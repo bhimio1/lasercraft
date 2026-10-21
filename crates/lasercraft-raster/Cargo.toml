@@ -11,4 +11,5 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-
+png.workspace = true
+zune-jpeg.workspace = true

@@ -16,6 +16,8 @@ mod path;
 mod export;
 // M6: the laser.
 pub(crate) mod device;
+// M7: images.
+mod image;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -36,6 +38,8 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(export::commands());
     // M6
     all.extend(device::commands());
+    // M7
+    all.extend(image::commands());
     all
 }
 

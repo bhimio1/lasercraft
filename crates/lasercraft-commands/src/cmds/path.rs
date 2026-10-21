@@ -60,6 +60,7 @@ fn contours(
         let shape = project
             .shape(*id)
             .ok_or_else(|| args.invalid(format!("shape {id} does not exist")))?;
+        super::objects::vector_only(project, &[*id], args)?;
         if !shape.geometry().is_closed() {
             return Err(args.invalid(format!("{what} need closed shapes; shape {id} is open")));
         }

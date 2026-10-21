@@ -39,6 +39,23 @@ pub(crate) fn objects_with_anchor(
     Ok((objects, index))
 }
 
+/// Refuses images in a vector-only operation (`docs/spec/images.md`).
+pub(crate) fn vector_only(
+    project: &Project,
+    ids: &[u32],
+    args: &crate::args::Args<'_>,
+) -> Result<(), CommandError> {
+    match ids
+        .iter()
+        .find(|id| project.shape(**id).is_some_and(|s| s.geometry().is_image()))
+    {
+        Some(id) => Err(args.invalid(format!(
+            "shape {id} is an image; this works on vector shapes only"
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// A shape's outline as a path in document coordinates.
 pub(crate) fn doc_path(shape: &Shape) -> Path {
     shape.geometry().to_path().transformed(shape.transform())

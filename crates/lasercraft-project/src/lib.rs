@@ -7,6 +7,7 @@
 mod compact;
 mod error;
 mod file;
+mod image;
 pub mod layer;
 mod layers;
 mod shape;
@@ -15,6 +16,8 @@ mod work_area;
 
 pub use error::ProjectError;
 pub use file::{FORMAT, FORMAT_VERSION};
+pub use image::Image;
+pub use lasercraft_raster as raster;
 pub use layer::{Color, Dither, ImageSettings, LAYER_COUNT, Layer, Mode};
 pub use shape::{
     Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_groups, validate_transform,

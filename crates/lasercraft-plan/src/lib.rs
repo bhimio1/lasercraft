@@ -8,6 +8,7 @@ mod bounds;
 mod dump;
 mod emit;
 mod fill;
+mod image;
 mod line;
 mod machine;
 mod model;
@@ -74,6 +75,42 @@ fn warn(warnings: &mut Vec<Warning>, layer: &Layer, message: impl Into<String>) 
     });
 }
 
+/// Plans a layer's images after its vector shapes, every pass.
+fn plan_images(
+    images: &[&lasercraft_project::Shape],
+    layer: &Layer,
+    feed: Feed,
+    overscan: f64,
+    out: &mut Emitter,
+    warnings: &mut Vec<Warning>,
+) {
+    let mut rasters = Vec::new();
+    for shape in images {
+        match image::raster_of(shape, layer) {
+            Ok(Some(raster)) if raster.lit() > 0 => rasters.push((shape.id(), raster)),
+            Ok(_) => {}
+            Err(reason) => warnings.push(Warning {
+                layer: layer.color,
+                shape: Some(shape.id()),
+                message: format!("image skipped: {reason}"),
+            }),
+        }
+    }
+    let rows = image::Rows {
+        bidirectional: layer.bidirectional,
+        overscan,
+        correction: layer.image.dot_correction,
+        grayscale: layer.image.dither == lasercraft_project::Dither::Grayscale,
+        min_power: layer.min_power.clamp(0.0, feed.power),
+    };
+    for pass in 1..=layer.passes {
+        let feed = Feed { pass, ..feed };
+        for (id, raster) in &rasters {
+            image::emit(raster, *id, &rows, &feed, out);
+        }
+    }
+}
+
 /// Plans the job: every output layer in order, each pass, line or fill.
 ///
 /// # Errors
@@ -87,7 +124,12 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
     let mut warnings = Vec::new();
     for layer in project.layers().iter().filter(|l| l.output) {
         let outlines = outlines(project, layer);
-        if outlines.is_empty() {
+        let images: Vec<&lasercraft_project::Shape> = project
+            .shapes()
+            .iter()
+            .filter(|s| s.layer() == layer.color && s.geometry().is_image())
+            .collect();
+        if outlines.is_empty() && images.is_empty() {
             continue;
         }
         if layer.speed > machine.max_speed {
@@ -110,36 +152,44 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
             power,
         };
         let mut overscan = 0.0;
-        match layer.mode {
-            Mode::Line => {
-                let cuts = line::cuts(outlines, layer, &mut warnings);
-                line::plan_layer(&cuts, layer.passes, feed, &mut out);
+        if !outlines.is_empty() {
+            match layer.mode {
+                Mode::Line => {
+                    let cuts = line::cuts(outlines, layer, &mut warnings);
+                    line::plan_layer(&cuts, layer.passes, feed, &mut out);
+                }
+                Mode::Fill => {
+                    let open = outlines.iter().filter(|o| !o.closed).count();
+                    if open > 0 {
+                        warn(
+                            &mut warnings,
+                            layer,
+                            format!("fill needs closed shapes; {open} open outline(s) skipped"),
+                        );
+                    }
+                    if layer.overscan {
+                        overscan = machine.overscan(layer.speed);
+                    }
+                    let settings = FillSettings {
+                        angle: layer.angle,
+                        interval: layer.interval,
+                        bidirectional: layer.bidirectional,
+                        crosshatch: layer.crosshatch,
+                        overscan,
+                    };
+                    let before = out.moves.len();
+                    fill::plan_layer(&outlines, &settings, layer.passes, feed, &mut out);
+                    if out.moves.len() == before {
+                        warn(&mut warnings, layer, "nothing to fill");
+                    }
+                }
             }
-            Mode::Fill => {
-                let open = outlines.iter().filter(|o| !o.closed).count();
-                if open > 0 {
-                    warn(
-                        &mut warnings,
-                        layer,
-                        format!("fill needs closed shapes; {open} open outline(s) skipped"),
-                    );
-                }
-                if layer.overscan {
-                    overscan = machine.overscan(layer.speed);
-                }
-                let settings = FillSettings {
-                    angle: layer.angle,
-                    interval: layer.interval,
-                    bidirectional: layer.bidirectional,
-                    crosshatch: layer.crosshatch,
-                    overscan,
-                };
-                let before = out.moves.len();
-                fill::plan_layer(&outlines, &settings, layer.passes, feed, &mut out);
-                if out.moves.len() == before {
-                    warn(&mut warnings, layer, "nothing to fill");
-                }
+        }
+        if !images.is_empty() {
+            if layer.overscan {
+                overscan = machine.overscan(layer.speed);
             }
+            plan_images(&images, layer, feed, overscan, &mut out, &mut warnings);
         }
         layers.push(LayerSummary {
             color: layer.color,

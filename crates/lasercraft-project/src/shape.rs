@@ -4,6 +4,7 @@ use lasercraft_geom::{Affine, Path, Point, Rect, SubPath, flatten, polyline};
 use serde::{Deserialize, Serialize};
 
 use crate::ProjectError;
+use crate::image::Image;
 use crate::layer::{Color, LAYER_COUNT};
 
 /// Largest allowed coordinate or size, in millimetres. Keeps every value far
@@ -41,6 +42,9 @@ pub enum Geometry {
     /// Lines and cubic Béziers in one or more subpaths: imported art, text,
     /// edited nodes and boolean results.
     Path(Path),
+    /// A grayscale bitmap on the rectangle (0, 0)–(width, height)
+    /// (`docs/spec/images.md`, M7).
+    Image(Image),
 }
 
 fn check_size(field: &str, value: f64) -> Result<(), ProjectError> {
@@ -111,6 +115,46 @@ impl Geometry {
                 }
                 path.points().try_for_each(check_point)
             }
+            Self::Image(image) => {
+                check_size("width", image.width)?;
+                check_size("height", image.height)?;
+                image.validate_adjust()
+            }
+        }
+    }
+
+    /// Whether this is an image (no vector outline).
+    #[must_use]
+    pub fn is_image(&self) -> bool {
+        matches!(self, Self::Image(_))
+    }
+
+    /// The image, if this is one.
+    #[must_use]
+    pub fn image(&self) -> Option<&Image> {
+        match self {
+            Self::Image(image) => Some(image),
+            _ => None,
+        }
+    }
+
+    /// The local rectangle of a rect or image: (0, 0)–(width, height).
+    fn frame(width: f64, height: f64) -> Vec<Point> {
+        vec![
+            Point::new(0.0, 0.0),
+            Point::new(width, 0.0),
+            Point::new(width, height),
+            Point::new(0.0, height),
+        ]
+    }
+
+    /// The outline used for selection and hit testing: the vector outlines,
+    /// or an image's rectangle.
+    #[must_use]
+    pub fn local_frame(&self, tolerance: f64) -> Vec<(Vec<Point>, bool)> {
+        match self {
+            Self::Image(image) => vec![(Self::frame(image.width, image.height), true)],
+            other => other.local_outlines(tolerance),
         }
     }
 
@@ -121,23 +165,18 @@ impl Geometry {
             Self::Rect { .. } | Self::Ellipse { .. } => true,
             Self::Polyline { closed, .. } => *closed,
             Self::Path(path) => path.is_closed(),
+            Self::Image(_) => false,
         }
     }
 
     /// The outlines in local coordinates, within `tolerance` mm of the true
-    /// curve, each with its closed flag. Only paths have more than one.
+    /// curve, each with its closed flag. Only paths have more than one;
+    /// images have none.
     #[must_use]
     pub fn local_outlines(&self, tolerance: f64) -> Vec<(Vec<Point>, bool)> {
         match self {
-            Self::Rect { width, height } => vec![(
-                vec![
-                    Point::new(0.0, 0.0),
-                    Point::new(*width, 0.0),
-                    Point::new(*width, *height),
-                    Point::new(0.0, *height),
-                ],
-                true,
-            )],
+            Self::Rect { width, height } => vec![(Self::frame(*width, *height), true)],
+            Self::Image(_) => Vec::new(),
             Self::Ellipse { rx, ry } => vec![(flatten::ellipse_points(*rx, *ry, tolerance), true)],
             Self::Polyline { points, closed } => vec![(points.clone(), *closed)],
             Self::Path(path) => path.flatten(tolerance),
@@ -161,6 +200,7 @@ impl Geometry {
                 .map(Path::single)
                 .unwrap_or_default(),
             Self::Path(path) => path.clone(),
+            Self::Image(_) => Path::default(),
         }
     }
 
@@ -176,6 +216,7 @@ impl Geometry {
                 _ => "polyline",
             },
             Self::Path(_) => "path",
+            Self::Image(_) => "image",
         }
     }
 }
@@ -340,6 +381,24 @@ impl Shape {
             .collect()
     }
 
+    /// The selection outline in document coordinates: the vector outlines,
+    /// or an image's rectangle.
+    #[must_use]
+    pub fn frame(&self, tolerance: f64) -> Vec<(Vec<Point>, bool)> {
+        let local_tolerance = tolerance / self.transform.max_stretch().max(f64::EPSILON);
+        self.geometry
+            .local_frame(local_tolerance)
+            .into_iter()
+            .map(|(points, closed)| {
+                let points = points
+                    .into_iter()
+                    .map(|p| self.transform.apply(p))
+                    .collect();
+                (points, closed)
+            })
+            .collect()
+    }
+
     /// The closed outlines in document coordinates (open ones are left out).
     #[must_use]
     pub fn closed_contours(&self, tolerance: f64) -> Vec<Vec<Point>> {
@@ -363,6 +422,10 @@ impl Shape {
             Geometry::Rect { width, height } => {
                 Rect::from_corners(Point::ZERO, Point::new(*width, *height)).transformed(t)
             }
+            Geometry::Image(image) => {
+                Rect::from_corners(Point::ZERO, Point::new(image.width, image.height))
+                    .transformed(t)
+            }
             Geometry::Polyline { points, .. } => Rect::bounding(points.iter().map(|p| t.apply(*p)))
                 .unwrap_or_else(|| Rect::from_corners(Point::ZERO, Point::ZERO)),
             Geometry::Path(path) => path
@@ -384,7 +447,7 @@ impl Shape {
         if !grown.contains(p) {
             return false;
         }
-        let outlines = self.outlines(tolerance * 0.25);
+        let outlines = self.frame(tolerance * 0.25);
         // Even-odd across the closed outlines, so holes are not hits.
         let inside = outlines
             .iter()
@@ -402,7 +465,7 @@ impl Shape {
     /// inside (even-odd across its closed outlines) contains the box.
     #[must_use]
     pub fn touches(&self, rect: &Rect, tolerance: f64) -> bool {
-        let outlines = self.outlines(tolerance);
+        let outlines = self.frame(tolerance);
         // Points inside or segments crossing, without containment; the
         // closing segment is checked separately.
         let crosses = outlines.iter().any(|(points, closed)| {

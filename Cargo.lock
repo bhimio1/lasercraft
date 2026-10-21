@@ -1242,6 +1242,7 @@ name = "lasercraft-project"
 version = "0.1.0"
 dependencies = [
  "lasercraft-geom",
+ "lasercraft-raster",
  "serde",
  "serde_json",
 ]
@@ -1249,6 +1250,10 @@ dependencies = [
 [[package]]
 name = "lasercraft-raster"
 version = "0.1.0"
+dependencies = [
+ "png",
+ "zune-jpeg",
+]
 
 [[package]]
 name = "lasercraft-ui"

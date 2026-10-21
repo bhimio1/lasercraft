@@ -133,6 +133,8 @@ pub enum Dither {
     Jarvis,
     /// Stucki error diffusion.
     Stucki,
+    /// Atkinson error diffusion (spreads three quarters of the error).
+    Atkinson,
     /// Ordered (Bayer) dithering.
     Ordered,
     /// Halftone dots.
@@ -175,6 +177,7 @@ names!(Dither {
     FloydSteinberg => "floyd_steinberg",
     Jarvis => "jarvis",
     Stucki => "stucki",
+    Atkinson => "atkinson",
     Ordered => "ordered",
     Halftone => "halftone",
 });
@@ -189,6 +192,47 @@ pub struct ImageSettings {
     pub interval: f64,
     /// Invert the image.
     pub negative: bool,
+    /// Halftone screen, cells per inch (M7).
+    #[serde(
+        default = "default_halftone_cells",
+        skip_serializing_if = "is_default_halftone_cells"
+    )]
+    pub halftone_cells: f64,
+    /// Halftone screen angle, degrees (M7).
+    #[serde(
+        default = "default_halftone_angle",
+        skip_serializing_if = "is_default_halftone_angle"
+    )]
+    pub halftone_angle: f64,
+    /// Dot width correction: each burned run is shortened by this much, half
+    /// at each end, mm (M7).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub dot_correction: f64,
+}
+
+/// Default halftone screen, cells per inch.
+pub const DEFAULT_HALFTONE_CELLS: f64 = 50.0;
+
+/// Default halftone angle, degrees.
+pub const DEFAULT_HALFTONE_ANGLE: f64 = 45.0;
+
+/// Allowed halftone screens, cells per inch.
+pub const HALFTONE_CELLS_RANGE: (f64, f64) = (1.0, 1000.0);
+
+fn default_halftone_cells() -> f64 {
+    DEFAULT_HALFTONE_CELLS
+}
+
+fn is_default_halftone_cells(v: &f64) -> bool {
+    *v == DEFAULT_HALFTONE_CELLS
+}
+
+fn default_halftone_angle() -> f64 {
+    DEFAULT_HALFTONE_ANGLE
+}
+
+fn is_default_halftone_angle(v: &f64) -> bool {
+    *v == DEFAULT_HALFTONE_ANGLE
 }
 
 impl Default for ImageSettings {
@@ -197,6 +241,9 @@ impl Default for ImageSettings {
             dither: Dither::default(),
             interval: 0.1,
             negative: false,
+            halftone_cells: DEFAULT_HALFTONE_CELLS,
+            halftone_angle: DEFAULT_HALFTONE_ANGLE,
+            dot_correction: 0.0,
         }
     }
 }
@@ -358,6 +405,25 @@ impl Layer {
             INTERVAL_RANGE.0,
             INTERVAL_RANGE.1,
         )?;
+        in_range(
+            "image.halftone_cells",
+            self.image.halftone_cells,
+            HALFTONE_CELLS_RANGE.0,
+            HALFTONE_CELLS_RANGE.1,
+        )?;
+        in_range(
+            "image.halftone_angle",
+            self.image.halftone_angle,
+            -360.0,
+            360.0,
+        )?;
+        // Up to one dot: a full correction would erase single dots.
+        in_range(
+            "image.dot_correction",
+            self.image.dot_correction,
+            0.0,
+            self.image.interval,
+        )?;
         in_range("kerf", self.kerf, -MAX_KERF, MAX_KERF)?;
         if self.tabs > MAX_TABS {
             return Err(ProjectError::invalid(
@@ -398,6 +464,9 @@ impl Layer {
             "image.dither" => self.image.dither.to_string(),
             "image.interval" => self.image.interval.to_string(),
             "image.negative" => on(self.image.negative),
+            "image.halftone_cells" => self.image.halftone_cells.to_string(),
+            "image.halftone_angle" => self.image.halftone_angle.to_string(),
+            "image.dot_correction" => self.image.dot_correction.to_string(),
             "kerf" => self.kerf.to_string(),
             "tabs" => self.tabs.to_string(),
             "tab_width" => self.tab_width.to_string(),
@@ -433,6 +502,9 @@ impl Layer {
             "image.dither" => next.image.dither = value.parse()?,
             "image.interval" => next.image.interval = interval(key, value)?,
             "image.negative" => next.image.negative = switch(key, value)?,
+            "image.halftone_cells" => next.image.halftone_cells = number(key, value)?,
+            "image.halftone_angle" => next.image.halftone_angle = number(key, value)?,
+            "image.dot_correction" => next.image.dot_correction = number(key, value)?,
             "kerf" => next.kerf = number(key, value)?,
             "tabs" => next.tabs = whole(key, value)?,
             "tab_width" => next.tab_width = number(key, value)?,
@@ -446,7 +518,7 @@ impl Layer {
 }
 
 /// Every setting name `layer.set` accepts.
-pub const SETTINGS: [&str; 21] = [
+pub const SETTINGS: [&str; 24] = [
     "name",
     "mode",
     "speed",
@@ -464,6 +536,9 @@ pub const SETTINGS: [&str; 21] = [
     "image.dither",
     "image.interval",
     "image.negative",
+    "image.halftone_cells",
+    "image.halftone_angle",
+    "image.dot_correction",
     "kerf",
     "tabs",
     "tab_width",
@@ -594,9 +669,12 @@ mod tests {
             ("output", "off"),
             ("show", "off"),
             ("air", "on"),
-            ("image.dither", "stucki"),
+            ("image.dither", "atkinson"),
             ("image.interval", "0.05"),
             ("image.negative", "on"),
+            ("image.halftone_cells", "60"),
+            ("image.halftone_angle", "22.5"),
+            ("image.dot_correction", "0.02"),
             ("kerf", "-0.08"),
             ("tabs", "4"),
             ("tab_width", "0.5"),
@@ -605,7 +683,10 @@ mod tests {
             l.set(key, value).unwrap();
             assert_eq!(l.get(key).unwrap(), value, "{key}");
         }
-        assert_eq!(SETTINGS.len(), 21);
+        assert_eq!(SETTINGS.len(), 24);
+        // Dot correction may not exceed one dot.
+        assert!(l.set("image.dot_correction", "0.06").is_err());
+        assert!(l.set("image.halftone_cells", "0").is_err());
         for key in SETTINGS {
             assert!(l.get(key).is_ok(), "{key}");
         }

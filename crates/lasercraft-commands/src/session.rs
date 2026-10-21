@@ -466,6 +466,24 @@ mod tests {
         .map(str::to_owned)
         .to_vec();
         script.extend(m3_round_trip_lines());
+        // M7: an image, its adjustments and the image layer settings.
+        let image = lasercraft_project::Geometry::Image(lasercraft_project::Image::new(
+            3.0,
+            2.0,
+            lasercraft_project::raster::Gray::new(3, 2, vec![0, 60, 120, 180, 240, 255]).unwrap(),
+        ));
+        let image_shape = format!(
+            r#"{{"id":500,"layer":4,"geometry":{},"transform":[1.0,0.0,0.0,1.0,5.0,5.0]}}"#,
+            serde_json::to_string(&image).unwrap()
+        );
+        script.extend([
+            Invocation::new("shape.insert", ["0".to_owned(), image_shape]).to_string(),
+            "image.adjust 500 brightness=5 contrast=-10 gamma=1.25".to_owned(),
+            "layer.set 4 image.dither halftone".to_owned(),
+            "layer.set 4 image.halftone_cells 40".to_owned(),
+            "layer.set 4 image.dot_correction 0.02".to_owned(),
+            "shape.rotate 30 500".to_owned(),
+        ]);
         script
     }
 

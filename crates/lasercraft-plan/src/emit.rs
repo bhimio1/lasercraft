@@ -63,6 +63,11 @@ impl Emitter {
         self.push(MoveKind::Travel, to, self.travel_speed, 0.0, feed, shape);
     }
 
+    /// Laser on at `power` (images: grayscale levels), at the feed speed.
+    pub fn burn(&mut self, to: Point, power: f64, feed: &Feed, shape: u32) {
+        self.push(MoveKind::Burn, to, feed.speed, power, feed, Some(shape));
+    }
+
     /// Along the toolpath at the feed speed, laser on or off.
     pub fn feed(&mut self, lit: bool, to: Point, feed: &Feed, shape: u32) {
         let (kind, power) = if lit {

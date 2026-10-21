@@ -19,7 +19,7 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
         cmd(
             "project.import",
             "project.import <path> [@color]",
-            "Import the vector art of an SVG or DXF file as paths.",
+            "Import the vector art of an SVG or DXF file as paths, or a PNG or JPEG as an image.",
             import,
         ),
         cmd(
@@ -34,6 +34,9 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
 fn import(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     args.expect(1, 1)?;
     let file = args.str(0)?;
+    if super::image::is_image_file(file) {
+        return super::image::import_image(project, args, file);
+    }
     let forced = args.color()?;
     let imported = import_file(FsPath::new(file), project.work_area().height_mm)
         .map_err(|e| args.invalid(e.0))?;
