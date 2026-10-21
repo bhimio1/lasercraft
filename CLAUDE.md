@@ -91,10 +91,10 @@ and macOS.
       move, scale, rotate; snapping; zoom/pan; LightBurn-style default shortcuts.
 - [x] M2 Layers ("cuts") with colors; line, fill and image modes; speed,
       power min/max, passes, interval, output on/off; cuts/layers panel.
-- [ ] M3 SVG and DXF import; node editing; booleans (union, subtract,
+- [x] M3 SVG and DXF import; node editing; booleans (union, subtract,
       intersect); offset, weld, group/ungroup, align/distribute, arrays (grid,
       circular); text from system fonts.
-- [ ] M4 Toolpath planning: cut ordering (inner first, shortest travel); fill
+- [x] M4 Toolpath planning: cut ordering (inner first, shortest travel); fill
       scanlines with overscan; kerf offset; tabs/bridges; preview with travel
       moves and time estimate.
 - [ ] M5 GRBL G-code export (M3/M4 dynamic power, S-max).

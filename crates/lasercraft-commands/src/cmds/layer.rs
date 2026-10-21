@@ -189,13 +189,18 @@ fn select(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErro
     args.expect(1, 2)?;
     let color = args.color_at(0)?;
     let mut ids = project.shapes_on(color);
-    match args.len() {
-        1 => {}
-        _ if args.str(1)? == "add" => ids.extend(project.selection()),
+    let add = match args.len() {
+        1 => false,
+        _ if args.str(1)? == "add" => true,
         _ => return Err(args.usage_error()),
+    };
+    if add {
+        ids.extend(project.selection());
+        project.set_selection(ids.iter().copied())?;
+    } else {
+        project.replace_selection(ids.iter().copied())?;
     }
     let count = ids.len();
-    project.set_selection(ids)?;
     Ok(Outcome::done(format!("{count} selected")))
 }
 

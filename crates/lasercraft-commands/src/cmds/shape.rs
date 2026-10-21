@@ -257,20 +257,32 @@ pub(crate) fn add_copies(
     verb: &str,
 ) -> Result<Outcome, CommandError> {
     let moved = Affine::translate(delta.x, delta.y);
-    for shape in shapes {
-        validate_transform(&(moved * *shape.transform()))?;
-    }
-    let mut new_ids = Vec::with_capacity(shapes.len());
-    for shape in shapes {
-        let id = project.add_copy(shape);
-        project.set_shape_transform(id, moved * *shape.transform())?;
-        new_ids.push(id);
-    }
+    let new_ids = place_copies(project, shapes, |t| moved * *t)?;
     project.set_selection(new_ids.iter().copied())?;
     Ok(Outcome::undoable(
         format!("{verb} {} shape(s)", new_ids.len()),
         Invocation::new("shape.delete", id_args(&new_ids)),
     ))
+}
+
+/// Adds copies of `shapes` on top with transforms `change(old)`, all or
+/// nothing. Copies get fresh ids and fresh group ids (`docs/spec/arrange.md`).
+pub(crate) fn place_copies(
+    project: &mut Project,
+    shapes: &[Shape],
+    change: impl Fn(&Affine) -> Affine,
+) -> Result<Vec<u32>, CommandError> {
+    for shape in shapes {
+        validate_transform(&change(shape.transform()))?;
+    }
+    let mut new_ids = Vec::with_capacity(shapes.len());
+    for shape in shapes {
+        let id = project.add_copy(shape);
+        project.set_shape_transform(id, change(shape.transform()))?;
+        new_ids.push(id);
+    }
+    project.regroup(&new_ids);
+    Ok(new_ids)
 }
 
 fn duplicate(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -284,7 +296,7 @@ fn duplicate(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandE
 
 /// Applies `change` to each shape's transform, all or nothing, with an exact
 /// inverse.
-fn transform_shapes(
+pub(crate) fn transform_shapes(
     project: &mut Project,
     ids: &[u32],
     message: String,
@@ -311,7 +323,7 @@ fn transform_shapes(
     Ok(Outcome::undoable(message, combine(inverses)))
 }
 
-fn set_transform_invocation(id: u32, t: &Affine) -> Invocation {
+pub(crate) fn set_transform_invocation(id: u32, t: &Affine) -> Invocation {
     Invocation::new(
         "shape.set_transform",
         std::iter::once(id.to_string()).chain(t.m.iter().map(ToString::to_string)),

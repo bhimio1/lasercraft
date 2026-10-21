@@ -11,8 +11,8 @@ palette, notes).
   previous); View (zoom in, zoom out, fit bed). Undo names the command it
   would reverse. Items that need a selection or a clipboard are greyed out
   without one. Each item shows its shortcut from the keymap.
-- Left: the tool palette (Select, Line, Rectangle, Ellipse); the active tool
-  is highlighted.
+- Left: the tool palette (Select, Line, Rectangle, Ellipse, Text, Edit
+  Nodes); the active tool is highlighted.
 - Right: the layers panel. It lists the layers that have shapes in output
   order (swatch, name, mode, speed and power, output and show switches);
   clicking a name opens it in the editor below, Shift+click selects its
@@ -35,6 +35,18 @@ palette, notes).
   path, the work area size and origin, the pointer position in mm, and the
   selection's count and size.
 - Window title: project name, prefixed with a dot when modified.
+
+## M3 additions
+
+- File → Import… asks for an `.svg` or `.dxf` path in the same kind of
+  window as Open and runs `project.import`.
+- Tools: weld, union, subtract, intersect, Offset… (a window for distance
+  and corner style), convert to path, close path, join paths, break apart.
+- Arrange: group, ungroup; Align, Distribute and Move on Bed submenus;
+  Grid Array… and Circular Array… windows (columns, rows and gaps; count,
+  center, sweep and whether copies turn).
+- Each window builds one command when OK is pressed; closing it runs
+  nothing.
 
 ## Files
 

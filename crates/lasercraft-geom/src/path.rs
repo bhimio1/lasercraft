@@ -218,6 +218,36 @@ impl Path {
     }
 }
 
+impl Path {
+    /// Closed polygons as a path of straight segments (contours with fewer
+    /// than three points are skipped). `None` when nothing is left.
+    #[must_use]
+    pub fn from_contours(contours: &[Vec<Point>]) -> Option<Self> {
+        let subpaths: Vec<SubPath> = contours
+            .iter()
+            .filter(|c| c.len() >= 3)
+            .filter_map(|c| SubPath::from_points(c, true))
+            .collect();
+        (!subpaths.is_empty()).then_some(Self { subpaths })
+    }
+
+    /// An ellipse centered on the origin as four cubic quarter arcs, ending
+    /// exactly where it starts.
+    #[must_use]
+    pub fn ellipse(rx: f64, ry: f64) -> Self {
+        let (start, mut segments) = arc(Point::ZERO, 1.0, 0.0, 360.0);
+        if let Some(Segment::Cubic(_, _, end)) = segments.last_mut() {
+            *end = start;
+        }
+        Self::single(SubPath {
+            start,
+            segments,
+            closed: true,
+        })
+        .transformed(&Affine::scale(rx, ry))
+    }
+}
+
 /// Point on a cubic at parameter `t`.
 #[must_use]
 pub fn cubic_at(p0: Point, p1: Point, p2: Point, p3: Point, t: f64) -> Point {

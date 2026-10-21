@@ -109,16 +109,32 @@ impl Combine {
     }
 }
 
+/// Adds to or edits the current selection.
 fn select(project: &mut Project, set: BTreeSet<u32>) -> Result<Outcome, CommandError> {
     let count = set.len();
     project.set_selection(set)?;
     Ok(Outcome::done(format!("{count} selected")))
 }
 
+/// Replaces the selection with a new pick (`docs/spec/arrange.md`, anchor).
+fn pick(project: &mut Project, set: BTreeSet<u32>) -> Result<Outcome, CommandError> {
+    let count = set.len();
+    project.replace_selection(set)?;
+    Ok(Outcome::done(format!("{count} selected")))
+}
+
+/// Selects `ids` combined with the selection as `how` says.
+fn combine_into(project: &mut Project, ids: &[u32], how: Combine) -> Result<Outcome, CommandError> {
+    let set = how.apply(project.selection(), ids);
+    match how {
+        Combine::Replace => pick(project, set),
+        _ => select(project, set),
+    }
+}
+
 fn change(project: &mut Project, args: &Args<'_>, how: Combine) -> Result<Outcome, CommandError> {
     let ids = args.required_ids(0, project)?;
-    let set = how.apply(project.selection(), &ids);
-    select(project, set)
+    combine_into(project, &ids, how)
 }
 
 fn clear(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -129,7 +145,7 @@ fn clear(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError
 fn all(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     args.expect(0, 0)?;
     let set = project.order().into_iter().collect();
-    select(project, set)
+    pick(project, set)
 }
 
 fn invert(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -139,7 +155,7 @@ fn invert(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErro
         .into_iter()
         .filter(|id| !project.is_selected(*id))
         .collect();
-    select(project, set)
+    pick(project, set)
 }
 
 fn tolerance(args: &Args<'_>, i: usize) -> Result<f64, CommandError> {
@@ -156,8 +172,7 @@ fn at(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     let tol = tolerance(args, 2)?;
     let how = Combine::parse(args, 3)?;
     let hit: Vec<u32> = project.shape_at(p, tol).into_iter().collect();
-    let set = how.apply(project.selection(), &hit);
-    select(project, set)
+    combine_into(project, &hit, how)
 }
 
 fn in_rect(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -170,8 +185,7 @@ fn in_rect(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErr
     };
     let how = Combine::parse(args, 5)?;
     let ids = project.shapes_in_rect(&rect, mode, 0.01);
-    let set = how.apply(project.selection(), &ids);
-    select(project, set)
+    combine_into(project, &ids, how)
 }
 
 fn cycle(project: &mut Project, args: &Args<'_>, forward: bool) -> Result<Outcome, CommandError> {
@@ -190,7 +204,7 @@ fn cycle(project: &mut Project, args: &Args<'_>, forward: bool) -> Result<Outcom
         (Some(i), true) => (i + 1) % order.len(),
         (Some(i), false) => i.checked_sub(1).unwrap_or(last),
     };
-    select(project, BTreeSet::from([order[next]]))
+    pick(project, BTreeSet::from([order[next]]))
 }
 
 #[cfg(test)]

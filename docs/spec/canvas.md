@@ -36,6 +36,11 @@ Milestones: M1, M2 (layer colors).
   clicking the first point again closes the shape; Esc cancels the unfinished
   line. A two-point result is a line.
 - A finished drawing selects the new shape and stays in the tool.
+- **Text** (M3): a click opens the text window at that point
+  (`docs/spec/text.md`).
+- **Edit Nodes** (M3): nodes and handles of selected paths, dragged and
+  edited as in `docs/spec/nodes.md`. The selection box and its handles are
+  hidden in this tool.
 
 ## Dragging
 

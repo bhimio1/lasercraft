@@ -11,6 +11,7 @@ mod affine;
 pub mod boolean;
 pub mod flatten;
 pub mod manipulate;
+pub mod nodes;
 pub mod path;
 mod point;
 pub mod polyline;

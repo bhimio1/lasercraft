@@ -1,7 +1,8 @@
 # Spec: keyboard shortcuts
 
 Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
-(notes, side panels), M4 (job preview).
+(notes, side panels), M3 (import, text, nodes, groups, booleans, alignment), M4
+(job preview).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -34,7 +35,7 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo | M0 |
 | Ctrl+I | Import a file | M3 |
 | Alt+Shift+L | Save machine code (G-code) | M5 |
-| Alt+X | Export vectors | M3 |
+| Alt+X | Export vectors | later (export not built yet) |
 | Ctrl+P / Ctrl+Shift+P | Print (black only / keep colors) | not planned |
 | Ctrl+Alt+N | Project notes window (`ui.notes`) | M2 |
 | Ctrl+A / Ctrl+Shift+I | Select all / invert selection | M1 |
@@ -62,19 +63,19 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+PgUp / Ctrl+PgDn | To front / to back | M1 |
 | Ctrl+T | Text tool | M3 |
 | Ctrl+\` | Node editing | M3 |
-| Ctrl+W / Ctrl+B | Weld / boolean helper | M3 |
-| Alt++ / Alt+- / Alt+* | Union / subtract / intersect | M3 |
-| Alt+Shift+C / Ctrl+K / Alt+B | Cut shapes / trim / break apart | M3 |
-| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset / convert to path / convert to bitmap | M3, M7 |
-| Alt+J / Alt+Shift+O / Alt+D | Join open paths / optimize / delete duplicates | M3 |
+| Ctrl+W / Ctrl+B | Weld / boolean helper | M3 / later |
+| Alt++ / Alt+- / Alt+* | Union / subtract / intersect | M3 / M3 / not bindable (below) |
+| Alt+Shift+C / Ctrl+K / Alt+B | Cut shapes / trim / break apart | later / later / M3 |
+| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset (window) / convert to path / convert to bitmap | M3 / M3 / M7 |
+| Alt+J / Alt+Shift+O / Alt+D | Join open paths / optimize / delete duplicates | M3 / later / later |
 | Ctrl+G / Ctrl+U | Group / ungroup | M3 |
 | Alt+←/→/↑/↓ | Align left / right / top / bottom | M3 |
 | Alt+PgUp / Alt+PgDn / Alt+Home | Align centers vertically / horizontally / both | M3 |
 | Alt+Shift+H / Alt+Shift+V | Move together horizontally / vertically | M3 |
-| L R T B C E (canvas focus) | Align left / right / top / bottom / centers vertically / horizontally *(legacy)* | M3 |
-| P (canvas focus) | Move to the bed center *(legacy)* | M3 |
-| Ctrl+Shift+M / Ctrl+2 | Mirror across a line / two-point rotate and scale | M3 |
-| Alt+M | Measure | M3 |
+| L R T B C E (canvas focus) | Align left / right / top / bottom / centers vertically / horizontally *(legacy)* | not bound (below) |
+| P (canvas focus) | Move to the bed center *(legacy)* | not bound (below; Arrange → Move on Bed) |
+| Ctrl+Shift+M / Ctrl+2 | Mirror across a line / two-point rotate and scale | later |
+| Alt+M | Measure | later |
 | Alt+Shift+W | Toggle outline / filled display (with the fill preview) | later (not bound in M4; the job preview shows fills) |
 | F12 | Toggle side panels (`ui.toggle_panels`) | M2 |
 | F1 | Help for the item under the pointer | M10 |
@@ -112,6 +113,19 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 - Drawing a rectangle or ellipse: Ctrl draws from the center, Shift makes
   width and height equal.
 
+M3 notes:
+
+- `+` is Shift+= on many layouts, so union is bound as both `Alt+Plus` and
+  `Alt+Shift+Plus`. egui has no key for `*` (Shift+8 on US layouts, other
+  keys elsewhere), so Alt+* cannot be bound reliably; intersect is in the
+  Tools menu and the console.
+- The legacy single-letter canvas keys (L R T B C E P) are not bound: in the
+  node tool the letters D I M L C B act on the node or segment under the
+  pointer (`docs/spec/nodes.md`), and plain letters would also fire while
+  typing. The Alt chords above cover alignment.
+- Alt+O opens the offset window; Ctrl+I the import path prompt; Ctrl+T and
+  Ctrl+\` switch to the text and node tools.
+
 Not adopted: Ctrl+Y (not a published default). Alt+C means "capture camera
 image" in v2.0 and "cut shapes" moved to Alt+Shift+C, so the legacy Alt+C
 conflict is gone.
@@ -126,6 +140,8 @@ conflict is gone.
   https://docs.lightburnsoftware.com/legacy/Hotkeys
   (`/Hotkeys.html` redirects there).
 - All read 2026-10-21. Only chord assignments and gestures are taken; action
-  descriptions are our own. Nudge step sizes are our own choice.
+  descriptions are our own. M3 chords are also listed on the LightBurn 2.1
+  pages cited in `docs/spec/arrange.md` and `docs/spec/nodes.md` (Align,
+  Boolean Tools, Grouping, Offset Shapes, Edit Nodes, Break Apart, Auto-Join). Nudge step sizes are our own choice.
 - Keymap file format and `ui.*`/`view.*` actions: own design, carried over from
   MusicCraft.

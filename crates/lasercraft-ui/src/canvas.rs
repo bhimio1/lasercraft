@@ -4,11 +4,13 @@
 use egui::{Color32, Pos2, Sense, Stroke, StrokeKind};
 use lasercraft_commands::Invocation;
 use lasercraft_geom::manipulate::Handle;
-use lasercraft_geom::{Affine, Point, Rect, flatten};
-use lasercraft_project::{BoxMode, Origin, Project};
+use lasercraft_geom::{Affine, Point, Rect, flatten, nodes};
+use lasercraft_project::{BoxMode, Geometry, Origin, Project};
 
 use crate::colors::layer_color;
-use crate::interaction::{Ctx, Draft, GRID_MM, Interaction, Mods, Tool, rotate_handle};
+use crate::interaction::{
+    Ctx, Draft, GRID_MM, Interaction, Mods, NodeKey, Tool, moved_part, rotate_handle,
+};
 use crate::view::{View, ZOOM_STEP};
 
 /// Major grid lines every this many millimetres.
@@ -70,6 +72,11 @@ impl Canvas {
     /// Sets the palette color for new shapes.
     pub fn set_color(&mut self, color: lasercraft_project::Color) {
         self.interaction.set_color(color);
+    }
+
+    /// Takes the point where the text tool was clicked, if any.
+    pub fn take_text_click(&mut self) -> Option<Point> {
+        self.interaction.take_text_click()
     }
 
     /// Switches tool.
@@ -200,6 +207,13 @@ impl Canvas {
         if enter && self.tool() == Tool::Line && !ui.ctx().text_edit_focused() {
             out.extend(self.interaction.finish_line(false));
         }
+        if self.tool() == Tool::Nodes && hovered && !ui.ctx().text_edit_focused() {
+            out.extend(
+                node_keys(ui)
+                    .into_iter()
+                    .flat_map(|k| self.interaction.node_key(k, &ctx)),
+            );
+        }
         out
     }
 
@@ -246,7 +260,14 @@ impl Canvas {
                 1.25
             };
             let stroke = Stroke::new(width, color);
-            for (points, closed) in shape.outlines(tolerance) {
+            let edited = self
+                .interaction
+                .part_drag()
+                .filter(|(id, ..)| *id == shape.id())
+                .and_then(|(id, part, to)| moved_part(project, id, part, to));
+            let outlines =
+                edited.map_or_else(|| shape.outlines(tolerance), |p| p.flatten(tolerance));
+            for (points, closed) in outlines {
                 let screen: Vec<Pos2> = points
                     .iter()
                     .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
@@ -258,14 +279,73 @@ impl Canvas {
                 });
             }
         }
-        paint_selection(
-            painter,
-            view,
-            project,
-            preview.map(|(_, t)| t),
-            visuals.extreme_bg_color,
-        );
+        if self.tool() == Tool::Nodes {
+            paint_nodes(painter, view, project, &self.interaction);
+        } else {
+            paint_selection(
+                painter,
+                view,
+                project,
+                preview.map(|(_, t)| t),
+                visuals.extreme_bg_color,
+            );
+        }
         paint_gesture(&self.interaction, ui, painter, view);
+    }
+}
+
+/// Node-tool keys pressed this frame (no modifiers).
+fn node_keys(ui: &egui::Ui) -> Vec<NodeKey> {
+    ui.input(|i| {
+        if i.modifiers.any() {
+            return Vec::new();
+        }
+        [
+            (egui::Key::D, NodeKey::Delete),
+            (egui::Key::I, NodeKey::Insert),
+            (egui::Key::M, NodeKey::Midpoint),
+            (egui::Key::L, NodeKey::Line),
+            (egui::Key::C, NodeKey::Curve),
+            (egui::Key::B, NodeKey::Break),
+        ]
+        .into_iter()
+        .filter(|(key, _)| i.key_pressed(*key))
+        .map(|(_, k)| k)
+        .collect()
+    })
+}
+
+/// Nodes (squares, subpath starts filled) and handles (circles on a line
+/// to their node) of the selected paths, with the dragged edit applied.
+fn paint_nodes(painter: &egui::Painter, view: &View, project: &Project, interaction: &Interaction) {
+    let stroke = Stroke::new(1.0, SELECTED);
+    let dragged = interaction.part_drag();
+    for id in project.selection() {
+        let Some(shape) = project.shape(id) else {
+            continue;
+        };
+        let Geometry::Path(local) = shape.geometry() else {
+            continue;
+        };
+        let path = dragged
+            .filter(|(d, ..)| *d == id)
+            .and_then(|(d, part, to)| moved_part(project, d, part, to))
+            .unwrap_or_else(|| local.transformed(shape.transform()));
+        for (_, _, _, handle, node) in nodes::handles(&path) {
+            let (h, n) = (pos(view.to_screen(handle)), pos(view.to_screen(node)));
+            painter.line_segment([n, h], Stroke::new(1.0, SELECTED.gamma_multiply(0.6)));
+            painter.circle_stroke(h, 3.5, stroke);
+        }
+        for (_, node, at) in nodes::nodes(&path) {
+            let square =
+                egui::Rect::from_center_size(pos(view.to_screen(at)), egui::vec2(7.0, 7.0));
+            if node == 0 {
+                painter.rect_filled(square, 0.0, SELECTED);
+            } else {
+                painter.rect_filled(square, 0.0, BED);
+                painter.rect_stroke(square, 0.0, stroke, StrokeKind::Middle);
+            }
+        }
     }
 }
 

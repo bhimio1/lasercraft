@@ -11,3 +11,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+lasercraft-geom.workspace = true
+usvg.workspace = true
+fontdb.workspace = true
+ttf-parser.workspace = true

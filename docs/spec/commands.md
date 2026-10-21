@@ -65,7 +65,11 @@ Milestone: M0.
 
 M1 adds the `shape.*`, `select.*` and `edit.copy|cut|paste*` commands in
 `docs/spec/shapes.md`. M2 adds `layer.*` and `shape.set_layer`
-(`docs/spec/layers.md`).
+(`docs/spec/layers.md`). M3 adds `project.import` (`docs/spec/import.md`),
+`shape.add_text` (`docs/spec/text.md`), `shape.to_path`,
+`shape.set_geometry`, `node.*`, `path.close|join|break_apart`
+(`docs/spec/nodes.md`), and `group.*`, `path.union|subtract|intersect|weld|offset`
+and `arrange.*` (`docs/spec/arrange.md`).
 
 ## Sources
 

@@ -50,6 +50,28 @@ pub fn palette() -> [[u8; 3]; LAYER_COUNT] {
     colors
 }
 
+/// The palette color closest to `rgb` (smallest squared RGB distance; ties
+/// go to the lower number), used to put imported art on layers
+/// (`docs/spec/import.md`).
+#[must_use]
+pub fn nearest_color(rgb: [u8; 3]) -> Color {
+    let distance = |c: &[u8; 3]| -> u32 {
+        c.iter()
+            .zip(rgb)
+            .map(|(a, b)| u32::from(a.abs_diff(b)).pow(2))
+            .sum()
+    };
+    let mut best = (0, u32::MAX);
+    for (i, c) in palette().iter().enumerate() {
+        let d = distance(c);
+        if d < best.1 {
+            // At most 30 colors, so the index fits.
+            best = (i as Color, d);
+        }
+    }
+    best.0
+}
+
 fn hsv(hue: f64, saturation: f64, value: f64) -> [u8; 3] {
     let c = value * saturation;
     let h = hue / 60.0;
@@ -510,6 +532,16 @@ pub fn default_layers() -> Vec<Layer> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nearest_color_matches_exactly_or_closest() {
+        for (i, c) in palette().iter().enumerate() {
+            assert_eq!(usize::from(nearest_color(*c)), i);
+        }
+        assert_eq!(nearest_color([10, 10, 10]), 0);
+        let near_one = palette()[1].map(|v| v.saturating_sub(3));
+        assert_eq!(nearest_color(near_one), 1);
+    }
 
     #[test]
     fn palette_has_distinct_colors() {

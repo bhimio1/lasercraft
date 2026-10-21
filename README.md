@@ -5,12 +5,13 @@ engravers, for Linux, Windows and macOS. Its workflow and default shortcuts aim
 to feel familiar to people coming from LightBurn. It is an independent project,
 not affiliated with or endorsed by LightBurn Software.
 
-**Status: milestone M2.** You can draw rectangles, ellipses, lines and
-polylines on a gridded bed; select, move, scale, rotate, mirror, duplicate,
-copy and paste them with snapping and LightBurn-style shortcuts; put them on
-color layers with line or fill settings (speed, power, passes, interval and
-more); undo everything; and save `.lcproj` files. A CLI does all of it headlessly. It does
-not drive a laser yet. See the milestone list in `CLAUDE.md`.
+**Status: milestones M0–M4.** Draw shapes or import SVG and DXF; add text
+from system fonts; edit nodes; combine shapes with booleans, weld and offset;
+group, align, distribute and array them; put them on color layers with line
+or fill settings, kerf and tabs; and preview the planned job with travel
+moves and a time estimate. Everything is undoable and works headlessly from
+the CLI. It does not drive a laser yet (G-code export is M5, the device M6).
+See the milestone list in `CLAUDE.md`.
 
 ## Build and run
 
@@ -18,7 +19,8 @@ not drive a laser yet. See the milestone list in `CLAUDE.md`.
 cargo build --release
 target/release/lasercraft [project.lcproj]
 target/release/lasercraft-cli help
-target/release/lasercraft-cli script examples/m2-layers.lcs
+target/release/lasercraft-cli script examples/m3-design.lcs
+target/release/lasercraft-cli preview job.lcproj --svg toolpath.svg
 ```
 
 On Linux the window needs `libxkbcommon-x11` and an OpenGL driver at runtime;
