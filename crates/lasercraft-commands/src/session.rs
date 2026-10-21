@@ -580,13 +580,17 @@ mod tests {
             "project.export_gcode",
             "layer.select",
         ];
+        // Device commands never change the project (`docs/spec/laser.md`).
         for command in Registry::with_builtin().iter() {
             let name = command.name();
             let covered = script
                 .iter()
                 .any(|line| line.split_whitespace().next() == Some(name));
             assert!(
-                covered || not_undoable.contains(&name) || name.starts_with("select."),
+                covered
+                    || not_undoable.contains(&name)
+                    || name.starts_with("select.")
+                    || name.starts_with("device."),
                 "add `{name}` to the round-trip script or list it as not undoable"
             );
         }

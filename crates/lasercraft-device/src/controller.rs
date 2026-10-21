@@ -736,17 +736,22 @@ impl Controller {
             Origin::Home => {
                 self.homing = None;
                 self.last_status = self.now;
-                if let Some(code) = error {
-                    self.reject(format!(
+                match error {
+                    // GRBL is idle once homing finishes.
+                    None => self.state = Some(MachineState::Idle),
+                    Some(code) => self.reject(format!(
                         "homing refused: error {code}: {}",
                         error_text(code)
-                    ));
+                    )),
                 }
             }
             Origin::Jog => {
                 if let Some(code) = error {
                     self.reject(format!("jog refused: error {code}: {}", error_text(code)));
                 }
+            }
+            Origin::Unlock if error.is_none() && self.state == Some(MachineState::Alarm) => {
+                self.state = Some(MachineState::Idle);
             }
             Origin::Console | Origin::Unlock => {}
         }

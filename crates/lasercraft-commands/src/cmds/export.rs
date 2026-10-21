@@ -19,40 +19,62 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
     )]
 }
 
+/// Splits `key=value`.
+pub(super) fn key_value<'a>(
+    args: &Args<'_>,
+    raw: &'a str,
+) -> Result<(&'a str, &'a str), CommandError> {
+    raw.split_once('=')
+        .ok_or_else(|| args.invalid(format!("`{raw}` is not key=value")))
+}
+
+/// A finite number from an option value.
+pub(super) fn number(args: &Args<'_>, key: &str, value: &str) -> Result<f64, CommandError> {
+    value
+        .parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .ok_or_else(|| args.invalid(format!("{key} needs a number, not `{value}`")))
+}
+
+/// Applies one machine or export option; `false` if `key` is not one.
+pub(super) fn apply_option(
+    args: &Args<'_>,
+    key: &str,
+    value: &str,
+    machine: &mut Machine,
+    options: &mut Options,
+) -> Result<bool, CommandError> {
+    match key {
+        "s_max" => options.s_max = number(args, key, value)?,
+        "air" => {
+            options.air = value
+                .parse::<Air>()
+                .map_err(|e| args.invalid(e.to_string()))?;
+        }
+        "finish" => {
+            options.finish_at_origin = match value {
+                "on" => true,
+                "off" => false,
+                _ => return Err(args.invalid("finish must be on or off")),
+            };
+        }
+        "max_speed" => machine.max_speed = number(args, key, value)?,
+        "accel" => machine.acceleration = number(args, key, value)?,
+        "max_power" => machine.max_power = number(args, key, value)?,
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
 /// Machine and export options from `key=value` arguments.
 fn options(args: &Args<'_>, from: usize) -> Result<(Machine, Options), CommandError> {
     let mut machine = Machine::default();
     let mut options = Options::default();
     for i in from..args.len() {
-        let raw = args.str(i)?;
-        let (key, value) = raw
-            .split_once('=')
-            .ok_or_else(|| args.invalid(format!("`{raw}` is not key=value")))?;
-        let number = || {
-            value
-                .parse::<f64>()
-                .ok()
-                .filter(|v| v.is_finite())
-                .ok_or_else(|| args.invalid(format!("{key} needs a number, not `{value}`")))
-        };
-        match key {
-            "s_max" => options.s_max = number()?,
-            "air" => {
-                options.air = value
-                    .parse::<Air>()
-                    .map_err(|e| args.invalid(e.to_string()))?;
-            }
-            "finish" => {
-                options.finish_at_origin = match value {
-                    "on" => true,
-                    "off" => false,
-                    _ => return Err(args.invalid("finish must be on or off")),
-                };
-            }
-            "max_speed" => machine.max_speed = number()?,
-            "accel" => machine.acceleration = number()?,
-            "max_power" => machine.max_power = number()?,
-            _ => return Err(args.invalid(format!("unknown option `{key}`"))),
+        let (key, value) = key_value(args, args.str(i)?)?;
+        if !apply_option(args, key, value, &mut machine, &mut options)? {
+            return Err(args.invalid(format!("unknown option `{key}`")));
         }
     }
     Ok((machine, options))

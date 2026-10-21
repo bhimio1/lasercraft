@@ -1,0 +1,31 @@
+> device.start
+starting the job (absolute coordinates): 105 lines, burn 743.1 mm, estimated 40.6 s
+refused: cannot start the job: the machine is not idle (Alarm)
+> device.home
+homing
+< ok
+> device.move_to 150 100 speed=200
+moving to X150 Y100
+< ok
+> device.jog up 10
+jogging up 10 mm
+< ok
+> device.frame
+framing the job's box (absolute coordinates) at 50 mm/s, laser off
+frame completed
+> device.frame outline from=current anchor=center
+framing the job's outline (center at X150 Y110) at 50 mm/s, laser off
+frame completed
+> device.start from=current anchor=center
+starting the job (center at X150 Y110): 106 lines, burn 743.1 mm, estimated 41.0 s
+job completed
+> device.start from=user anchor=top-right
+starting the job (top-right at X200 Y150): 105 lines, burn 743.1 mm, estimated 40.6 s
+job completed
+> device.send $32
+sending `$32`
+< error:3
+> device.connect simulator
+connecting to simulator at 115200 baud
+(the simulator stays connected)
+simulator: laser on for 1486.225 mm in 28 stretch(es), head at X120 Y150, Idle, 92.2 s

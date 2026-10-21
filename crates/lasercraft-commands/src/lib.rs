@@ -17,6 +17,7 @@ mod invocation;
 mod registry;
 mod session;
 
+pub use cmds::device::{DeviceContext, with_context};
 pub use command::{Command, Outcome};
 pub use error::CommandError;
 pub use invocation::Invocation;

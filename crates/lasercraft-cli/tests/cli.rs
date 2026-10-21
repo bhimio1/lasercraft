@@ -303,3 +303,55 @@ fn preview_lists_moves_takes_machine_flags_and_reports_bounds() {
     assert!(stderr(&out).contains("acceleration"), "{}", stderr(&out));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn m6_simulate_runs_device_commands_on_the_simulated_grbl() {
+    let dir = temp_dir("simulate");
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/m5-export.lcs");
+    let out = cli_in(&dir, &["script", script]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let out = cli_in(
+        &dir,
+        &[
+            "simulate",
+            "m5-job.lcproj",
+            "--locked",
+            "--user-origin",
+            "200,150",
+            "device.start",
+            "device.home",
+            "device.move_to 150 100 speed=200",
+            "device.jog up 10",
+            "device.frame",
+            "device.frame outline from=current anchor=center",
+            "device.start from=current anchor=center",
+            "device.start from=user anchor=top-right",
+            "device.send $32",
+            "device.connect simulator",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/m6-simulate.out");
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(golden_path, stdout(&out)).unwrap();
+    }
+    assert_eq!(
+        stdout(&out),
+        std::fs::read_to_string(golden_path).unwrap_or_default()
+    );
+    // Refusals fail the run and say why.
+    let out = cli_in(
+        &dir,
+        &["simulate", "m5-job.lcproj", "device.start from=user"],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stderr(&out).contains("set an origin"), "{}", stderr(&out));
+    let out = cli_in(&dir, &["simulate", "m5-job.lcproj"]);
+    assert_eq!(out.status.code(), Some(2));
+    let out = cli_in(
+        &dir,
+        &["simulate", "m5-job.lcproj", "--fast", "device.home"],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

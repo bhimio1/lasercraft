@@ -1,9 +1,10 @@
+use lasercraft_device::Request;
 use lasercraft_project::Project;
 
 use crate::{CommandError, Invocation, args::Args};
 
 /// The result of a successful command.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
     /// Human-readable description of what happened.
     pub message: String,
@@ -12,6 +13,9 @@ pub struct Outcome {
     pub inverse: Option<Invocation>,
     /// The project was replaced wholesale (new/load); undo history must be cleared.
     pub reset_history: bool,
+    /// A request for the device thread (`device.*` commands); the front end
+    /// delivers it (`docs/spec/laser.md`).
+    pub device: Option<Request>,
 }
 
 impl Outcome {
@@ -21,6 +25,16 @@ impl Outcome {
             message: message.into(),
             inverse: None,
             reset_history: false,
+            device: None,
+        }
+    }
+
+    /// A successful outcome that asks the front end to send `request` to the
+    /// device. Not undoable: the project does not change.
+    pub fn device(message: impl Into<String>, request: Request) -> Self {
+        Self {
+            device: Some(request),
+            ..Self::done(message)
         }
     }
 
@@ -30,6 +44,7 @@ impl Outcome {
             message: message.into(),
             inverse: Some(inverse),
             reset_history: false,
+            device: None,
         }
     }
 
@@ -39,6 +54,7 @@ impl Outcome {
             message: message.into(),
             inverse: None,
             reset_history: true,
+            device: None,
         }
     }
 }

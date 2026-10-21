@@ -14,6 +14,8 @@ mod objects;
 mod path;
 // M5: G-code export.
 mod export;
+// M6: the laser.
+pub(crate) mod device;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -32,6 +34,8 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(arrange::commands());
     // M5
     all.extend(export::commands());
+    // M6
+    all.extend(device::commands());
     all
 }
 

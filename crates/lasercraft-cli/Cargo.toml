@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 lasercraft-commands.workspace = true
+lasercraft-device.workspace = true
 lasercraft-project.workspace = true
 lasercraft-plan.workspace = true
 lasercraft-geom.workspace = true

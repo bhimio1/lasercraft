@@ -1171,6 +1171,7 @@ name = "lasercraft-cli"
 version = "0.1.0"
 dependencies = [
  "lasercraft-commands",
+ "lasercraft-device",
  "lasercraft-geom",
  "lasercraft-plan",
  "lasercraft-project",
@@ -1181,6 +1182,7 @@ dependencies = [
 name = "lasercraft-commands"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-device",
  "lasercraft-gcode",
  "lasercraft-geom",
  "lasercraft-import",

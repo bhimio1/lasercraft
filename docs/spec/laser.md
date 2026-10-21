@@ -151,15 +151,10 @@ and run the command:
 
 ## Command line
 
-`lasercraft-cli run-job <project.lcproj> --simulate [--frame | --frame-outline]
-[--start-from absolute|current|user] [--at X,Y] [--anchor <name>] [--s-max n]
-[--max-speed v] [--accel a] [--max-power p]` runs the job (or the frame) on
-the simulated GRBL through the real controller and prints the outcome, the
-lines streamed, the simulator's laser-on length and the final position.
-`--at` is the head position (current) or user origin (user). Anchor names:
-`top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`,
-`bottom`, `bottom-right`. Only `--simulate` exists in M6; real ports are used
-from the app.
+`lasercraft-cli simulate <project.lcproj> [--locked] [--user-origin X,Y]
+<command> …` runs device commands against the simulated GRBL through the
+real controller (`docs/spec/cli.md`). Only the simulator is reachable from
+the CLI in M6; real ports are used from the app.
 
 ## Sources
 
