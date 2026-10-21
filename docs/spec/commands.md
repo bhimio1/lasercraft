@@ -21,6 +21,12 @@ Milestone: M0.
 - Unknown names fail with "unknown command". Wrong argument counts fail with
   the command's usage line.
 
+## Device commands
+
+- `device.*` commands (`docs/spec/laser.md`) never change the project and are
+  not undoable. Their outcome carries a device request (`Outcome::device`)
+  that the front end delivers to the device thread or the simulator.
+
 ## Undo and redo
 
 - Undoable commands return an inverse invocation that restores the previous

@@ -1160,6 +1160,8 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "lasercraft-commands",
+ "lasercraft-device",
+ "lasercraft-geom",
  "lasercraft-plan",
  "lasercraft-project",
  "lasercraft-ui",

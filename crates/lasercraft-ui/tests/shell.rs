@@ -7,7 +7,7 @@ use lasercraft_geom::Point;
 use lasercraft_project::Project;
 use lasercraft_ui::interaction::Tool;
 use lasercraft_ui::keymap::Keymap;
-use lasercraft_ui::{Action, Shell, ShellView};
+use lasercraft_ui::{Action, LaserView, Shell, ShellView};
 
 struct Harness {
     ctx: egui::Context,
@@ -15,6 +15,7 @@ struct Harness {
     session: Session,
     time: f64,
     log: Vec<String>,
+    laser: LaserView,
 }
 
 impl Harness {
@@ -29,6 +30,7 @@ impl Harness {
             session,
             time: 0.0,
             log: Vec::new(),
+            laser: LaserView::default(),
         };
         h.frame(Vec::new(), Modifiers::NONE);
         h
@@ -46,7 +48,7 @@ impl Harness {
         self.time += 0.25;
         let undo = self.session.undo_label().cloned();
         let mut actions = Vec::new();
-        let (shell, session) = (&mut self.shell, &self.session);
+        let (shell, session, laser) = (&mut self.shell, &self.session, &self.laser);
         let mut output = self.ctx.run_ui(input, |ui| {
             let view = ShellView {
                 project: session.project(),
@@ -54,6 +56,7 @@ impl Harness {
                 modified: false,
                 undo: undo.as_ref(),
                 can_redo: session.redo_depth() > 0,
+                laser,
             };
             actions = shell.show(ui, &view);
         });
@@ -232,6 +235,7 @@ fn layers_panel_lists_used_layers() {
             modified: false,
             undo,
             can_redo: false,
+            laser: &LaserView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -276,6 +280,7 @@ fn alt_p_opens_the_preview_and_draws_what_it_is_given() {
             modified: false,
             undo: None,
             can_redo: false,
+            laser: &LaserView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -366,6 +371,7 @@ fn alt_shift_l_asks_where_to_save_gcode() {
             modified: false,
             undo: None,
             can_redo: false,
+            laser: &LaserView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -375,4 +381,148 @@ fn alt_shift_l_asks_where_to_save_gcode() {
         _ => false,
     });
     assert!(found, "G-code prompt not shown");
+}
+
+impl Harness {
+    /// Every piece of text drawn in one frame.
+    fn texts(&mut self) -> Vec<String> {
+        let input = RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+            time: Some(self.time),
+            ..RawInput::default()
+        };
+        let (shell, session, laser) = (&mut self.shell, &self.session, &self.laser);
+        let mut output = self.ctx.run_ui(input, |ui| {
+            let view = ShellView {
+                project: session.project(),
+                file: None,
+                modified: false,
+                undo: None,
+                can_redo: false,
+                laser,
+            };
+            let _ = shell.show(ui, &view);
+        });
+        output.textures_delta.clear();
+        output
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn laser_shortcuts_run_device_commands_with_the_panel_settings() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    let ctrl_shift = Modifiers::COMMAND | Modifiers::SHIFT;
+    let ctrl_alt = Modifiers::COMMAND | Modifiers::ALT;
+    h.key(Key::S, Modifiers::ALT);
+    h.key(Key::R, Modifiers::ALT);
+    h.key(Key::R, Modifiers::ALT | Modifiers::SHIFT);
+    h.key(Key::CloseBracket, ctrl_shift);
+    h.key(Key::CloseCurlyBracket, ctrl_shift);
+    h.key(Key::OpenBracket, ctrl_shift);
+    h.key(Key::OpenBracket, ctrl_alt);
+    h.key(Key::CloseBracket, ctrl_alt);
+    h.key(Key::H, Modifiers::COMMAND);
+    h.key(Key::Pause, Modifiers::NONE);
+    h.key(Key::Pause, Modifiers::COMMAND);
+    assert_eq!(
+        h.log,
+        [
+            "device.start from=absolute anchor=bottom-left",
+            "device.frame from=absolute anchor=bottom-left speed=50",
+            "device.frame outline from=absolute anchor=bottom-left speed=50",
+            "device.jog up 10 speed=50",
+            "device.jog up 10 speed=50",
+            "device.jog down 10 speed=50",
+            "device.jog left 10 speed=50",
+            "device.jog right 10 speed=50",
+            "device.home",
+            "device.pause",
+            "device.stop",
+        ]
+    );
+    // While paused, the same key resumes.
+    h.laser.port = Some("simulator".into());
+    h.laser.busy = Some(lasercraft_ui::Busy {
+        kind: "job".into(),
+        acknowledged: 3,
+        total: 10,
+        elapsed: 2.0,
+        paused: true,
+        constant_power: false,
+    });
+    h.log.clear();
+    h.key(Key::Pause, Modifiers::NONE);
+    assert_eq!(h.log, ["device.resume"]);
+}
+
+#[test]
+fn stop_and_pause_show_whenever_a_laser_is_connected() {
+    let mut h = Harness::new(&[]);
+    let texts = h.texts();
+    assert!(!texts.iter().any(|t| t == "Stop"), "no laser, no Stop");
+    h.laser.port = Some("/dev/ttyUSB0".into());
+    h.laser.ready = true;
+    h.laser.state = "Idle".into();
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Stop") && texts.iter().any(|t| t == "Pause"));
+    assert!(
+        texts.iter().any(|t| t == "Laser Idle on /dev/ttyUSB0"),
+        "{texts:?}"
+    );
+    // A job with constant power says Pause only holds motion.
+    h.laser.busy = Some(lasercraft_ui::Busy {
+        kind: "job".into(),
+        acknowledged: 1,
+        total: 4,
+        elapsed: 1.0,
+        paused: false,
+        constant_power: true,
+    });
+    assert!(h.texts().iter().any(|t| t == "Pause (motion)"));
+}
+
+#[test]
+fn the_laser_tab_shows_status_console_and_the_alarm_window() {
+    let mut h = Harness::new(&[]);
+    h.shell.show_laser_tab();
+    h.laser.port = Some("simulator".into());
+    h.laser.ready = true;
+    h.laser.state = "Idle".into();
+    h.laser.position = Some([12.5, 30.0]);
+    h.laser.console = vec![
+        lasercraft_ui::ConsoleLine {
+            sent: true,
+            text: "$$".into(),
+            routine: false,
+        },
+        lasercraft_ui::ConsoleLine {
+            sent: false,
+            text: "<Idle|MPos:0,0,0>".into(),
+            routine: true,
+        },
+    ];
+    h.laser.alarm = Some("Alarm 1: a limit switch was hit".into());
+    let texts = h.texts();
+    for want in [
+        "Ready (Idle) at X12.5 Y30 on simulator",
+        "> $$",
+        "Laser alarm",
+        "Alarm 1: a limit switch was hit",
+        "Unlock",
+        "Set origin",
+        "Frame outline",
+    ] {
+        assert!(texts.iter().any(|t| t == want), "{want}: {texts:?}");
+    }
+    assert!(
+        !texts.iter().any(|t| t.starts_with("<Idle")),
+        "routine lines are hidden by default"
+    );
 }

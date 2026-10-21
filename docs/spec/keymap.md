@@ -2,7 +2,7 @@
 
 Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
 (notes, side panels), M3 (import, text, nodes, groups, booleans, alignment), M4
-(job preview).
+(job preview), M6 (laser: start, frame, pause/stop, home, jog).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -16,7 +16,8 @@ Later chords are bound as their commands arrive; the table below says when.
 - Shortcuts are ignored while a text field has keyboard focus.
 - A chord bound twice in one file is an error naming the line.
 - Invocations are registry commands, or front-end actions: `ui.*` (files,
-  tools, paste at the pointer, notes, side panels) and `view.*` (zoom). Front-end actions do not
+  tools, paste at the pointer, notes, side panels, laser actions that use the
+  Laser panel's settings) and `view.*` (zoom). Front-end actions do not
   change the project; the actions they lead to are commands.
 - Menu items show the chord bound to their action.
 
@@ -86,14 +87,14 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | --- | --- | --- |
 | Ctrl+Tab | Add tabs by hand | later (M4 has automatic tabs only) |
 | Alt+P | Preview the job (`ui.preview`; works without a device) | M4 |
-| Alt+L | Move the head to a clicked point | M6 |
-| Ctrl+Shift+[ / Ctrl+Shift+] | Jog down / up | M6 |
-| Ctrl+Alt+[ / Ctrl+Alt+] | Jog left / right | M6 |
-| Ctrl+H | Home (on macOS this chord is also the system "hide app") | M6 |
-| Alt+S / Alt+Shift+S | Start the job / send it without starting | M6 |
-| Alt+R / Alt+Shift+R | Frame the job / frame its outline | M6 |
-| Ctrl+Shift+A | Frame the selection *(legacy)* | M6 |
-| Pause / Ctrl+Break *(legacy)* | Pause / stop; also always-visible buttons | M6 |
+| Alt+L | Move the head to a clicked point | later |
+| Ctrl+Shift+[ / Ctrl+Shift+] | Jog down / up (`ui.jog_down`, `ui.jog_up`; also bound to `{` / `}`, which Shift+[ / Shift+] type on many layouts) | M6 |
+| Ctrl+Alt+[ / Ctrl+Alt+] | Jog left / right (`ui.jog_left`, `ui.jog_right`) | M6 |
+| Ctrl+H | Home (`device.home`; on macOS this chord is also the system "hide app") | M6 |
+| Alt+S / Alt+Shift+S | Start the job (`ui.device_start`) / send it without starting (controllers that store files; not GRBL) | M6 / not planned |
+| Alt+R / Alt+Shift+R | Frame the job / frame its outline (`ui.device_frame`, `ui.device_frame_outline`) | M6 |
+| Ctrl+Shift+A | Frame the selection *(legacy)* | later (with cut-selected-graphics) |
+| Pause / Ctrl+Break *(legacy)* | Pause or resume (`ui.device_pause`) / stop (`device.stop`, bound as Ctrl+Pause, which is what egui reports for Ctrl+Break); also always-visible buttons | M6 |
 | Alt+C | Capture a camera image | M9 |
 | Ctrl+Shift+R / Ctrl+Shift+F | Rotary / feeder setup | M9 |
 | Alt+0 … Alt+4 | Print-and-cut steps | M9 |

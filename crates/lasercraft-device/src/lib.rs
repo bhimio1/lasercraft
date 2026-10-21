@@ -18,6 +18,6 @@ pub mod sim;
 mod thread;
 
 pub use bench::Bench;
-pub use controller::{Controller, Protocol, Settings, jog_line};
+pub use controller::{Controller, Protocol, Settings, jog_line, uses_constant_power};
 pub use messages::{Event, Info, MachineState, Outcome, Request, SIMULATOR_PORT, StreamKind};
 pub use thread::{DeviceHandle, list_ports, spawn};

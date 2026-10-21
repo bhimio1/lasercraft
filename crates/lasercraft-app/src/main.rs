@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use eframe::egui;
-use lasercraft_commands::{Invocation, Registry, Session};
+use lasercraft_commands::{Invocation, Registry, Session, with_context};
 use lasercraft_project::Project;
 use lasercraft_ui::keymap::Keymap;
 use lasercraft_ui::{Action, Shell, ShellView};
 
+mod laser;
 mod preview;
 
 struct Options {
@@ -59,10 +60,12 @@ struct App {
     closing: bool,
     /// Session revision the open preview was planned from.
     previewed: Option<u64>,
+    /// The laser connection (M6).
+    laser: laser::Laser,
 }
 
 impl App {
-    fn new(keymap: Keymap, file: Option<PathBuf>) -> Self {
+    fn new(keymap: Keymap, file: Option<PathBuf>, ctx: &egui::Context) -> Self {
         let mut app = Self {
             session: Session::new(Project::default(), Registry::with_builtin()),
             shell: Shell::new(keymap),
@@ -71,6 +74,7 @@ impl App {
             pending: None,
             closing: false,
             previewed: None,
+            laser: laser::Laser::new(ctx),
         };
         if let Some(path) = file {
             app.open(path);
@@ -83,11 +87,17 @@ impl App {
     }
 
     /// Runs an invocation, logging the outcome. Returns whether it succeeded.
+    /// `device.*` commands get what the app knows about the machine filled
+    /// in, and their request goes to the device thread.
     fn run(&mut self, invocation: &Invocation) -> bool {
+        let invocation = &with_context(invocation, &self.laser.context());
         match self.session.run(invocation) {
             Ok(outcome) => {
                 self.shell
                     .log(format!("> {invocation}\n{}", outcome.message));
+                if let Some(request) = outcome.device {
+                    self.laser.send(request);
+                }
                 true
             }
             Err(err) => {
@@ -117,7 +127,7 @@ impl App {
         let discards = match &action {
             Action::New | Action::Open(_) | Action::Quit => true,
             Action::Run(inv) => inv.name == "project.new" || inv.name == "project.load",
-            Action::Save | Action::SaveAs(_) | Action::Preview => false,
+            Action::Save | Action::SaveAs(_) | Action::Preview | Action::Laser(_) => false,
         };
         if discards && self.modified() && self.pending.is_none() {
             self.pending = Some(action);
@@ -156,6 +166,11 @@ impl App {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             Action::Preview => self.refresh_preview(true),
+            Action::Laser(action) => {
+                if let Some(line) = self.laser.act(&action) {
+                    self.shell.log(line);
+                }
+            }
         }
     }
 
@@ -222,6 +237,12 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending = Some(Action::Quit);
         }
+        for line in self.laser.poll() {
+            self.shell.log(line);
+        }
+        if self.laser.connected() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
         let undo = self.session.undo_label().cloned();
         let view = ShellView {
             project: self.session.project(),
@@ -229,6 +250,7 @@ impl eframe::App for App {
             modified: self.modified(),
             undo: undo.as_ref(),
             can_redo: self.session.redo_depth() > 0,
+            laser: self.laser.view(),
         };
         let actions = self.shell.show(ui, &view);
         for action in actions {
@@ -253,7 +275,7 @@ fn main() -> ExitCode {
         eframe::run_native(
             "LaserCraft",
             native,
-            Box::new(move |_cc| Ok(Box::new(App::new(keymap, options.file)))),
+            Box::new(move |cc| Ok(Box::new(App::new(keymap, options.file, &cc.egui_ctx)))),
         )
         .map_err(|e| e.to_string())
     });

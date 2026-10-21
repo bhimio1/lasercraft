@@ -10,6 +10,7 @@ use crate::canvas::Canvas;
 use crate::dialogs::Dialogs;
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
+use crate::laser_panel::{self, LaserAction, LaserPanel, LaserView};
 use crate::layers_panel::{LayersPanel, palette_strip};
 use crate::preview::{Preview, PreviewWindow};
 
@@ -131,6 +132,8 @@ pub struct ShellView<'a> {
     pub undo: Option<&'a Invocation>,
     /// Whether `edit.redo` has anything to do.
     pub can_redo: bool,
+    /// The laser connection (M6).
+    pub laser: &'a LaserView,
 }
 
 /// Something the user asked for. The app carries it out.
@@ -151,6 +154,8 @@ pub enum Action {
     /// Plan the job and hand it to [`Shell::set_preview`]; the preview
     /// window is open and wants it.
     Preview,
+    /// Something the app remembers about the laser (`docs/spec/laser.md`).
+    Laser(LaserAction),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +181,12 @@ pub struct Shell {
     preview: Option<PreviewWindow>,
     /// Offset, array and text windows (M3).
     dialogs: Dialogs,
+    /// The Laser panel's settings (M6).
+    laser: LaserPanel,
+    /// The right dock shows the Laser panel instead of Cuts / Layers.
+    laser_tab: bool,
+    /// Whether the running stream is paused, for the pause/resume key.
+    paused: bool,
 }
 
 impl Shell {
@@ -193,6 +204,9 @@ impl Shell {
             notes: None,
             preview: None,
             dialogs: Dialogs::default(),
+            laser: LaserPanel::default(),
+            laser_tab: false,
+            paused: false,
         }
     }
 
@@ -231,6 +245,12 @@ impl Shell {
         self.canvas.tool()
     }
 
+    /// Shows the Laser panel in the right dock.
+    pub fn show_laser_tab(&mut self) {
+        self.laser_tab = true;
+        self.panels = true;
+    }
+
     /// Asks the user for a path to save to.
     pub fn prompt_save_as(&mut self) {
         self.prompt = Some((PromptKind::SaveAs, String::new()));
@@ -240,10 +260,11 @@ impl Shell {
     pub fn show(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>) -> Vec<Action> {
         // Ctrl+= / Ctrl+- / Ctrl+0 zoom the canvas, not the whole UI.
         ui.ctx().options_mut(|o| o.zoom_with_keyboard = false);
+        self.paused = view.laser.busy.as_ref().is_some_and(|b| b.paused);
         let mut actions = self.shortcuts(ui);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, view, &mut actions));
         let pointer = self.canvas.pointer();
-        egui::Panel::bottom("status").show(ui, |ui| status_bar(ui, view, pointer));
+        egui::Panel::bottom("status").show(ui, |ui| status_bar(ui, view, pointer, &mut actions));
         egui::Panel::bottom("console")
             .resizable(true)
             .default_size(120.0)
@@ -263,9 +284,25 @@ impl Shell {
                 .resizable(true)
                 .default_size(290.0)
                 .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .selectable_label(!self.laser_tab, "Cuts / Layers")
+                            .clicked()
+                        {
+                            self.laser_tab = false;
+                        }
+                        if ui.selectable_label(self.laser_tab, "Laser").clicked() {
+                            self.laser_tab = true;
+                        }
+                    });
+                    ui.separator();
                     egui::ScrollArea::vertical().show(ui, |ui| {
-                        let invocations = self.layers.show(ui, view.project);
-                        actions.extend(invocations.into_iter().map(Action::Run));
+                        if self.laser_tab {
+                            self.laser.show(ui, view.laser, &mut actions);
+                        } else {
+                            let invocations = self.layers.show(ui, view.project);
+                            actions.extend(invocations.into_iter().map(Action::Run));
+                        }
                     });
                 });
         }
@@ -282,6 +319,7 @@ impl Shell {
         {
             self.preview = None;
         }
+        laser_panel::windows(ui.ctx(), view.laser, &mut actions);
         if let Some(at) = self.canvas.take_text_click() {
             self.dialogs.open_text(at);
         }
@@ -412,7 +450,14 @@ impl Shell {
                 self.canvas.zoom(&invocation.name);
                 return None;
             }
-            _ => Action::Run(invocation),
+            "ui.laser" => {
+                self.show_laser_tab();
+                return None;
+            }
+            name => match self.laser.resolve(name, self.paused) {
+                Some(action) => return action,
+                None => Action::Run(invocation),
+            },
         })
     }
 
@@ -496,6 +541,39 @@ impl Shell {
                 ui.separator();
                 self.menu_line(ui, "Side Panels", "ui.toggle_panels", true, actions);
                 self.menu_line(ui, "Job Preview…", "ui.preview", true, actions);
+            });
+            ui.menu_button("Laser", |ui| {
+                let ready = view.laser.ready;
+                let idle = ready && view.laser.busy.is_none();
+                self.menu_line(ui, "Laser Panel", "ui.laser", true, actions);
+                ui.separator();
+                self.menu_line(ui, "Start", "ui.device_start", idle, actions);
+                self.menu_line(ui, "Frame", "ui.device_frame", idle, actions);
+                self.menu_line(
+                    ui,
+                    "Frame Outline",
+                    "ui.device_frame_outline",
+                    idle,
+                    actions,
+                );
+                self.menu_line(ui, "Pause / Resume", "ui.device_pause", ready, actions);
+                self.menu_line(
+                    ui,
+                    "Stop",
+                    "device.stop",
+                    view.laser.port.is_some(),
+                    actions,
+                );
+                ui.separator();
+                self.menu_line(ui, "Home", "device.home", idle, actions);
+                self.menu_line(ui, "Unlock", "device.unlock", idle, actions);
+                self.menu_line(
+                    ui,
+                    "Disconnect",
+                    "device.disconnect",
+                    view.laser.port.is_some(),
+                    actions,
+                );
             });
         });
     }
@@ -621,8 +699,19 @@ impl Shell {
     }
 }
 
-fn status_bar(ui: &mut egui::Ui, view: &ShellView<'_>, pointer: Option<Point>) {
+fn status_bar(
+    ui: &mut egui::Ui,
+    view: &ShellView<'_>,
+    pointer: Option<Point>,
+    actions: &mut Vec<Action>,
+) {
     ui.horizontal(|ui| {
+        // Stop and Pause stay reachable whatever else is open (safety rule 7).
+        if let Some(port) = &view.laser.port {
+            laser_panel::stop_and_pause(ui, view.laser, actions);
+            ui.label(format!("Laser {} on {port}", view.laser.state));
+            ui.separator();
+        }
         let file = view
             .file
             .map_or_else(|| "not saved".to_owned(), |p| p.display().to_string());

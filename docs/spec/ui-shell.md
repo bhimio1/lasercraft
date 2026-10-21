@@ -1,7 +1,7 @@
 # Spec: main window shell
 
 Milestones: M0 (shell), M1 (canvas, tools, editing menus), M2 (layers panel,
-palette, notes).
+palette, notes), M6 (Laser panel and menu).
 
 ## Layout
 
@@ -35,6 +35,21 @@ palette, notes).
   path, the work area size and origin, the pointer position in mm, and the
   selection's count and size.
 - Window title: project name, prefixed with a dot when modified.
+
+## M6 additions
+
+- The right dock has two tabs: Cuts / Layers and Laser. The Laser panel
+  (`docs/spec/laser.md`, "Panel layout") draws `LaserView` data the app
+  builds from device events, and emits `device.*` invocations (run through
+  the session like any command) or `Action::Laser` for what only the app
+  remembers (user origin, port list, closing the alarm and notice windows).
+- Laser menu: Laser Panel, Start, Frame, Frame Outline, Pause / Resume, Stop,
+  Home, Unlock, Disconnect.
+- While a laser is connected the status bar starts with Pause (or Resume)
+  and Stop and the machine state, so they stay reachable whatever panel or
+  window is open (safety rule 7).
+- A "Laser alarm" window shows an alarm until closed, with Unlock and Home;
+  a "Laser" window shows permission help and failed jobs.
 
 ## M3 additions
 

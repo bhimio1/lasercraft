@@ -23,10 +23,11 @@ lasercraft-commands, lasercraft-ui ──► lasercraft-import (M3; the UI only 
 lasercraft-import ──► lasercraft-geom
 lasercraft-app ──► lasercraft-plan (M4)
 lasercraft-commands ──► lasercraft-gcode ──► lasercraft-plan (M5: project.export_gcode)
-lasercraft-app ┄► lasercraft-device [M6]
+lasercraft-commands ──► lasercraft-device (M6: device.* commands return a Request)
+lasercraft-app ──► lasercraft-device (M6: the device thread)
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
-      └┄► lasercraft-device (simulator) [M6]
+lasercraft-cli ──► lasercraft-device (M6: simulate)
 
 lasercraft-plan ──► lasercraft-project, lasercraft-geom (M4)
 lasercraft-plan ┄► lasercraft-raster [M7]
@@ -46,11 +47,11 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-import` | SVG and DXF to geometry; font lookup and text outlines. | M3: SVG (usvg), DXF (own reader), system fonts (fontdb), glyph outlines (ttf-parser) |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
-| `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5 |
-| `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M0: message types, GRBL real-time bytes, state names, Linux permission help |
-| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags) |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields |
-| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0 |
+| `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5; M6: job placement (Start From, nine-point job origin), laser-off framing (box, convex hull) |
+| `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M6: reply parser, I/O-free `Controller` (character counting with send-response fallback, polling, stalls, hold-then-reset stop, spindle stop on pausing `M3` jobs, laser-mode check), simulated GRBL with a laser-on log, `Bench`, device thread (serial and simulator) |
+| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags); M5: `export`; M6: `simulate` |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window |
+| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin |
 
 ## Command registry
 
@@ -68,9 +69,12 @@ depends on `lasercraft-project`: it streams lines it is given.
 - Redo restores the project's id allocator to its value when the command first
   ran, so recreated objects get the ids later history entries refer to.
 - Naming: `area.action` (`project.set_work_area`). Lengths are millimetres.
-- Device actions (connect, jog, frame, start, pause, stop) will be commands too
-  (M6), but they are never undoable, and they act on the device thread through
-  `Request` messages rather than on the project.
+- Device actions (connect, jog, frame, start, pause, stop, …) are `device.*`
+  commands too (M6). They never change the project and are not undoable: each
+  returns a `lasercraft_device::Request` in `Outcome::device`, which the front
+  end delivers (the app to its device thread, `lasercraft-cli simulate` to the
+  simulator). `with_context` fills in what only the front end knows (head
+  position, user origin, `$30`).
 
 ## Threading model
 
@@ -91,8 +95,11 @@ depends on `lasercraft-project`: it streams lines it is given.
   immutable snapshot of the project and returns a plan through a channel, so a
   long plan never freezes the UI. M4 itself plans on the UI thread, only while
   the preview window is open and the session's revision has changed.
-- The CLI uses the same channels with the simulated device, which is how M6 is
-  tested without hardware.
+- The streaming logic is the I/O-free `Controller` (requests, received lines
+  and the time in; bytes and events out). The device thread wraps it with a
+  port and a clock; tests and `lasercraft-cli simulate` wrap it with the
+  simulator on simulated time (`Bench`), which is how M6 is tested without
+  hardware.
 
 ## Testing strategy
 

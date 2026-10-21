@@ -98,7 +98,7 @@ and macOS.
       scanlines with overscan; kerf offset; tabs/bridges; preview with travel
       moves and time estimate.
 - [x] M5 GRBL G-code export (M3/M4 dynamic power, S-max).
-- [ ] M6 Device connection and GRBL streaming: character counting with
+- [x] M6 Device connection and GRBL streaming: character counting with
       ping-pong fallback, status polling; jog, home, set origin, job origin
       modes (absolute, current position, user origin); framing,
       start/pause/stop, console. All simulator-tested.

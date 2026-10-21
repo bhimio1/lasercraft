@@ -108,3 +108,17 @@ Alt+Shift+V    = arrange.move_together vertical
 
 # G-code (M5)
 Alt+Shift+L  = ui.export_gcode
+
+# Laser (M6). Shift+] types `}` on many layouts, so both are bound.
+Alt+S          = ui.device_start
+Alt+R          = ui.device_frame
+Alt+Shift+R    = ui.device_frame_outline
+Pause          = ui.device_pause
+Ctrl+Pause     = device.stop
+Ctrl+H         = device.home
+Ctrl+Shift+]   = ui.jog_up
+Ctrl+Shift+}   = ui.jog_up
+Ctrl+Shift+[   = ui.jog_down
+Ctrl+Shift+{   = ui.jog_down
+Ctrl+Alt+[     = ui.jog_left
+Ctrl+Alt+]     = ui.jog_right

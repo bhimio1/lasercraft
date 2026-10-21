@@ -171,6 +171,13 @@ fn has_m3(line: &str) -> bool {
         || upper.contains("M03")
 }
 
+/// Whether a program uses constant laser power (`M3`), which stays on while
+/// a feed hold is stopped (`docs/spec/safety.md` rule 9).
+#[must_use]
+pub fn uses_constant_power(gcode: &str) -> bool {
+    program_lines(gcode).iter().any(|l| has_m3(l))
+}
+
 /// `$` commands other than jogging, and EEPROM writes, go one at a time.
 fn needs_alone(line: &str) -> bool {
     let upper = line.to_ascii_uppercase();
