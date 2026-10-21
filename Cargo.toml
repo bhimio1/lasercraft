@@ -23,6 +23,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 i_overlay = "9.1"
 egui = "0.37"
+usvg = { version = "0.48.1", default-features = false }
+fontdb = { version = "0.24.0", default-features = false, features = ["std", "fs", "fontconfig"] }
+ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 
 [workspace.lints.rust]

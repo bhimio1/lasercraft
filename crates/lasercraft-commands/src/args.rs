@@ -39,6 +39,13 @@ impl<'a> Args<'a> {
             .map_or(Ok(0), |c| Ok(lasercraft_project::layer::parse_color(c)?))
     }
 
+    /// The `@<color>` argument, if one was given.
+    pub fn color(&self) -> Result<Option<u8>, CommandError> {
+        self.color
+            .map(|c| Ok(lasercraft_project::layer::parse_color(c)?))
+            .transpose()
+    }
+
     /// Argument `i` as a palette color.
     pub fn color_at(&self, i: usize) -> Result<u8, CommandError> {
         Ok(lasercraft_project::layer::parse_color(self.str(i)?)?)

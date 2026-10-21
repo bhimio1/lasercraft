@@ -424,7 +424,7 @@ mod tests {
                 r#"{"id":40,"geometry":{"kind":"rect","width":1.0,"height":2.0},"transform":[1.0,0.0,0.0,1.0,0.0,0.0]}"#,
             ],
         );
-        [
+        let mut script = [
             "project.rename Round trip",
             r#"project.set_notes "cut at 80%""#,
             "project.set_work_area 610 305",
@@ -464,7 +464,81 @@ mod tests {
             "layer.delete 3",
         ]
         .map(str::to_owned)
-        .to_vec()
+        .to_vec();
+        script.extend(m3_round_trip_lines());
+        script
+    }
+
+    /// M3 commands: groups, arrangement, arrays, nodes, booleans, import
+    /// and text. Shape ids continue from the lines above (next id 44).
+    fn m3_round_trip_lines() -> Vec<String> {
+        let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/fixtures");
+        let geometry = Invocation::new(
+            "shape.set_geometry",
+            ["45", r#"{"kind":"rect","width":5.0,"height":5.0}"#],
+        );
+        let import = Invocation::new("project.import", [format!("{fixtures}/m3-art.svg")]);
+        let text = Invocation::new(
+            "shape.add_text",
+            [
+                "10".to_owned(),
+                "10".to_owned(),
+                "5".to_owned(),
+                format!("{fixtures}/lctest.ttf"),
+                "HOLA".to_owned(),
+            ],
+        );
+        let mut lines: Vec<String> = [
+            "shape.add_rect 200 0 20 20",
+            "shape.add_rect 210 10 20 20",
+            "shape.add_ellipse 250 50 10 10",
+            "shape.add_line 300 0 310 0",
+            "shape.add_line 310 0 310 10",
+            "group.create 44 45",
+            "arrange.align left 44 46",
+            "group.ungroup 44",
+            "group.set 46 49",
+            "arrange.distribute h-centered 44 45 46",
+            "arrange.move_together vertical 44 45",
+            "arrange.move_to_bed center 47 48",
+            "arrange.grid 2 1 5 0 46",
+            "arrange.circular 3 0 0 90 rotate 47",
+            "shape.to_path 44",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        lines.push(geometry.to_string());
+        lines.extend(
+            [
+                "node.move 44 0 0 1 1",
+                "node.insert 44 0 0",
+                "node.to_curve 44 0 0",
+                "node.set_handle 44 0 0 1 3 3",
+                "node.to_line 44 0 0",
+                "node.delete 44 0 1",
+                "node.break 44 0 0",
+                "node.delete_segment 44 0 0",
+                "path.join 47 48",
+                "shape.add_polyline 0 0 10 0 10 10 0 0.2",
+                "path.close 55",
+                "path.break_apart 55",
+                "shape.add_rect 0 300 10 10",
+                "shape.add_rect 5 305 10 10",
+                "path.union 60 61",
+                "shape.add_rect 0 300 10 10",
+                "shape.add_rect 5 305 10 10",
+                "path.subtract 63 64",
+                "shape.add_rect 0 300 10 10",
+                "shape.add_rect 5 305 10 10",
+                "path.intersect 66 67",
+                "path.weld 62 65",
+                "path.offset 1 round 69",
+            ]
+            .map(str::to_owned),
+        );
+        lines.push(import.to_string());
+        lines.push(text.to_string());
+        lines
     }
 
     /// Runs every undoable command, then undoes, redoes and undoes again,

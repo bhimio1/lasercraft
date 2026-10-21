@@ -51,7 +51,8 @@ item per line.
 | `next_id` | Next object id to hand out; greater than every shape id. |
 | `layers.order` | Output order: all 30 colors exactly once. |
 | `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. |
-| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, or `polyline` with `points` as `[x, y]` pairs and `closed`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
+| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, `polyline` with `points` as `[x, y]` pairs and `closed`, or `path` with `subpaths`, `docs/spec/geometry.md`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
+| `shapes[].groups` | M3, optional: the group ids the shape belongs to, outermost first (`docs/spec/arrange.md`); left out when the shape is not grouped. Ids are ≥ 1, not repeated, and below `next_id`. Older files have none, so no version bump was needed. |
 
 Document coordinates are millimetres with x to the right and y downwards
 (SVG convention, `docs/spec/geometry.md`). The origin corner says how they map

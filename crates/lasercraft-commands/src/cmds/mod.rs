@@ -5,6 +5,13 @@ mod layer;
 mod project;
 mod select;
 mod shape;
+// M3: import, text, groups, nodes, booleans, arrangement.
+mod arrange;
+mod group;
+mod import;
+mod node;
+mod objects;
+mod path;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -15,6 +22,12 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(select::commands());
     all.extend(clipboard::commands());
     all.extend(layer::commands());
+    // M3
+    all.extend(import::commands());
+    all.extend(group::commands());
+    all.extend(node::commands());
+    all.extend(path::commands());
+    all.extend(arrange::commands());
     all
 }
 

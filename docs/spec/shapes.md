@@ -25,6 +25,8 @@ Milestone: M1.
   document equality. They still change only through commands.
 - Adding, duplicating or pasting shapes selects the new shapes. Deleting a
   shape removes it from the selection.
+- Every selection change is widened to whole top-level groups, and the
+  selection remembers the object added last (`docs/spec/arrange.md`, M3).
 - Commands that act on shapes take explicit ids, or use the selection when no
   ids are given. With no ids and an empty selection they fail with "nothing
   selected". Inverses always name ids explicitly.

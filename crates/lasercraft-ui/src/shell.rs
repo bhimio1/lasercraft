@@ -7,16 +7,90 @@ use lasercraft_geom::Point;
 use lasercraft_project::Project;
 
 use crate::canvas::Canvas;
+use crate::dialogs::Dialogs;
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
 use crate::layers_panel::{LayersPanel, palette_strip};
 
 /// Tools in the tool palette: label, `ui.tool` argument.
-const TOOLS: [(&str, &str, Tool); 4] = [
+const TOOLS: [(&str, &str, Tool); 6] = [
     ("Select", "select", Tool::Select),
     ("Line", "line", Tool::Line),
     ("Rectangle", "rect", Tool::Rect),
     ("Ellipse", "ellipse", Tool::Ellipse),
+    ("Text", "text", Tool::Text),
+    ("Edit Nodes", "nodes", Tool::Nodes),
+];
+
+/// M3 Tools menu entries that act on the selection: label, invocation.
+const PATH_TOOLS: [(&str, &str); 9] = [
+    ("Weld", "path.weld"),
+    ("Union", "path.union"),
+    ("Subtract", "path.subtract"),
+    ("Intersect", "path.intersect"),
+    ("Offset…", "ui.offset"),
+    ("Convert to Path", "shape.to_path"),
+    ("Close Path", "path.close"),
+    ("Join Paths", "path.join"),
+    ("Break Apart", "path.break_apart"),
+];
+
+/// M3 Arrange menu entries: submenu (empty for top level), label, invocation.
+const ARRANGE_M3: [(&str, &str, &str); 22] = [
+    ("", "Group", "group.create"),
+    ("", "Ungroup", "group.ungroup"),
+    ("Align", "Left Edges", "arrange.align left"),
+    ("Align", "Right Edges", "arrange.align right"),
+    ("Align", "Top Edges", "arrange.align top"),
+    ("Align", "Bottom Edges", "arrange.align bottom"),
+    ("Align", "Vertical Centers", "arrange.align center-x"),
+    ("Align", "Horizontal Centers", "arrange.align center-y"),
+    ("Align", "Centers", "arrange.align center"),
+    (
+        "Distribute",
+        "Horizontal Spacing",
+        "arrange.distribute h-spaced",
+    ),
+    (
+        "Distribute",
+        "Horizontal Centers",
+        "arrange.distribute h-centered",
+    ),
+    (
+        "Distribute",
+        "Vertical Spacing",
+        "arrange.distribute v-spaced",
+    ),
+    (
+        "Distribute",
+        "Vertical Centers",
+        "arrange.distribute v-centered",
+    ),
+    (
+        "Distribute",
+        "Pack Horizontally",
+        "arrange.move_together horizontal",
+    ),
+    (
+        "Distribute",
+        "Pack Vertically",
+        "arrange.move_together vertical",
+    ),
+    ("Move on Bed", "Center", "arrange.move_to_bed center"),
+    ("Move on Bed", "Top Left", "arrange.move_to_bed top-left"),
+    ("Move on Bed", "Top Right", "arrange.move_to_bed top-right"),
+    (
+        "Move on Bed",
+        "Bottom Left",
+        "arrange.move_to_bed bottom-left",
+    ),
+    (
+        "Move on Bed",
+        "Bottom Right",
+        "arrange.move_to_bed bottom-right",
+    ),
+    ("", "Grid Array…", "ui.grid_array"),
+    ("", "Circular Array…", "ui.circular_array"),
 ];
 
 /// Menu entries that act on the selection: label, invocation.
@@ -79,6 +153,7 @@ pub enum Action {
 enum PromptKind {
     Open,
     SaveAs,
+    Import,
 }
 
 /// UI-only state of the main window.
@@ -92,6 +167,8 @@ pub struct Shell {
     panels: bool,
     /// The notes window: open, with its text once loaded from the project.
     notes: Option<Option<String>>,
+    /// Offset, array and text windows (M3).
+    dialogs: Dialogs,
 }
 
 impl Shell {
@@ -107,6 +184,7 @@ impl Shell {
             layers: LayersPanel::default(),
             panels: true,
             notes: None,
+            dialogs: Dialogs::default(),
         }
     }
 
@@ -177,6 +255,15 @@ impl Shell {
             });
         self.path_prompt(ui, &mut actions);
         self.notes_window(ui, view.project, &mut actions);
+        if let Some(at) = self.canvas.take_text_click() {
+            self.dialogs.open_text(at);
+        }
+        let color = self.canvas.color();
+        actions.extend(
+            self.dialogs
+                .show(ui.ctx(), view.project, color)
+                .map(Action::Run),
+        );
         actions
     }
 
@@ -274,6 +361,14 @@ impl Shell {
                 self.notes = Some(None);
                 return None;
             }
+            "ui.import" => {
+                self.prompt = Some((PromptKind::Import, String::new()));
+                return None;
+            }
+            "ui.offset" | "ui.grid_array" | "ui.circular_array" => {
+                self.dialogs.open(&invocation.name);
+                return None;
+            }
             "ui.toggle_panels" => {
                 self.panels = !self.panels;
                 return None;
@@ -304,6 +399,7 @@ impl Shell {
                     ("Open…", "ui.open"),
                     ("Save", "ui.save"),
                     ("Save As…", "ui.save_as"),
+                    ("Import…", "ui.import"),
                     ("Project Notes…", "ui.notes"),
                     ("Quit", "ui.quit"),
                 ] {
@@ -342,6 +438,11 @@ impl Shell {
                 for (label, name, _) in TOOLS {
                     self.menu_line(ui, label, &format!("ui.tool {name}"), true, actions);
                 }
+                ui.separator();
+                let selected = !view.project.selection().is_empty();
+                for (label, line) in PATH_TOOLS {
+                    self.menu_line(ui, label, line, selected, actions);
+                }
             });
             ui.menu_button("Arrange", |ui| {
                 let selected = !view.project.selection().is_empty();
@@ -349,6 +450,8 @@ impl Shell {
                     let enabled = selected || line.starts_with("select.");
                     self.menu_line(ui, label, line, enabled, actions);
                 }
+                ui.separator();
+                self.arrange_m3(ui, selected, actions);
             });
             ui.menu_button("View", |ui| {
                 self.menu_line(ui, "Zoom In", "view.zoom_in", true, actions);
@@ -358,6 +461,24 @@ impl Shell {
                 self.menu_line(ui, "Side Panels", "ui.toggle_panels", true, actions);
             });
         });
+    }
+
+    /// Grouping, alignment, distribution, bed placement and arrays, with
+    /// submenus in the order of [`ARRANGE_M3`].
+    fn arrange_m3(&mut self, ui: &mut egui::Ui, selected: bool, actions: &mut Vec<Action>) {
+        let mut done: Vec<&str> = Vec::new();
+        for (menu, label, line) in ARRANGE_M3 {
+            if menu.is_empty() {
+                self.menu_line(ui, label, line, selected, actions);
+            } else if !done.contains(&menu) {
+                done.push(menu);
+                ui.menu_button(menu, |ui| {
+                    for (_, label, line) in ARRANGE_M3.iter().filter(|e| e.0 == menu) {
+                        self.menu_line(ui, label, line, selected, actions);
+                    }
+                });
+            }
+        }
     }
 
     /// A menu item that runs `line` (shown with its bound chord).
@@ -424,9 +545,10 @@ impl Shell {
         let Some((kind, text)) = &mut self.prompt else {
             return;
         };
-        let title = match kind {
-            PromptKind::Open => "Open project",
-            PromptKind::SaveAs => "Save project as",
+        let (title, what) = match kind {
+            PromptKind::Open => ("Open project", "Path to a .lcproj file:"),
+            PromptKind::SaveAs => ("Save project as", "Path to a .lcproj file:"),
+            PromptKind::Import => ("Import vector art", "Path to an .svg or .dxf file:"),
         };
         let mut open = true;
         let mut done = None;
@@ -434,7 +556,7 @@ impl Shell {
             .collapsible(false)
             .open(&mut open)
             .show(ui.ctx(), |ui| {
-                ui.label("Path to a .lcproj file:");
+                ui.label(what);
                 let field = ui.text_edit_singleline(text);
                 let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 if (ui.button("OK").clicked() || enter) && !text.trim().is_empty() {
@@ -445,6 +567,10 @@ impl Shell {
             actions.push(match kind {
                 PromptKind::Open => Action::Open(path),
                 PromptKind::SaveAs => Action::SaveAs(path),
+                PromptKind::Import => Action::Run(Invocation::new(
+                    "project.import",
+                    [path.display().to_string()],
+                )),
             });
             self.prompt = None;
         } else if !open {

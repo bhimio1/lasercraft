@@ -19,7 +19,8 @@ named in brackets.
 ```
 lasercraft-app ──► lasercraft-ui ──► lasercraft-commands ──► lasercraft-project ──► lasercraft-geom
 lasercraft-ui, lasercraft-commands ──► lasercraft-geom
-lasercraft-commands ┄► lasercraft-import [M3]
+lasercraft-commands, lasercraft-ui ──► lasercraft-import (M3; the UI only lists font families)
+lasercraft-import ──► lasercraft-geom
 lasercraft-app ┄► lasercraft-device [M6], lasercraft-plan, lasercraft-gcode [M4/M5]
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project
@@ -38,8 +39,8 @@ depends on `lasercraft-project`: it streams lines it is given.
 | --- | --- | --- |
 | `lasercraft-geom` | Points, affine transforms, bounding boxes; later paths, Béziers, flattening, booleans, offsets. Pure, deterministic. | M1: `Point`, `Affine`, `Rect`, ellipse flattening, polyline queries, snapping, handle math |
 | `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M2: name, notes, work area, 30 layers with cut settings in output order, shapes (rect, ellipse, polyline) with transforms and a layer, hit tests, selection and clipboard as view state; compact JSON writer |
-| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M2: `project.*`, `shape.*`, `select.*`, `layer.*`, `edit.*` |
-| `lasercraft-import` | SVG and DXF to geometry. | Empty until M3 |
+| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M3: adds `project.import`, `shape.add_text`, `shape.to_path`, `node.*`, `group.*`, `path.*`, `arrange.*` |
+| `lasercraft-import` | SVG and DXF to geometry; font lookup and text outlines. | M3: SVG (usvg), DXF (own reader), system fonts (fontdb), glyph outlines (ttf-parser) |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested. | Empty until M4 |
 | `lasercraft-gcode` | GRBL-dialect output, with work-area and power checks. | Empty until M5 |
@@ -115,9 +116,21 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |
 
+| `usvg` (no default features) | SVG import: resolves CSS, `<use>`, transforms and units and turns every element into absolute lines and Béziers; text and font features are off, so no font stack is pulled in. Apache-2.0 OR MIT. |
+| `fontdb` (`std`, `fs`, `fontconfig`; no `memmap`) | Finds installed fonts by family name for text (M3). MIT. |
+| `ttf-parser` (`std` only) | Reads glyph outlines, advances, cap height and `kern` pairs from TrueType/OpenType fonts. MIT OR Apache-2.0. |
+
+DXF is read by our own small parser (`lasercraft-import/src/dxf.rs`): the
+available crates pull in large dependency trees for a format whose ASCII
+form is simple group-code pairs.
+
 Planned, each to be justified here when added: `serialport` (M6, serial I/O),
-an SVG parser such as `usvg` (M3), a DXF reader (M3), `image` (M7), a font
-loader (M3 text).
+`image` (M7).
+
+M3 notes: node editing, joining and splitting live in `lasercraft-geom`
+(`nodes`); groups are a chain of group ids on each shape
+(`docs/spec/arrange.md`); text is stored as outline paths
+(`docs/spec/text.md`).
 
 ## Deferred decisions
 

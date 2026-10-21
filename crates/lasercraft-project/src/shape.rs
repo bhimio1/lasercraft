@@ -1,6 +1,6 @@
 //! Shapes: an id, local geometry and a transform (`docs/spec/shapes.md`).
 
-use lasercraft_geom::{Affine, Path, Point, Rect, flatten, polyline};
+use lasercraft_geom::{Affine, Path, Point, Rect, SubPath, flatten, polyline};
 use serde::{Deserialize, Serialize};
 
 use crate::ProjectError;
@@ -144,6 +144,26 @@ impl Geometry {
         }
     }
 
+    /// The same outline as a path: rectangles and polylines become lines,
+    /// ellipses four cubic quarter arcs (`docs/spec/nodes.md`).
+    #[must_use]
+    pub fn to_path(&self) -> Path {
+        match self {
+            Self::Rect { width, height } => Path::from_contours(&[vec![
+                Point::new(0.0, 0.0),
+                Point::new(*width, 0.0),
+                Point::new(*width, *height),
+                Point::new(0.0, *height),
+            ]])
+            .unwrap_or_default(),
+            Self::Ellipse { rx, ry } => Path::ellipse(*rx, *ry),
+            Self::Polyline { points, closed } => SubPath::from_points(points, *closed)
+                .map(Path::single)
+                .unwrap_or_default(),
+            Self::Path(path) => path.clone(),
+        }
+    }
+
     /// Short name of the kind, for listings.
     #[must_use]
     pub fn kind(&self) -> &'static str {
@@ -168,6 +188,9 @@ pub struct Shape {
     /// Palette color of the shape's layer.
     #[serde(default)]
     layer: Color,
+    /// Groups the shape belongs to, outermost first (`docs/spec/arrange.md`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    groups: Vec<u32>,
     geometry: Geometry,
     transform: Affine,
 }
@@ -193,6 +216,25 @@ pub fn validate_transform(t: &Affine) -> Result<(), ProjectError> {
     Ok(())
 }
 
+/// Checks a group chain: ids at least 1, none repeated.
+///
+/// # Errors
+///
+/// Returns [`ProjectError::InvalidValue`] if not.
+pub fn validate_groups(groups: &[u32]) -> Result<(), ProjectError> {
+    if groups.contains(&0) {
+        return Err(ProjectError::invalid("group", "ids must be at least 1"));
+    }
+    let unique: std::collections::HashSet<u32> = groups.iter().copied().collect();
+    if unique.len() != groups.len() {
+        return Err(ProjectError::invalid(
+            "group",
+            "a shape lists a group twice",
+        ));
+    }
+    Ok(())
+}
+
 impl Shape {
     /// A validated shape.
     ///
@@ -204,6 +246,7 @@ impl Shape {
         let shape = Self {
             id,
             layer: 0,
+            groups: Vec::new(),
             geometry,
             transform,
         };
@@ -218,8 +261,29 @@ impl Shape {
         if usize::from(self.layer) >= LAYER_COUNT {
             return Err(ProjectError::invalid("layer", "must be a color 0–29"));
         }
+        validate_groups(&self.groups)?;
         self.geometry.validate()?;
         validate_transform(&self.transform)
+    }
+
+    /// Groups the shape belongs to, outermost first; empty when ungrouped.
+    #[must_use]
+    pub fn groups(&self) -> &[u32] {
+        &self.groups
+    }
+
+    /// The outermost group, if any.
+    #[must_use]
+    pub fn top_group(&self) -> Option<u32> {
+        self.groups.first().copied()
+    }
+
+    pub(crate) fn set_groups(&mut self, groups: Vec<u32>) {
+        self.groups = groups;
+    }
+
+    pub(crate) fn set_geometry(&mut self, geometry: Geometry) {
+        self.geometry = geometry;
     }
 
     /// Identifier, unique in the project.

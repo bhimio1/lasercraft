@@ -16,8 +16,10 @@ mod work_area;
 pub use error::ProjectError;
 pub use file::{FORMAT, FORMAT_VERSION};
 pub use layer::{Color, Dither, ImageSettings, LAYER_COUNT, Layer, Mode};
-pub use shape::{Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_transform};
-pub use shapes::{BoxMode, ViewState};
+pub use shape::{
+    Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_groups, validate_transform,
+};
+pub use shapes::{BoxMode, ObjectKey, ViewState};
 pub use work_area::{MAX_WORK_AREA_MM, MIN_WORK_AREA_MM, Origin, WorkArea};
 
 use serde::{Deserialize, Serialize};

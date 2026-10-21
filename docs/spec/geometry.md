@@ -26,6 +26,7 @@ booleans and offsets get their own specs in M1–M4.
   tolerance of the chord, so the polyline stays within the tolerance of the
   curve.
 - Affine transforms map Béziers to Béziers exactly.
+- Node editing, joining and splitting paths: `docs/spec/nodes.md` (M3).
 
 ## Booleans and offsets (M3 base)
 

@@ -6,6 +6,7 @@
 
 mod canvas;
 pub mod colors;
+mod dialogs;
 pub mod interaction;
 pub mod keymap;
 mod layers_panel;
@@ -17,7 +18,7 @@ pub use shell::{Action, Shell, ShellView};
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 12] = [
+pub const UI_ACTIONS: [&str; 16] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -30,4 +31,9 @@ pub const UI_ACTIONS: [&str; 12] = [
     "view.zoom_in",
     "view.zoom_out",
     "view.zoom_fit",
+    // M3: import prompt and the offset / array windows.
+    "ui.import",
+    "ui.offset",
+    "ui.grid_array",
+    "ui.circular_array",
 ];

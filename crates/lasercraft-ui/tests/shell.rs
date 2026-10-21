@@ -241,3 +241,48 @@ fn layers_panel_lists_used_layers() {
     }
     assert!(found, "layer name not drawn");
 }
+
+#[test]
+fn m3_shortcuts_group_align_and_weld() {
+    let mut h = Harness::new(&[
+        "shape.add_rect 0 0 20 20",
+        "shape.add_rect 10 30 20 20",
+        "select.all",
+    ]);
+    h.key(Key::ArrowLeft, Modifiers::ALT);
+    assert_eq!(h.log, ["arrange.align left"]);
+    assert_eq!(h.bounds(2).min.x, 0.0);
+    h.key(Key::G, Modifiers::COMMAND);
+    assert_eq!(h.session.project().shape(2).unwrap().groups(), [3]);
+    h.key(Key::U, Modifiers::COMMAND);
+    h.key(Key::W, Modifiers::COMMAND);
+    assert_eq!(h.log[1..], ["group.create", "group.ungroup", "path.weld"]);
+    assert_eq!(h.session.project().order(), [4]);
+}
+
+#[test]
+fn node_tool_drags_a_node_on_the_canvas() {
+    let mut h = Harness::new(&["shape.add_rect 100 100 50 50", "shape.to_path"]);
+    h.key(Key::Backtick, Modifiers::COMMAND);
+    assert_eq!(h.shell.tool(), Tool::Nodes);
+    // Node 2 is the bottom-right corner; drag it with snapping off.
+    h.drag((150.0, 150.0), (163.0, 171.0), Modifiers::COMMAND);
+    assert_eq!(h.log.len(), 1);
+    assert!(h.log[0].starts_with("node.move 1 0 2 "), "{:?}", h.log);
+    let b = h.bounds(1);
+    assert!(
+        (b.max.x - 163.0).abs() < 0.5 && (b.max.y - 171.0).abs() < 0.5,
+        "{b:?}"
+    );
+}
+
+#[test]
+fn text_tool_click_opens_the_text_window_without_running_anything() {
+    let mut h = Harness::new(&[]);
+    h.key(Key::T, Modifiers::COMMAND);
+    assert_eq!(h.shell.tool(), Tool::Text);
+    h.drag((50.0, 50.0), (50.0, 50.0), Modifiers::NONE);
+    h.frame(Vec::new(), Modifiers::NONE);
+    assert!(h.log.is_empty());
+    assert!(h.session.project().shapes().is_empty());
+}

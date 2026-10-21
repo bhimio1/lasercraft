@@ -14,6 +14,9 @@ use crate::{Geometry, Project, ProjectError, Shape};
 pub struct ViewState {
     selection: BTreeSet<u32>,
     clipboard: Vec<Shape>,
+    /// A shape of the object added to the selection last
+    /// (`docs/spec/arrange.md`, "Anchor object").
+    anchor: Option<u32>,
 }
 
 impl PartialEq for ViewState {
@@ -29,6 +32,25 @@ pub enum BoxMode {
     Contained,
     /// Shapes whose outline crosses or lies inside the box.
     Touching,
+}
+
+/// A top-level object: an outermost group, or an ungrouped shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ObjectKey {
+    /// All shapes whose outermost group is this id.
+    Group(u32),
+    /// One ungrouped shape.
+    Shape(u32),
+}
+
+impl ObjectKey {
+    /// The object a shape belongs to.
+    #[must_use]
+    pub fn of(shape: &Shape) -> Self {
+        shape
+            .top_group()
+            .map_or(Self::Shape(shape.id()), Self::Group)
+    }
 }
 
 fn unknown(id: u32) -> ProjectError {
@@ -108,8 +130,9 @@ impl Project {
                 format!("{index} is past the end ({} shapes)", self.shapes.len()),
             ));
         }
-        if shape.id() >= self.next_id {
-            self.set_next_id(shape.id().saturating_add(1));
+        let highest = shape.groups().iter().copied().fold(shape.id(), u32::max);
+        if highest >= self.next_id {
+            self.set_next_id(highest.saturating_add(1));
         }
         self.shapes.insert(index, shape);
         Ok(())
@@ -132,6 +155,9 @@ impl Project {
     pub fn remove_shape(&mut self, id: u32) -> Result<(usize, Shape), ProjectError> {
         let index = self.index_of(id).ok_or_else(|| unknown(id))?;
         self.view.selection.remove(&id);
+        if self.view.anchor == Some(id) {
+            self.view.anchor = None;
+        }
         Ok((index, self.shapes.remove(index)))
     }
 
@@ -145,6 +171,113 @@ impl Project {
         let index = self.index_of(id).ok_or_else(|| unknown(id))?;
         self.shapes[index].set_transform(transform);
         Ok(())
+    }
+
+    /// Replaces a shape's geometry.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an unknown id or invalid geometry.
+    pub fn set_shape_geometry(&mut self, id: u32, geometry: Geometry) -> Result<(), ProjectError> {
+        geometry.validate()?;
+        let index = self.index_of(id).ok_or_else(|| unknown(id))?;
+        self.shapes[index].set_geometry(geometry);
+        Ok(())
+    }
+
+    /// Sets the groups a shape belongs to, outermost first. Moves the id
+    /// allocator past them so new ids never collide.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an unknown id or an invalid chain.
+    pub fn set_shape_groups(&mut self, id: u32, groups: Vec<u32>) -> Result<(), ProjectError> {
+        crate::shape::validate_groups(&groups)?;
+        let index = self.index_of(id).ok_or_else(|| unknown(id))?;
+        if let Some(highest) = groups.iter().max()
+            && *highest >= self.next_id
+        {
+            self.set_next_id(highest.saturating_add(1));
+        }
+        self.shapes[index].set_groups(groups);
+        Ok(())
+    }
+
+    /// Gives the shapes `ids` (fresh copies) new group ids: shapes that
+    /// shared a group share its replacement. Ids are allocated in order of
+    /// first appearance, so the result is deterministic.
+    pub fn regroup(&mut self, ids: &[u32]) {
+        let mut fresh: Vec<(u32, u32)> = Vec::new();
+        for id in ids {
+            let Some(index) = self.index_of(*id) else {
+                continue;
+            };
+            let old = self.shapes[index].groups().to_vec();
+            let mut new = Vec::with_capacity(old.len());
+            for g in old {
+                let mapped = if let Some((_, to)) = fresh.iter().find(|(from, _)| *from == g) {
+                    *to
+                } else {
+                    let to = self.allocate_id();
+                    fresh.push((g, to));
+                    to
+                };
+                new.push(mapped);
+            }
+            self.shapes[index].set_groups(new);
+        }
+    }
+
+    /// The top-level objects that `ids` belong to, each as all of its
+    /// shapes in drawing order; objects ordered by their lowest shape.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an unknown id.
+    pub fn objects_of(&self, ids: &[u32]) -> Result<Vec<Vec<u32>>, ProjectError> {
+        let mut keys = Vec::new();
+        for id in ids {
+            let key = ObjectKey::of(self.shape(*id).ok_or_else(|| unknown(*id))?);
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        let mut objects: Vec<(ObjectKey, Vec<u32>)> = Vec::new();
+        for shape in &self.shapes {
+            let key = ObjectKey::of(shape);
+            if !keys.contains(&key) {
+                continue;
+            }
+            match objects.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, members)) => members.push(shape.id()),
+                None => objects.push((key, vec![shape.id()])),
+            }
+        }
+        Ok(objects.into_iter().map(|(_, members)| members).collect())
+    }
+
+    /// `ids` widened to every shape of their top-level objects.
+    fn widened(&self, ids: &BTreeSet<u32>) -> BTreeSet<u32> {
+        let keys: HashSet<ObjectKey> = ids
+            .iter()
+            .filter_map(|id| self.shape(*id))
+            .map(ObjectKey::of)
+            .collect();
+        self.shapes
+            .iter()
+            .filter(|s| keys.contains(&ObjectKey::of(s)))
+            .map(Shape::id)
+            .collect()
+    }
+
+    /// A shape of the anchor object: the object added to the selection
+    /// last, else the first selected shape in drawing order.
+    #[must_use]
+    pub fn anchor(&self) -> Option<u32> {
+        self.view
+            .anchor
+            .filter(|a| self.view.selection.contains(a))
+            .or_else(|| self.selection().first().copied())
     }
 
     /// Moves a shape to the layer `color`.
@@ -264,6 +397,15 @@ impl Project {
         if let Some(missing) = ids.iter().find(|id| self.shape(**id).is_none()) {
             return Err(unknown(*missing));
         }
+        let ids = self.widened(&ids);
+        let added = self
+            .shapes
+            .iter()
+            .map(Shape::id)
+            .find(|id| ids.contains(id) && !self.view.selection.contains(id));
+        if added.is_some() {
+            self.view.anchor = added;
+        }
         self.view.selection = ids;
         Ok(())
     }
@@ -293,6 +435,12 @@ impl Project {
                 return Err(ProjectError::invalid(
                     "next_id",
                     format!("must be greater than every shape id ({})", shape.id()),
+                ));
+            }
+            if let Some(g) = shape.groups().iter().find(|g| **g >= self.next_id) {
+                return Err(ProjectError::invalid(
+                    "next_id",
+                    format!("must be greater than every group id ({g})"),
                 ));
             }
         }
@@ -386,6 +534,61 @@ mod tests {
         assert_eq!(p.selection(), [a]);
         p.remove_shape(a).unwrap();
         assert!(p.selection().is_empty());
+    }
+
+    #[test]
+    fn selection_widens_to_groups_and_tracks_the_anchor() {
+        let mut p = Project::default();
+        let a = square(&mut p, 0.0, 0.0);
+        let b = square(&mut p, 20.0, 0.0);
+        let c = square(&mut p, 40.0, 0.0);
+        let g = p.allocate_id();
+        p.set_shape_groups(a, vec![g]).unwrap();
+        p.set_shape_groups(b, vec![g]).unwrap();
+        p.set_selection([b]).unwrap();
+        assert_eq!(p.selection(), [a, b]);
+        assert_eq!(p.anchor(), Some(a), "first of the added shapes");
+        p.set_selection([a, b, c]).unwrap();
+        assert_eq!(p.anchor(), Some(c), "last added object");
+        p.set_selection([a, b]).unwrap();
+        assert_eq!(p.anchor(), Some(a), "falls back once the anchor leaves");
+        assert_eq!(p.objects_of(&[c, b]).unwrap(), [vec![a, b], vec![c]]);
+        assert!(p.objects_of(&[99]).is_err());
+    }
+
+    #[test]
+    fn group_chains_are_validated_and_regrouped() {
+        let mut p = Project::default();
+        let a = square(&mut p, 0.0, 0.0);
+        assert!(p.set_shape_groups(a, vec![0]).is_err());
+        assert!(p.set_shape_groups(a, vec![5, 5]).is_err());
+        p.set_shape_groups(a, vec![10, 7]).unwrap();
+        assert_eq!(p.next_id(), 11, "allocator moves past group ids");
+        let copy = p.add_copy(&p.shape(a).unwrap().clone());
+        p.regroup(&[copy]);
+        assert_eq!(p.shape(copy).unwrap().groups(), [12, 13]);
+        let json = p.to_json();
+        assert!(json.contains("\"groups\": [10, 7]"), "{json}");
+        assert_eq!(Project::from_json(&json).unwrap(), p);
+        let broken = json.replace("\"next_id\": 14", "\"next_id\": 12");
+        assert!(Project::from_json(&broken).is_err());
+    }
+
+    #[test]
+    fn geometry_can_be_replaced_and_converted() {
+        let mut p = Project::default();
+        let a = square(&mut p, 0.0, 0.0);
+        let path = p.shape(a).unwrap().geometry().to_path();
+        assert_eq!(path.subpaths[0].segments.len(), 3);
+        p.set_shape_geometry(a, Geometry::Path(path)).unwrap();
+        assert_eq!(p.shape(a).unwrap().geometry().kind(), "path");
+        assert!(
+            p.set_shape_geometry(a, Geometry::Path(lasercraft_geom::Path::default()))
+                .is_err()
+        );
+        let e = Geometry::Ellipse { rx: 2.0, ry: 1.0 }.to_path();
+        let b = e.bounds().unwrap();
+        assert!(b.max.approx_eq(Point::new(2.0, 1.0), 1e-9));
     }
 
     #[test]

@@ -1,0 +1,63 @@
+renamed to Coaster set
+imported 4 shape(s) from examples/fixtures/m3-art.svg
+imported 4 shape(s) from examples/fixtures/m3-plate.dxf
+moved 4 shape(s) to the bed's top-right
+ungrouped 1 group(s)
+welded 2 shape(s) into shape 11
+added path 12
+added rect 13
+added ellipse 14
+subtracted 2 shape(s) into shape 15
+offset 1 shape(s) by 2 mm into shape 16
+added rect 17
+converted 1 shape(s) to paths
+edited nodes of shape 17
+edited nodes of shape 17
+edited nodes of shape 17
+edited nodes of shape 17
+added rect 18
+added rect 19
+grouped 2 objects as group 20
+grid: 5 cop(ies) of 2 shape(s)
+added ellipse 36
+circular array: 5 cop(ies) of 1 shape(s)
+aligned 3 objects top
+undid `arrange.align top 1 4 12`
+project "Coaster set": work area 400 × 400 mm, origin front-left, 29 shape(s)
+  layer  0 "Layer 00": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  1 "Layer 01": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  2 "Layer 02": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  3 "Layer 03": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  4 "Layer 04": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  5 "Layer 05": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer 10 "Layer 10": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer 21 "Layer 21": line 10 mm/s, power 0–20%, 1 pass(es)
+     1 @0  path     (5, 5) – (75, 55)
+     4 @10 path     (10, 45) – (70, 50)
+     6 @1  path     (347, 17) – (353, 23) group 10
+     7 @1  path     (387, 17) – (393, 23) group 10
+     8 @1  path     (340, 0) – (400, 40) group 10
+     9 @21 path     (360, 10) – (380, 25) group 10
+    11 @1  path     (12, 15) – (60, 38)
+    12 @2  path     (10.571, 112) – (35.714, 120)
+    15 @1  path     (100, 100) – (130, 130)
+    16 @1  path     (98, 98) – (132, 132)
+    17 @3  path     (200, 145.556) – (225, 165)
+    18 @4  rect     (0, 200) – (10, 210) group 20
+    19 @4  rect     (15, 200) – (25, 210) group 20
+    21 @4  rect     (30, 200) – (40, 210) group 23
+    22 @4  rect     (45, 200) – (55, 210) group 23
+    24 @4  rect     (60, 200) – (70, 210) group 26
+    25 @4  rect     (75, 200) – (85, 210) group 26
+    27 @4  rect     (0, 215) – (10, 225) group 29
+    28 @4  rect     (15, 215) – (25, 225) group 29
+    30 @4  rect     (30, 215) – (40, 225) group 32
+    31 @4  rect     (45, 215) – (55, 225) group 32
+    33 @4  rect     (60, 215) – (70, 225) group 35
+    34 @4  rect     (75, 215) – (85, 225) group 35
+    36 @5  ellipse  (295, 295) – (305, 305)
+    37 @5  ellipse  (277.679, 285) – (287.679, 295)
+    38 @5  ellipse  (277.679, 265) – (287.679, 275)
+    39 @5  ellipse  (295, 255) – (305, 265)
+    40 @5  ellipse  (312.321, 265) – (322.321, 275)
+    41 @5  ellipse  (312.321, 285) – (322.321, 295)

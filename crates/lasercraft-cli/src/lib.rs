@@ -247,6 +247,11 @@ pub fn summary(project: &Project) -> String {
             mm(b.max.x),
             mm(b.max.y)
         );
+        // M3: group chain, outermost first.
+        if !shape.groups().is_empty() {
+            let groups: Vec<String> = shape.groups().iter().map(ToString::to_string).collect();
+            let _ = write!(out, " group {}", groups.join("/"));
+        }
     }
     out
 }

@@ -102,6 +102,40 @@ fn m2_layers_script_matches_golden_output() {
 }
 
 #[test]
+fn m3_design_script_matches_golden_output() {
+    // The script names its fixtures relative to the repository root.
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let out = Command::new(env!("CARGO_BIN_EXE_lasercraft-cli"))
+        .args(["script", "examples/m3-design.lcs"])
+        .current_dir(root)
+        .output()
+        .expect("spawn lasercraft-cli");
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(stdout(&out), include_str!("golden/m3-design.out"));
+}
+
+#[test]
+fn imports_through_run_and_show_groups() {
+    let dir = temp_dir("import");
+    let file = dir.join("plate.lcproj");
+    let f = path_str(&file);
+    assert!(cli(&["new", f]).status.success());
+    let dxf = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/fixtures/m3-plate.dxf"
+    );
+    let out = cli(&["run", f, &format!("project.import \"{dxf}\" @3")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let shown = stdout(&cli(&["show", f]));
+    assert!(shown.contains("4 shape(s)"), "{shown}");
+    assert!(shown.contains("@3  path"), "{shown}");
+    assert!(shown.contains("group 5"), "{shown}");
+    let out = cli(&["run", f, "project.import /nonexistent/x.dxf"]);
+    assert_eq!(out.status.code(), Some(1));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn script_errors_name_the_line() {
     let dir = temp_dir("script");
     let script = dir.join("bad.lcs");
