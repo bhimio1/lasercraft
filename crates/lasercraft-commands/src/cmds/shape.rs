@@ -13,25 +13,25 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
     vec![
         cmd(
             "shape.add_rect",
-            "shape.add_rect <x> <y> <width> <height>",
+            "shape.add_rect <x> <y> <width> <height> [@color]",
             "Add a rectangle with its top-left corner at (x, y).",
             add_rect,
         ),
         cmd(
             "shape.add_ellipse",
-            "shape.add_ellipse <cx> <cy> <rx> <ry>",
+            "shape.add_ellipse <cx> <cy> <rx> <ry> [@color]",
             "Add an ellipse centered on (cx, cy).",
             add_ellipse,
         ),
         cmd(
             "shape.add_line",
-            "shape.add_line <x1> <y1> <x2> <y2>",
+            "shape.add_line <x1> <y1> <x2> <y2> [@color]",
             "Add a straight line.",
             add_line,
         ),
         cmd(
             "shape.add_polyline",
-            "shape.add_polyline [closed] <x1> <y1> <x2> <y2> ...",
+            "shape.add_polyline [closed] <x1> <y1> <x2> <y2> ... [@color]",
             "Add a polyline through two or more points.",
             add_polyline,
         ),
@@ -131,11 +131,13 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
 /// Adds a shape, selects it, and returns an outcome whose inverse deletes it.
 pub(crate) fn add(
     project: &mut Project,
+    args: &Args<'_>,
     geometry: Geometry,
     transform: Affine,
 ) -> Result<Outcome, CommandError> {
     let kind = geometry.kind();
-    let id = project.add_shape(geometry, transform)?;
+    let color = args.color_or_default()?;
+    let id = project.add_shape_on(geometry, transform, color)?;
     project.set_selection([id])?;
     Ok(Outcome::undoable(
         format!("added {kind} {id}"),
@@ -149,6 +151,7 @@ fn add_rect(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandEr
     let (width, height) = (args.f64(2, "width")?, args.f64(3, "height")?);
     add(
         project,
+        args,
         Geometry::Rect { width, height },
         Affine::translate(corner.x, corner.y),
     )
@@ -160,6 +163,7 @@ fn add_ellipse(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comman
     let (rx, ry) = (args.f64(2, "x radius")?, args.f64(3, "y radius")?);
     add(
         project,
+        args,
         Geometry::Ellipse { rx, ry },
         Affine::translate(center.x, center.y),
     )
@@ -170,6 +174,7 @@ fn add_line(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandEr
     let points = vec![args.point(0)?, args.point(2)?];
     add(
         project,
+        args,
         Geometry::Polyline {
             points,
             closed: false,
@@ -191,6 +196,7 @@ fn add_polyline(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comma
         .collect::<Result<Vec<Point>, _>>()?;
     add(
         project,
+        args,
         Geometry::Polyline { points, closed },
         Affine::IDENTITY,
     )

@@ -1,6 +1,7 @@
 # Spec: main window shell
 
-Milestones: M0 (shell), M1 (canvas, tools, editing menus).
+Milestones: M0 (shell), M1 (canvas, tools, editing menus), M2 (layers panel,
+palette, notes).
 
 ## Layout
 
@@ -12,6 +13,18 @@ Milestones: M0 (shell), M1 (canvas, tools, editing menus).
   without one. Each item shows its shortcut from the keymap.
 - Left: the tool palette (Select, Line, Rectangle, Ellipse); the active tool
   is highlighted.
+- Right: the layers panel. It lists the layers that have shapes in output
+  order (swatch, name, mode, speed and power, output and show switches);
+  clicking a name opens it in the editor below, Shift+click selects its
+  shapes. Move up / Move down / Delete shapes act on the edited layer. The
+  editor shows the layer's settings (fill settings only in fill mode; image
+  settings in a collapsed section). A dragged value is committed as one
+  command when the drag ends; typed values when entered.
+- Bottom: the palette strip of 30 colors; the current color for new shapes is
+  outlined. Clicking a color with shapes selected moves them to that layer,
+  otherwise it becomes the current color.
+- F12 or View → Side Panels hides and shows the tool palette and the layers
+  panel. File → Project Notes… (Ctrl+Alt+N) edits the notes.
 - Center: the canvas (`docs/spec/canvas.md`).
 - Console (bottom, resizable): a line where any command can be typed and run,
   and a log of each command with its message or error.

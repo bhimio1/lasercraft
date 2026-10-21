@@ -9,6 +9,7 @@ use lasercraft_project::Project;
 use crate::canvas::Canvas;
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
+use crate::layers_panel::{LayersPanel, palette_strip};
 
 /// Tools in the tool palette: label, `ui.tool` argument.
 const TOOLS: [(&str, &str, Tool); 4] = [
@@ -87,6 +88,10 @@ pub struct Shell {
     log: Vec<String>,
     prompt: Option<(PromptKind, String)>,
     canvas: Canvas,
+    layers: LayersPanel,
+    panels: bool,
+    /// The notes window: open, with its text once loaded from the project.
+    notes: Option<Option<String>>,
 }
 
 impl Shell {
@@ -99,6 +104,9 @@ impl Shell {
             log: Vec::new(),
             prompt: None,
             canvas: Canvas::default(),
+            layers: LayersPanel::default(),
+            panels: true,
+            notes: None,
         }
     }
 
@@ -130,6 +138,8 @@ impl Shell {
 
     /// Draws one frame and returns what the user asked for.
     pub fn show(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>) -> Vec<Action> {
+        // Ctrl+= / Ctrl+- / Ctrl+0 zoom the canvas, not the whole UI.
+        ui.ctx().options_mut(|o| o.zoom_with_keyboard = false);
         let mut actions = self.shortcuts(ui);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, view, &mut actions));
         let pointer = self.canvas.pointer();
@@ -138,9 +148,27 @@ impl Shell {
             .resizable(true)
             .default_size(120.0)
             .show(ui, |ui| self.console(ui, &mut actions));
-        egui::Panel::left("tools")
-            .resizable(false)
-            .show(ui, |ui| self.tool_palette(ui, &mut actions));
+        egui::Panel::bottom("palette").show(ui, |ui| {
+            let (invocations, picked) = palette_strip(ui, view.project, self.canvas.color());
+            actions.extend(invocations.into_iter().map(Action::Run));
+            if let Some(color) = picked {
+                self.canvas.set_color(color);
+            }
+        });
+        if self.panels {
+            egui::Panel::left("tools")
+                .resizable(false)
+                .show(ui, |ui| self.tool_palette(ui, &mut actions));
+            egui::Panel::right("layers")
+                .resizable(true)
+                .default_size(290.0)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        let invocations = self.layers.show(ui, view.project);
+                        actions.extend(invocations.into_iter().map(Action::Run));
+                    });
+                });
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
@@ -148,7 +176,32 @@ impl Shell {
                 actions.extend(drawn.into_iter().map(Action::Run));
             });
         self.path_prompt(ui, &mut actions);
+        self.notes_window(ui, view.project, &mut actions);
         actions
+    }
+
+    fn notes_window(&mut self, ui: &mut egui::Ui, project: &Project, actions: &mut Vec<Action>) {
+        let Some(slot) = &mut self.notes else {
+            return;
+        };
+        let text = slot.get_or_insert_with(|| project.notes().to_owned());
+        let mut open = true;
+        let mut save = false;
+        egui::Window::new("Project notes")
+            .open(&mut open)
+            .show(ui.ctx(), |ui| {
+                ui.add(egui::TextEdit::multiline(text).desired_rows(10));
+                save = ui.button("Save notes").clicked();
+            });
+        if save {
+            actions.push(Action::Run(Invocation::new(
+                "project.set_notes",
+                [text.clone()],
+            )));
+        }
+        if save || !open {
+            self.notes = None;
+        }
     }
 
     fn shortcuts(&mut self, ui: &egui::Ui) -> Vec<Action> {
@@ -217,6 +270,14 @@ impl Shell {
                 Some(p) => Invocation::new("edit.paste", [p.x.to_string(), p.y.to_string()]),
                 None => Invocation::bare("edit.paste"),
             }),
+            "ui.notes" => {
+                self.notes = Some(None);
+                return None;
+            }
+            "ui.toggle_panels" => {
+                self.panels = !self.panels;
+                return None;
+            }
             "view.zoom_in" | "view.zoom_out" | "view.zoom_fit" => {
                 self.canvas.zoom(&invocation.name);
                 return None;
@@ -243,6 +304,7 @@ impl Shell {
                     ("Open…", "ui.open"),
                     ("Save", "ui.save"),
                     ("Save As…", "ui.save_as"),
+                    ("Project Notes…", "ui.notes"),
                     ("Quit", "ui.quit"),
                 ] {
                     if self.menu_item(ui, label, bound, true) {
@@ -292,6 +354,8 @@ impl Shell {
                 self.menu_line(ui, "Zoom In", "view.zoom_in", true, actions);
                 self.menu_line(ui, "Zoom Out", "view.zoom_out", true, actions);
                 self.menu_line(ui, "Fit Bed", "view.zoom_fit", true, actions);
+                ui.separator();
+                self.menu_line(ui, "Side Panels", "ui.toggle_panels", true, actions);
             });
         });
     }

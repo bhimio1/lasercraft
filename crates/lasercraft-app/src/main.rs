@@ -231,11 +231,7 @@ fn main() -> ExitCode {
         eframe::run_native(
             "LaserCraft",
             native,
-            Box::new(move |cc| {
-                // Ctrl+= / Ctrl+- / Ctrl+0 zoom the canvas, not the whole UI.
-                cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
-                Ok(Box::new(App::new(keymap, options.file)))
-            }),
+            Box::new(move |_cc| Ok(Box::new(App::new(keymap, options.file)))),
         )
         .map_err(|e| e.to_string())
     });

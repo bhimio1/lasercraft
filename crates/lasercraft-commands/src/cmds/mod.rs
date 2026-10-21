@@ -1,6 +1,7 @@
 //! Built-in commands, one module per area.
 
 mod clipboard;
+mod layer;
 mod project;
 mod select;
 mod shape;
@@ -13,6 +14,7 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(shape::commands());
     all.extend(select::commands());
     all.extend(clipboard::commands());
+    all.extend(layer::commands());
     all
 }
 

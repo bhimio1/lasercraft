@@ -31,6 +31,7 @@ Milestone: M1.
 
 ## Hit testing
 
+- Shapes on hidden layers are never hit and never picked by a box.
 - A point hits a shape when it is within the tolerance of its outline, or
   inside a closed shape (even-odd rule). The topmost hit wins.
 - Box selection: "contained" picks shapes whose bounds lie inside the box;
@@ -40,14 +41,15 @@ Milestone: M1.
 ## Commands
 
 Lengths in mm, angles in degrees (positive is clockwise on screen). `[ids]`
-means optional trailing shape ids, defaulting to the selection.
+means optional trailing shape ids, defaulting to the selection. `[@color]`
+puts a new shape on a layer (`docs/spec/layers.md`); the default is 0.
 
 | Command | Undo | Effect |
 | --- | --- | --- |
-| `shape.add_rect <x> <y> <w> <h>` | delete | Rectangle with top-left corner (x, y). |
-| `shape.add_ellipse <cx> <cy> <rx> <ry>` | delete | Ellipse. |
-| `shape.add_line <x1> <y1> <x2> <y2>` | delete | Two-point polyline. |
-| `shape.add_polyline [closed] <x1> <y1> <x2> <y2> …` | delete | Polyline through the points. |
+| `shape.add_rect <x> <y> <w> <h> [@color]` | delete | Rectangle with top-left corner (x, y). |
+| `shape.add_ellipse <cx> <cy> <rx> <ry> [@color]` | delete | Ellipse. |
+| `shape.add_line <x1> <y1> <x2> <y2> [@color]` | delete | Two-point polyline. |
+| `shape.add_polyline [closed] <x1> <y1> <x2> <y2> … [@color]` | delete | Polyline through the points. |
 | `shape.insert <index> <json>` | delete | Insert a shape (with its id) at a drawing-order position. Used by undo. |
 | `shape.delete [ids]` | insert | Delete shapes. |
 | `shape.duplicate [ids]` | delete | Copies placed exactly on top of the originals, above them in drawing order. |

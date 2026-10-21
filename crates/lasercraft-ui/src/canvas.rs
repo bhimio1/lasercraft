@@ -7,6 +7,7 @@ use lasercraft_geom::manipulate::Handle;
 use lasercraft_geom::{Affine, Point, Rect, flatten};
 use lasercraft_project::{BoxMode, Origin, Project};
 
+use crate::colors::layer_color;
 use crate::interaction::{Ctx, Draft, GRID_MM, Interaction, Mods, Tool, rotate_handle};
 use crate::view::{View, ZOOM_STEP};
 
@@ -21,6 +22,10 @@ const FLATTEN_PX: f64 = 0.3;
 /// Scroll pixels per factor-of-e zoom.
 const SCROLL_PER_E: f64 = 400.0;
 
+/// The bed is drawn as a light sheet in every theme so dark layer colors
+/// (layer 0 is black) stay visible.
+const BED: Color32 = Color32::from_gray(246);
+const GRID: Color32 = Color32::from_gray(90);
 const SHAPE: Color32 = Color32::from_rgb(70, 140, 235);
 const SELECTED: Color32 = Color32::from_rgb(255, 150, 40);
 const DRAFT: Color32 = Color32::from_rgb(120, 200, 120);
@@ -54,6 +59,17 @@ impl Canvas {
     #[must_use]
     pub fn tool(&self) -> Tool {
         self.interaction.tool()
+    }
+
+    /// The palette color for new shapes.
+    #[must_use]
+    pub fn color(&self) -> lasercraft_project::Color {
+        self.interaction.color()
+    }
+
+    /// Sets the palette color for new shapes.
+    pub fn set_color(&mut self, color: lasercraft_project::Color) {
+        self.interaction.set_color(color);
     }
 
     /// Switches tool.
@@ -199,14 +215,9 @@ impl Canvas {
         painter.rect_filled(painter.clip_rect(), 0.0, visuals.extreme_bg_color);
         let bed_screen =
             egui::Rect::from_two_pos(pos(view.to_screen(bed.min)), pos(view.to_screen(bed.max)));
-        painter.rect_filled(bed_screen, 0.0, visuals.faint_bg_color);
-        paint_grid(painter, view, bed, visuals.weak_text_color());
-        painter.rect_stroke(
-            bed_screen,
-            0.0,
-            Stroke::new(1.5, visuals.strong_text_color()),
-            StrokeKind::Middle,
-        );
+        painter.rect_filled(bed_screen, 0.0, BED);
+        paint_grid(painter, view, bed, GRID);
+        painter.rect_stroke(bed_screen, 0.0, Stroke::new(1.5, GRID), StrokeKind::Middle);
         let corner = match project.work_area().origin {
             Origin::FrontLeft => bed_screen.left_bottom(),
             Origin::FrontRight => bed_screen.right_bottom(),
@@ -218,18 +229,28 @@ impl Canvas {
         let preview = self.interaction.preview();
         let tolerance = FLATTEN_PX / view.scale();
         for shape in project.shapes() {
+            let Ok(layer) = project.layer(shape.layer()) else {
+                continue;
+            };
+            if !layer.show {
+                continue;
+            }
             let moved = preview.and_then(|(ids, t)| ids.contains(&shape.id()).then_some(t));
             let (points, closed) = shape.outline(tolerance);
             let screen: Vec<Pos2> = points
                 .iter()
                 .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
                 .collect();
-            let color = if project.is_selected(shape.id()) {
-                SELECTED
+            let mut color = layer_color(shape.layer());
+            if !layer.output {
+                color = color.gamma_multiply(0.3);
+            }
+            let width = if project.is_selected(shape.id()) {
+                2.5
             } else {
-                SHAPE
+                1.25
             };
-            let stroke = Stroke::new(1.5, color);
+            let stroke = Stroke::new(width, color);
             painter.add(if closed {
                 egui::Shape::closed_line(screen, stroke)
             } else {

@@ -1,6 +1,7 @@
 # Spec: project file (`.lcproj`)
 
-Milestones: M0 (version 1), M1 (version 2 adds shapes). Later milestones add
+Milestones: M0 (version 1), M1 (version 2 adds shapes), M2 (version 3 adds
+layers). Later milestones add
 fields and bump `version` when old readers must refuse a file.
 
 ## Format
@@ -11,7 +12,7 @@ newline, so files diff cleanly and golden tests compare exact text.
 ```json
 {
   "format": "lasercraft-project",
-  "version": 2,
+  "version": 3,
   "name": "Untitled",
   "notes": "",
   "work_area": {
@@ -20,9 +21,14 @@ newline, so files diff cleanly and golden tests compare exact text.
     "origin": "front_left"
   },
   "next_id": 2,
+  "layers": {
+    "order": [0, 1, 2, …, 29],
+    "changed": [{ "color": 2, "name": "Engrave", "mode": "fill", … }]
+  },
   "shapes": [
     {
       "id": 1,
+      "layer": 2,
       "geometry": { "kind": "rect", "width": 20.0, "height": 10.0 },
       "transform": [1.0, 0.0, 0.0, 1.0, 5.0, 5.0]
     }
@@ -30,18 +36,22 @@ newline, so files diff cleanly and golden tests compare exact text.
 }
 ```
 
-(Shown compactly; files are pretty-printed with one value per line.)
+Values that fit within 72 characters are written on one line; longer arrays
+of numbers are packed several per line, and other long values are broken one
+item per line.
 
 | Field | Meaning |
 | --- | --- |
 | `format` | Always `lasercraft-project`. |
-| `version` | Format version, currently 2. Version 1 files (no shapes) load and are saved as version 2. |
+| `version` | Format version, currently 3. Older files load (no shapes: none; no layers: default layers, every shape on layer 0) and are saved as version 3. |
 | `name` | Display name, 1–200 characters after trimming. |
 | `notes` | Free text, at most 20 000 characters. Optional when reading. |
 | `work_area.width_mm`, `height_mm` | Reachable bed size, 1–10 000 mm, finite. |
 | `work_area.origin` | Bed corner where machine coordinates are zero: `front_left`, `front_right`, `rear_left`, `rear_right`. "Front" is the side nearest the operator. |
 | `next_id` | Next object id to hand out; greater than every shape id. |
-| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, or `polyline` with `points` as `[x, y]` pairs and `closed`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
+| `layers.order` | Output order: all 30 colors exactly once. |
+| `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. |
+| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, or `polyline` with `points` as `[x, y]` pairs and `closed`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
 
 Document coordinates are millimetres with x to the right and y downwards
 (SVG convention, `docs/spec/geometry.md`). The origin corner says how they map

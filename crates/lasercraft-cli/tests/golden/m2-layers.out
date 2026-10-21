@@ -1,0 +1,32 @@
+renamed to Name tag
+added rect 1
+added ellipse 2
+added rect 3
+added line 4
+layer 1 name = Cut
+layer 1 speed = 8
+layer 1 max_power = 90
+layer 1 passes = 2
+layer 1 air = on
+layer 2 name = Engrave
+layer 2 mode = fill
+layer 2 speed = 150
+layer 2 max_power = 35
+layer 2 interval = 0.1
+layer 2 overscan = on
+layer 3 name = Score
+copied layer 1 settings to layer 3
+layer 3 passes = 1
+layer 3 max_power = 30
+layer order changed
+1 selected
+moved 1 shape(s) to layer 2
+undid `shape.set_layer 2`
+project "Name tag": work area 400 × 400 mm, origin front-left, 4 shape(s)
+  layer  2 "Engrave": fill 150 mm/s, power 0–35%, 1 pass(es), interval 0.1 mm at 0°, both ways, overscan
+  layer  3 "Score": line 8 mm/s, power 0–30%, 1 pass(es), air
+  layer  1 "Cut": line 8 mm/s, power 0–90%, 2 pass(es), air
+     1 @1  rect     (10, 10) – (90, 40)
+     2 @1  ellipse  (16, 21) – (24, 29)
+     3 @2  rect     (30, 15) – (80, 35)
+     4 @3  line     (30, 38) – (80, 38)

@@ -174,6 +174,43 @@ fn mm(value: f64) -> String {
     }
 }
 
+/// A layer's settings in one line, listing fill settings only for fill layers.
+fn layer_settings(l: &lasercraft_project::Layer) -> String {
+    let mut text = format!(
+        "{} {} mm/s, power {}–{}%, {} pass(es)",
+        l.mode,
+        mm(l.speed),
+        mm(l.min_power),
+        mm(l.max_power),
+        l.passes
+    );
+    if l.mode == lasercraft_project::Mode::Fill {
+        let _ = write!(
+            text,
+            ", interval {} mm at {}°{}{}{}",
+            mm(l.interval),
+            mm(l.angle),
+            if l.bidirectional {
+                ", both ways"
+            } else {
+                ", one way"
+            },
+            if l.overscan { ", overscan" } else { "" },
+            if l.crosshatch { ", crosshatch" } else { "" }
+        );
+    }
+    for (on, word) in [
+        (!l.output, "output off"),
+        (!l.show, "hidden"),
+        (l.air, "air"),
+    ] {
+        if on {
+            let _ = write!(text, ", {word}");
+        }
+    }
+    text
+}
+
 /// Description of a project: one header line, then one line per shape in
 /// drawing order with its bounds.
 #[must_use]
@@ -187,12 +224,23 @@ pub fn summary(project: &Project) -> String {
         area.origin,
         project.shapes().len()
     );
+    for color in project.used_layers() {
+        if let Ok(l) = project.layer(color) {
+            let _ = write!(
+                out,
+                "\n  layer {color:>2} \"{}\": {}",
+                l.name,
+                layer_settings(l)
+            );
+        }
+    }
     for shape in project.shapes() {
         let b = shape.bounds();
         let _ = write!(
             out,
-            "\n  {:>4} {:<8} ({}, {}) – ({}, {})",
+            "\n  {:>4} @{:<2} {:<8} ({}, {}) – ({}, {})",
             shape.id(),
+            shape.layer(),
             shape.geometry().kind(),
             mm(b.min.x),
             mm(b.min.y),

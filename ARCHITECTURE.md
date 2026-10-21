@@ -37,15 +37,15 @@ depends on `lasercraft-project`: it streams lines it is given.
 | Crate | Responsibility | Status |
 | --- | --- | --- |
 | `lasercraft-geom` | Points, affine transforms, bounding boxes; later paths, Béziers, flattening, booleans, offsets. Pure, deterministic. | M1: `Point`, `Affine`, `Rect`, ellipse flattening, polyline queries, snapping, handle math |
-| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M1: name, notes, work area, shapes (rect, ellipse, polyline) with transforms, hit tests, selection and clipboard as view state |
-| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M1: `project.*`, `shape.*`, `select.*`, `edit.*` |
+| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M2: name, notes, work area, 30 layers with cut settings in output order, shapes (rect, ellipse, polyline) with transforms and a layer, hit tests, selection and clipboard as view state; compact JSON writer |
+| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M2: `project.*`, `shape.*`, `select.*`, `layer.*`, `edit.*` |
 | `lasercraft-import` | SVG and DXF to geometry. | Empty until M3 |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested. | Empty until M4 |
 | `lasercraft-gcode` | GRBL-dialect output, with work-area and power checks. | Empty until M5 |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M0: message types, GRBL real-time bytes, state names, Linux permission help |
-| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M1: `new`, `run`, `script`, `show` (with shapes), `commands` |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M1: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine), keymap |
+| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands` |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap |
 | `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0 |
 
 ## Command registry
@@ -110,7 +110,7 @@ depends on `lasercraft-project`: it streams lines it is given.
 
 | Dependency | Why |
 | --- | --- |
-| `serde`, `serde_json` (`float_roundtrip`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses. `float_roundtrip` makes parsing bit-exact, so saving and undo never drift. |
+| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses. `float_roundtrip` makes parsing bit-exact, so saving and undo never drift; `preserve_order` keeps field order for the compact file writer. |
 | `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |
 
@@ -120,8 +120,6 @@ loader (M3 text).
 
 ## Deferred decisions
 
-- A compact project-file writer (one line per point and matrix) if pretty
-  JSON grows too large with imported art (M3).
 - File dialogs: M0 asks for a path in a text field. A native dialog crate
   (e.g. `rfd`) needs a portal on Flatpak; decide in M1.
 - Whether the MCP server is a separate crate (as in MusicCraft).

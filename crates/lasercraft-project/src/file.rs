@@ -9,7 +9,7 @@ use crate::{Project, ProjectError};
 pub const FORMAT: &str = "lasercraft-project";
 
 /// The newest format version this build reads and the one it writes.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// Just enough of a file to decide whether we can read the rest.
 #[derive(serde::Deserialize)]
@@ -19,13 +19,13 @@ struct Header {
 }
 
 impl Project {
-    /// Serializes to pretty-printed JSON ending in a newline, so files diff
-    /// cleanly and golden tests compare exact text.
+    /// Serializes to compact, indented JSON ending in a newline, so files
+    /// diff cleanly and golden tests compare exact text.
     #[must_use]
     pub fn to_json(&self) -> String {
-        let mut text = serde_json::to_string_pretty(self).unwrap_or_default();
-        text.push('\n');
-        text
+        serde_json::to_value(self)
+            .map(|v| crate::compact::to_string(&v))
+            .unwrap_or_default()
     }
 
     /// Parses and validates project JSON.
@@ -97,6 +97,7 @@ mod tests {
     const GOLDEN: &str = include_str!("../tests/golden/default.lcproj");
     const GOLDEN_SHAPES: &str = include_str!("../tests/golden/shapes.lcproj");
     const V1: &str = include_str!("../tests/golden/v1-default.lcproj");
+    const V2_SHAPES: &str = include_str!("../tests/golden/v2-shapes.lcproj");
 
     #[test]
     fn default_project_matches_golden_file() {
@@ -164,6 +165,57 @@ mod tests {
     }
 
     #[test]
+    fn version_2_shapes_load_onto_layer_0() {
+        let p = Project::from_json(V2_SHAPES).unwrap();
+        assert_eq!(p.to_json(), GOLDEN_SHAPES);
+        assert!(p.shapes().iter().all(|s| s.layer() == 0));
+    }
+
+    #[test]
+    fn changed_layers_and_order_round_trip() {
+        let mut p = Project::default();
+        p.set_layer_setting(4, "mode", "fill").unwrap();
+        p.set_layer_setting(4, "name", "Engrave").unwrap();
+        let mut order = p.layer_order();
+        order.swap(0, 4);
+        p.set_layer_order(&order).unwrap();
+        let text = p.to_json();
+        assert_eq!(
+            text.matches("\"color\":").count(),
+            1,
+            "only changed layers: {text}"
+        );
+        assert_eq!(Project::from_json(&text).unwrap(), p);
+    }
+
+    #[test]
+    fn rejects_bad_layer_tables() {
+        let order = "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,";
+        for (from, to) in [
+            (
+                order,
+                "0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,",
+            ),
+            (
+                order,
+                "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,",
+            ),
+            (
+                order,
+                "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 99,",
+            ),
+            (
+                "\"changed\": []",
+                "\"changed\": [{\"color\": 1, \"name\": \"x\", \"mode\": \"line\", \"speed\": -1.0}]",
+            ),
+        ] {
+            let bad = GOLDEN.replace(from, to);
+            assert_ne!(bad, GOLDEN);
+            assert!(Project::from_json(&bad).is_err(), "{to}");
+        }
+    }
+
+    #[test]
     fn rejects_duplicate_ids_and_stale_next_id() {
         let dup = GOLDEN_SHAPES.replace("\"id\": 2", "\"id\": 1");
         assert!(matches!(
@@ -198,7 +250,7 @@ mod tests {
             Project::from_json("not json"),
             Err(ProjectError::Format(_))
         ));
-        let newer = GOLDEN.replace("\"version\": 2", "\"version\": 99");
+        let newer = GOLDEN.replace("\"version\": 3", "\"version\": 99");
         assert_eq!(
             Project::from_json(&newer),
             Err(ProjectError::UnsupportedVersion(99))

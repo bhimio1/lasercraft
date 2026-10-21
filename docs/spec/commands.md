@@ -64,7 +64,8 @@ Milestone: M0.
 | `edit.undo`, `edit.redo`, `edit.batch …` | — | As above. |
 
 M1 adds the `shape.*`, `select.*` and `edit.copy|cut|paste*` commands in
-`docs/spec/shapes.md`.
+`docs/spec/shapes.md`. M2 adds `layer.*` and `shape.set_layer`
+(`docs/spec/layers.md`).
 
 ## Sources
 

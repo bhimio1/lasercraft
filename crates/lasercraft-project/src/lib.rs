@@ -4,14 +4,18 @@
 //! input and leaves the project unchanged on error. The format is described in
 //! `docs/spec/project-file.md`.
 
+mod compact;
 mod error;
 mod file;
+pub mod layer;
+mod layers;
 mod shape;
 mod shapes;
 mod work_area;
 
 pub use error::ProjectError;
 pub use file::{FORMAT, FORMAT_VERSION};
+pub use layer::{Color, Dither, ImageSettings, LAYER_COUNT, Layer, Mode};
 pub use shape::{Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_transform};
 pub use shapes::{BoxMode, ViewState};
 pub use work_area::{MAX_WORK_AREA_MM, MIN_WORK_AREA_MM, Origin, WorkArea};
@@ -35,6 +39,9 @@ pub struct Project {
     notes: String,
     work_area: WorkArea,
     next_id: u32,
+    /// Settings for all 30 layers, in output order.
+    #[serde(default)]
+    layers: layer::LayerTable,
     /// Shapes in drawing order: later shapes are drawn on top.
     #[serde(default)]
     shapes: Vec<Shape>,
@@ -52,6 +59,7 @@ impl Default for Project {
             notes: String::new(),
             work_area: WorkArea::default(),
             next_id: 1,
+            layers: layer::LayerTable::default(),
             shapes: Vec::new(),
             view: ViewState::default(),
         }
@@ -175,6 +183,7 @@ impl Project {
         if self.next_id == 0 {
             return Err(ProjectError::invalid("next_id", "must be at least 1"));
         }
+        self.validate_layers()?;
         self.validate_shapes()
     }
 }

@@ -89,7 +89,7 @@ and macOS.
 - [x] M0 Workspace, docs, command registry, CLI, project save/load, undo/redo.
 - [x] M1 Canvas with bed grid; shapes (rect, ellipse, line, polyline); select,
       move, scale, rotate; snapping; zoom/pan; LightBurn-style default shortcuts.
-- [ ] M2 Layers ("cuts") with colors; line, fill and image modes; speed,
+- [x] M2 Layers ("cuts") with colors; line, fill and image modes; speed,
       power min/max, passes, interval, output on/off; cuts/layers panel.
 - [ ] M3 SVG and DXF import; node editing; booleans (union, subtract,
       intersect); offset, weld, group/ungroup, align/distribute, arrays (grid,

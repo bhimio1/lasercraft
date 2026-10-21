@@ -92,15 +92,18 @@ impl Harness {
         self.frame(vec![button(b, false)], modifiers);
     }
 
+    /// Presses and releases a key (an unreleased key would make the next
+    /// press of it a repeat, which shortcuts ignore).
     fn key(&mut self, key: Key, modifiers: Modifiers) {
-        let event = Event::Key {
+        let event = |pressed| Event::Key {
             key,
             physical_key: None,
-            pressed: true,
+            pressed,
             repeat: false,
             modifiers,
         };
-        self.frame(vec![event], modifiers);
+        self.frame(vec![event(true)], modifiers);
+        self.frame(vec![event(false)], modifiers);
     }
 
     fn bounds(&self, id: u32) -> lasercraft_geom::Rect {
@@ -123,7 +126,7 @@ fn rectangle_tool_draws_through_the_keymap() {
     h.key(Key::R, Modifiers::COMMAND);
     assert_eq!(h.shell.tool(), Tool::Rect);
     h.drag((20.0, 30.0), (80.0, 70.0), Modifiers::NONE);
-    assert_eq!(h.log, ["shape.add_rect 20 30 60 40"]);
+    assert_eq!(h.log, ["shape.add_rect 20 30 60 40 @0"]);
     h.key(Key::Escape, Modifiers::NONE);
     assert_eq!(h.shell.tool(), Tool::Select);
 }
@@ -193,4 +196,48 @@ fn box_selection_direction_picks_contained_or_touched() {
     assert_eq!(h.session.project().selection(), [1, 2]);
     h.drag((-5.0, -5.0), (30.0, 30.0), Modifiers::NONE);
     assert_eq!(h.session.project().selection(), [1]);
+}
+
+#[test]
+fn f12_hides_the_side_panels_and_the_bed_fits_larger() {
+    // A wide bed, so its fit depends on the canvas width.
+    let mut h = Harness::new(&["project.set_work_area 1000 200"]);
+    h.key(Key::Num0, Modifiers::COMMAND);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let with_panels = h.shell.canvas_view().unwrap().scale();
+    h.key(Key::F12, Modifiers::NONE);
+    h.key(Key::Num0, Modifiers::COMMAND);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let without = h.shell.canvas_view().unwrap().scale();
+    assert!(without > with_panels, "{with_panels} -> {without}");
+}
+
+#[test]
+fn layers_panel_lists_used_layers() {
+    let mut h = Harness::new(&["shape.add_rect 0 0 10 10 @4", "layer.set 4 name Engrave"]);
+    h.frame(Vec::new(), Modifiers::NONE);
+    // The panel's text is in the frame's shapes; look for the layer name.
+    let mut found = false;
+    let input = RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+        ..RawInput::default()
+    };
+    let undo = None;
+    let mut output = h.ctx.run_ui(input, |ui| {
+        let view = ShellView {
+            project: h.session.project(),
+            file: None,
+            modified: false,
+            undo,
+            can_redo: false,
+        };
+        let _ = h.shell.show(ui, &view);
+    });
+    output.textures_delta.clear();
+    for clipped in &output.shapes {
+        if let egui::Shape::Text(text) = &clipped.shape {
+            found |= text.galley.text() == "Engrave";
+        }
+    }
+    assert!(found, "layer name not drawn");
 }

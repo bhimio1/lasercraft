@@ -5,8 +5,10 @@
 //! runs those through the command session (`docs/spec/ui-shell.md`).
 
 mod canvas;
+pub mod colors;
 pub mod interaction;
 pub mod keymap;
+mod layers_panel;
 mod shell;
 pub mod view;
 
@@ -15,7 +17,9 @@ pub use shell::{Action, Shell, ShellView};
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 10] = [
+pub const UI_ACTIONS: [&str; 12] = [
+    "ui.notes",
+    "ui.toggle_panels",
     "ui.new",
     "ui.open",
     "ui.save",

@@ -410,6 +410,13 @@ mod tests {
 
     /// Every undoable command, in an order where each line is valid.
     fn round_trip_script() -> Vec<String> {
+        let mut settings = lasercraft_project::Layer::new(9);
+        settings.passes = 3;
+        let layer_json = Invocation::new(
+            "layer.set_all",
+            ["9".to_owned(), serde_json::to_string(&settings).unwrap()],
+        );
+        let order = Invocation::new("layer.set_order", (0..30).rev().map(|c: u8| c.to_string()));
         let inserted = Invocation::new(
             "shape.insert",
             [
@@ -445,6 +452,16 @@ mod tests {
             "edit.cut 1",
             "edit.paste 100 100",
             "edit.paste_in_place",
+            "shape.add_rect 10 10 5 5 @3",
+            "shape.set_layer 7 3 5",
+            "layer.set 7 mode fill",
+            "layer.set 7 interval 300lpi",
+            r#"layer.set 3 name "Score lines""#,
+            "layer.copy_settings 7 3",
+            &layer_json.to_string(),
+            "layer.move 7 top",
+            &order.to_string(),
+            "layer.delete 3",
         ]
         .map(str::to_owned)
         .to_vec()
@@ -481,7 +498,13 @@ mod tests {
         // Keep `round_trip_script` complete: every command is either covered
         // there or listed as not undoable here.
         let script = round_trip_script();
-        let not_undoable = ["project.new", "project.load", "project.save", "edit.copy"];
+        let not_undoable = [
+            "project.new",
+            "project.load",
+            "project.save",
+            "edit.copy",
+            "layer.select",
+        ];
         for command in Registry::with_builtin().iter() {
             let name = command.name();
             let covered = script

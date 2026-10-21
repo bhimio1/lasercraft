@@ -15,6 +15,7 @@ Ctrl+O       = ui.open
 Ctrl+S       = ui.save
 Ctrl+Shift+S = ui.save_as
 Ctrl+Q       = ui.quit
+Ctrl+Alt+N   = ui.notes
 
 # Edit
 Ctrl+Z       = edit.undo
@@ -40,6 +41,7 @@ Ctrl+R       = ui.tool rect
 Ctrl+E       = ui.tool ellipse
 
 # View
+F12          = ui.toggle_panels
 Ctrl+Equals  = view.zoom_in
 Ctrl+Minus   = view.zoom_out
 Ctrl+0       = view.zoom_fit

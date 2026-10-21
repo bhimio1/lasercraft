@@ -94,6 +94,14 @@ fn m1_shapes_script_matches_golden_output() {
 }
 
 #[test]
+fn m2_layers_script_matches_golden_output() {
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/m2-layers.lcs");
+    let out = cli(&["script", script]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(stdout(&out), include_str!("golden/m2-layers.out"));
+}
+
+#[test]
 fn script_errors_name_the_line() {
     let dir = temp_dir("script");
     let script = dir.join("bad.lcs");

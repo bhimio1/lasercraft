@@ -1,10 +1,11 @@
 # Spec: canvas
 
-Milestone: M1.
+Milestones: M1, M2 (layer colors).
 
 ## View
 
-- The canvas shows the work area as a sheet with a grid: minor lines every
+- The canvas shows the work area as a light sheet in every theme (so the
+  black layer stays visible) with a grid: minor lines every
   10 mm and major lines every 50 mm; minor lines are hidden when they would be
   closer than 6 px. The rear of the bed is at the top of the screen. The
   machine-origin corner is marked.
@@ -12,6 +13,8 @@ Milestone: M1.
   the view center; "fit" shows the whole bed with a margin. Zoom is limited to
   0.05–200 px per mm.
 - Pan: middle-button drag, or hold Space and drag with the left button.
+- Shapes are drawn in their layer's color, selected ones with a heavier line.
+  Layers with output off are drawn faded; hidden layers are not drawn.
 - The status bar shows the pointer position in mm and the selection's size.
 - Zoom and pan are view state, not commands, and are not saved.
 

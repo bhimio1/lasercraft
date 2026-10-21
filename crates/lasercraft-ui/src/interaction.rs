@@ -8,7 +8,7 @@ use lasercraft_commands::Invocation;
 use lasercraft_geom::manipulate::{Handle, Scale, rotation_degrees, scale_for_handle};
 use lasercraft_geom::snap::{self, Snap};
 use lasercraft_geom::{Affine, Point, Rect};
-use lasercraft_project::{BoxMode, Project, snap_points};
+use lasercraft_project::{BoxMode, Color, Project, snap_points};
 
 /// Grid spacing in millimetres.
 pub const GRID_MM: f64 = 10.0;
@@ -149,6 +149,8 @@ pub struct Interaction {
     drag: Drag,
     polyline: Vec<Point>,
     pointer: Option<Point>,
+    /// Palette color for new shapes.
+    color: Color,
 }
 
 impl Default for Interaction {
@@ -158,6 +160,7 @@ impl Default for Interaction {
             drag: Drag::Idle,
             polyline: Vec::new(),
             pointer: None,
+            color: 0,
         }
     }
 }
@@ -192,6 +195,17 @@ pub fn rotate_handle(bounds: &Rect, px_per_mm: f64) -> Point {
 }
 
 impl Interaction {
+    /// The palette color new shapes get.
+    #[must_use]
+    pub fn color(&self) -> Color {
+        self.color
+    }
+
+    /// Sets the palette color for new shapes.
+    pub fn set_color(&mut self, color: Color) {
+        self.color = color;
+    }
+
     /// The active tool.
     #[must_use]
     pub fn tool(&self) -> Tool {
@@ -497,23 +511,35 @@ impl Interaction {
         }
     }
 
+    /// A create command for `name` with numeric arguments, on the current
+    /// color.
+    fn create(&self, name: &str, numbers: &[f64], closed: bool) -> Invocation {
+        let mut args: Vec<String> = Vec::new();
+        if closed {
+            args.push("closed".to_owned());
+        }
+        args.extend(numbers.iter().map(|v| num(*v)));
+        args.push(format!("@{}", self.color));
+        Invocation::new(name, args)
+    }
+
     fn finish_box(&self, start: Point, current: Point, mods: Mods) -> Vec<Invocation> {
         let b = draw_box(start, current, mods);
         if b.width() < MIN_DRAW_MM || b.height() < MIN_DRAW_MM {
             return Vec::new();
         }
         match self.tool {
-            Tool::Rect => vec![inv(
+            Tool::Rect => vec![self.create(
                 "shape.add_rect",
                 &[b.min.x, b.min.y, b.width(), b.height()],
-                &[],
+                false,
             )],
             Tool::Ellipse => {
                 let c = b.center();
-                vec![inv(
+                vec![self.create(
                     "shape.add_ellipse",
                     &[c.x, c.y, b.width() / 2.0, b.height() / 2.0],
-                    &[],
+                    false,
                 )]
             }
             Tool::Select | Tool::Line => Vec::new(),
@@ -539,14 +565,9 @@ impl Interaction {
         }
         let coords: Vec<f64> = points.iter().flat_map(|p| [p.x, p.y]).collect();
         if points.len() == 2 && !closed {
-            return vec![inv("shape.add_line", &coords, &[])];
+            return vec![self.create("shape.add_line", &coords, false)];
         }
-        let mut args: Vec<String> = Vec::new();
-        if closed && points.len() >= 3 {
-            args.push("closed".to_owned());
-        }
-        args.extend(coords.iter().map(|v| num(*v)));
-        vec![Invocation::new("shape.add_polyline", args)]
+        vec![self.create("shape.add_polyline", &coords, closed && points.len() >= 3)]
     }
 }
 
@@ -817,9 +838,11 @@ mod tests {
     fn rect_and_ellipse_tools_draw_snapped_boxes() {
         let mut w = World::new(&[]);
         w.ui.set_tool(Tool::Rect);
+        w.ui.set_color(4);
         let out = w.gesture(&[(10.3, 9.8), (40.0, 30.0), (50.2, 29.9)], PLAIN);
-        assert_eq!(out, ["shape.add_rect 10 10 40 20"]);
+        assert_eq!(out, ["shape.add_rect 10 10 40 20 @4"]);
         w.ui.set_tool(Tool::Ellipse);
+        w.ui.set_color(0);
         let out = w.gesture(
             &[(100.0, 100.0), (113.0, 104.0)],
             Mods {
@@ -828,7 +851,7 @@ mod tests {
             },
         );
         // From the center, square: radius = larger side = 13 (no grid point near).
-        assert_eq!(out, ["shape.add_ellipse 100 100 13 13"]);
+        assert_eq!(out, ["shape.add_ellipse 100 100 13 13 @0"]);
         // Too small: nothing.
         let out = w.gesture(&[(200.0, 200.0), (200.2, 205.0)], CTRL);
         assert!(out.is_empty());
@@ -858,7 +881,7 @@ mod tests {
         ctx_clicks(&mut w, &[(0.0, 0.0), (30.0, 0.0)]);
         assert!(w.ui.busy());
         let invs = w.ui.double_click();
-        assert_eq!(w.apply(invs), ["shape.add_line 0 0 30 0"]);
+        assert_eq!(w.apply(invs), ["shape.add_line 0 0 30 0 @0"]);
         // Clicking the first point again closes the shape.
         let out = ctx_clicks(
             &mut w,
@@ -869,7 +892,10 @@ mod tests {
                 (100.2, 100.1),
             ],
         );
-        assert_eq!(out, ["shape.add_polyline closed 100 100 130 100 115 120"]);
+        assert_eq!(
+            out,
+            ["shape.add_polyline closed 100 100 130 100 115 120 @0"]
+        );
         assert!(!w.ui.busy());
         // A single point draws nothing; Esc-style cancel clears.
         ctx_clicks(&mut w, &[(5.0, 5.0)]);

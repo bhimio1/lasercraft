@@ -4,6 +4,7 @@ use lasercraft_geom::{Affine, Point, Rect, flatten, polyline};
 use serde::{Deserialize, Serialize};
 
 use crate::ProjectError;
+use crate::layer::{Color, LAYER_COUNT};
 
 /// Largest allowed coordinate or size, in millimetres. Keeps every value far
 /// from overflow while allowing generous off-bed scratch space.
@@ -140,6 +141,9 @@ impl Geometry {
 #[serde(deny_unknown_fields)]
 pub struct Shape {
     id: u32,
+    /// Palette color of the shape's layer.
+    #[serde(default)]
+    layer: Color,
     geometry: Geometry,
     transform: Affine,
 }
@@ -175,6 +179,7 @@ impl Shape {
     pub fn new(id: u32, geometry: Geometry, transform: Affine) -> Result<Self, ProjectError> {
         let shape = Self {
             id,
+            layer: 0,
             geometry,
             transform,
         };
@@ -186,6 +191,9 @@ impl Shape {
         if self.id == 0 {
             return Err(ProjectError::invalid("shape id", "must be at least 1"));
         }
+        if usize::from(self.layer) >= LAYER_COUNT {
+            return Err(ProjectError::invalid("layer", "must be a color 0–29"));
+        }
         self.geometry.validate()?;
         validate_transform(&self.transform)
     }
@@ -194,6 +202,16 @@ impl Shape {
     #[must_use]
     pub fn id(&self) -> u32 {
         self.id
+    }
+
+    /// Palette color of the shape's layer.
+    #[must_use]
+    pub fn layer(&self) -> Color {
+        self.layer
+    }
+
+    pub(crate) fn set_layer(&mut self, layer: Color) {
+        self.layer = layer;
     }
 
     /// Local geometry.
@@ -406,7 +424,7 @@ mod tests {
         let json = serde_json::to_string(&line).unwrap();
         assert_eq!(
             json,
-            r#"{"id":7,"geometry":{"kind":"polyline","points":[[1.0,2.0],[3.0,4.0]],"closed":false},"transform":[1.0,0.0,0.0,1.0,0.0,0.0]}"#
+            r#"{"id":7,"layer":0,"geometry":{"kind":"polyline","points":[[1.0,2.0],[3.0,4.0]],"closed":false},"transform":[1.0,0.0,0.0,1.0,0.0,0.0]}"#
         );
         assert_eq!(serde_json::from_str::<Shape>(&json).unwrap(), line);
         let unknown = json.replace("\"closed\"", "\"extra\":1,\"closed\"");

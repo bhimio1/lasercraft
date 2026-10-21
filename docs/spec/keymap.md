@@ -1,6 +1,7 @@
 # Spec: keyboard shortcuts
 
-Milestones: M0 (file and edit), M1 (selection, drawing, transform, view).
+Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
+(notes, side panels).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -14,7 +15,7 @@ Later chords are bound as their commands arrive; the table below says when.
 - Shortcuts are ignored while a text field has keyboard focus.
 - A chord bound twice in one file is an error naming the line.
 - Invocations are registry commands, or front-end actions: `ui.*` (files,
-  tools, paste at the pointer) and `view.*` (zoom). Front-end actions do not
+  tools, paste at the pointer, notes, side panels) and `view.*` (zoom). Front-end actions do not
   change the project; the actions they lead to are commands.
 - Menu items show the chord bound to their action.
 
@@ -35,7 +36,7 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Alt+Shift+L | Save machine code (G-code) | M5 |
 | Alt+X | Export vectors | M3 |
 | Ctrl+P / Ctrl+Shift+P | Print (black only / keep colors) | not planned |
-| Ctrl+Alt+N | Show project notes | M2 |
+| Ctrl+Alt+N | Project notes window (`ui.notes`) | M2 |
 | Ctrl+A / Ctrl+Shift+I | Select all / invert selection | M1 |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / copy / paste (at the pointer) | M1 |
 | Alt+V | Paste in place | M1 |
@@ -74,8 +75,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | P (canvas focus) | Move to the bed center *(legacy)* | M3 |
 | Ctrl+Shift+M / Ctrl+2 | Mirror across a line / two-point rotate and scale | M3 |
 | Alt+M | Measure | M3 |
-| Alt+Shift+W | Toggle outline / filled display | M2 |
-| F12 | Toggle side panels | M2 |
+| Alt+Shift+W | Toggle outline / filled display (with the fill preview) | M4 |
+| F12 | Toggle side panels (`ui.toggle_panels`) | M2 |
 | F1 | Help for the item under the pointer | M10 |
 
 ### Machine (all need a connected device)

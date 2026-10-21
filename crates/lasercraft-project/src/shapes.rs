@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use lasercraft_geom::{Affine, Point, Rect};
 
+use crate::layer::{Color, LAYER_COUNT};
 use crate::shape::validate_transform;
 use crate::{Geometry, Project, ProjectError, Shape};
 
@@ -63,7 +64,25 @@ impl Project {
         geometry: Geometry,
         transform: Affine,
     ) -> Result<u32, ProjectError> {
-        let shape = Shape::new(self.next_id.max(1), geometry, transform)?;
+        self.add_shape_on(geometry, transform, 0)
+    }
+
+    /// Adds a shape on top of the layer `color` with a fresh id and returns
+    /// the id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectError::InvalidValue`] for invalid geometry, transform
+    /// or color.
+    pub fn add_shape_on(
+        &mut self,
+        geometry: Geometry,
+        transform: Affine,
+        color: Color,
+    ) -> Result<u32, ProjectError> {
+        let mut shape = Shape::new(self.next_id.max(1), geometry, transform)?;
+        shape.set_layer(color);
+        shape.validate()?;
         let id = self.allocate_id();
         self.shapes.push(shape);
         Ok(id)
@@ -128,6 +147,20 @@ impl Project {
         Ok(())
     }
 
+    /// Moves a shape to the layer `color`.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an unknown id or a color outside 0–29.
+    pub fn set_shape_layer(&mut self, id: u32, color: Color) -> Result<(), ProjectError> {
+        if usize::from(color) >= LAYER_COUNT {
+            return Err(ProjectError::invalid("layer", "must be a color 0–29"));
+        }
+        let index = self.index_of(id).ok_or_else(|| unknown(id))?;
+        self.shapes[index].set_layer(color);
+        Ok(())
+    }
+
     /// The current drawing order as ids.
     #[must_use]
     pub fn order(&self) -> Vec<u32> {
@@ -171,21 +204,29 @@ impl Project {
         Ok(bounds)
     }
 
-    /// The topmost shape hit at `p` within `tolerance` mm.
+    /// Whether a shape's layer is shown. Hidden shapes cannot be picked.
+    #[must_use]
+    pub fn is_visible(&self, shape: &Shape) -> bool {
+        self.layer(shape.layer()).map_or(true, |l| l.show)
+    }
+
+    /// The topmost visible shape hit at `p` within `tolerance` mm.
     #[must_use]
     pub fn shape_at(&self, p: Point, tolerance: f64) -> Option<u32> {
         self.shapes
             .iter()
             .rev()
+            .filter(|s| self.is_visible(s))
             .find(|s| s.hit(p, tolerance))
             .map(Shape::id)
     }
 
-    /// Shapes picked by a selection box, in drawing order.
+    /// Visible shapes picked by a selection box, in drawing order.
     #[must_use]
     pub fn shapes_in_rect(&self, rect: &Rect, mode: BoxMode, tolerance: f64) -> Vec<u32> {
         self.shapes
             .iter()
+            .filter(|s| self.is_visible(s))
             .filter(|s| match mode {
                 BoxMode::Contained => rect.contains_rect(&s.bounds()),
                 BoxMode::Touching => s.touches(rect, tolerance),
@@ -307,6 +348,18 @@ mod tests {
         let r = Rect::from_corners(Point::new(-1.0, -1.0), Point::new(25.0, 11.0));
         assert_eq!(p.shapes_in_rect(&r, BoxMode::Contained, 0.01), [a]);
         assert_eq!(p.shapes_in_rect(&r, BoxMode::Touching, 0.01), [a, b]);
+    }
+
+    #[test]
+    fn hidden_layers_cannot_be_picked() {
+        let mut p = Project::default();
+        let a = square(&mut p, 0.0, 0.0);
+        p.set_layer_setting(0, "show", "off").unwrap();
+        assert_eq!(p.shape_at(Point::new(5.0, 5.0), 0.1), None);
+        let all = Rect::from_corners(Point::new(-1.0, -1.0), Point::new(20.0, 20.0));
+        assert!(p.shapes_in_rect(&all, BoxMode::Touching, 0.01).is_empty());
+        p.set_layer_setting(0, "show", "on").unwrap();
+        assert_eq!(p.shape_at(Point::new(5.0, 5.0), 0.1), Some(a));
     }
 
     #[test]

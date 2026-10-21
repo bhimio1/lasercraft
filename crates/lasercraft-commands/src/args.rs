@@ -13,11 +13,35 @@ pub(crate) struct Args<'a> {
     name: &'static str,
     usage: &'static str,
     items: &'a [String],
+    /// Trailing `@<color>` selector, if the usage allows one and it was given.
+    color: Option<&'a str>,
 }
 
 impl<'a> Args<'a> {
     pub fn new(name: &'static str, usage: &'static str, items: &'a [String]) -> Self {
-        Self { name, usage, items }
+        let (items, color) = match items.split_last() {
+            Some((last, rest)) if usage.contains("[@color]") && last.starts_with('@') => {
+                (rest, Some(&last[1..]))
+            }
+            _ => (items, None),
+        };
+        Self {
+            name,
+            usage,
+            items,
+            color,
+        }
+    }
+
+    /// The `@<color>` argument, or color 0 when none was given.
+    pub fn color_or_default(&self) -> Result<u8, CommandError> {
+        self.color
+            .map_or(Ok(0), |c| Ok(lasercraft_project::layer::parse_color(c)?))
+    }
+
+    /// Argument `i` as a palette color.
+    pub fn color_at(&self, i: usize) -> Result<u8, CommandError> {
+        Ok(lasercraft_project::layer::parse_color(self.str(i)?)?)
     }
 
     /// A usage error for this command.
