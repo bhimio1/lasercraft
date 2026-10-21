@@ -187,6 +187,8 @@ pub struct Shell {
     laser_tab: bool,
     /// Whether the running stream is paused, for the pause/resume key.
     paused: bool,
+    /// Alt+I was pressed: open the selected image's adjustments.
+    adjust_requested: bool,
 }
 
 impl Shell {
@@ -207,6 +209,7 @@ impl Shell {
             laser: LaserPanel::default(),
             laser_tab: false,
             paused: false,
+            adjust_requested: false,
         }
     }
 
@@ -237,6 +240,12 @@ impl Shell {
     #[must_use]
     pub fn canvas_view(&self) -> Option<crate::view::View> {
         self.canvas.view()
+    }
+
+    /// How many image textures the canvas holds (for tests).
+    #[must_use]
+    pub fn image_textures(&self) -> usize {
+        self.canvas.image_textures()
     }
 
     /// The active canvas tool.
@@ -320,6 +329,9 @@ impl Shell {
             self.preview = None;
         }
         laser_panel::windows(ui.ctx(), view.laser, &mut actions);
+        if std::mem::take(&mut self.adjust_requested) && !self.dialogs.open_adjust(view.project) {
+            self.log("select an image to adjust");
+        }
         if let Some(at) = self.canvas.take_text_click() {
             self.dialogs.open_text(at);
         }
@@ -434,6 +446,11 @@ impl Shell {
                 self.prompt = Some((PromptKind::ExportGcode, String::new()));
                 return None;
             }
+            "ui.adjust_image" => {
+                // Opened in `show`, which has the project.
+                self.adjust_requested = true;
+                return None;
+            }
             "ui.offset" | "ui.grid_array" | "ui.circular_array" => {
                 self.dialogs.open(&invocation.name);
                 return None;
@@ -524,6 +541,13 @@ impl Shell {
                 for (label, line) in PATH_TOOLS {
                     self.menu_line(ui, label, line, selected, actions);
                 }
+                ui.separator();
+                let image = view.project.selection().into_iter().any(|id| {
+                    view.project
+                        .shape(id)
+                        .is_some_and(|s| s.geometry().is_image())
+                });
+                self.menu_line(ui, "Adjust Image…", "ui.adjust_image", image, actions);
             });
             ui.menu_button("Arrange", |ui| {
                 let selected = !view.project.selection().is_empty();
@@ -663,7 +687,7 @@ impl Shell {
         let (title, what) = match kind {
             PromptKind::Open => ("Open project", "Path to a .lcproj file:"),
             PromptKind::SaveAs => ("Save project as", "Path to a .lcproj file:"),
-            PromptKind::Import => ("Import vector art", "Path to an .svg or .dxf file:"),
+            PromptKind::Import => ("Import", "Path to an .svg, .dxf, .png or .jpg file:"),
             PromptKind::ExportGcode => ("Save G-code", "Path to the .gcode file to write:"),
         };
         let mut open = true;

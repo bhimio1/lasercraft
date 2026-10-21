@@ -526,3 +526,40 @@ fn the_laser_tab_shows_status_console_and_the_alarm_window() {
         "routine lines are hidden by default"
     );
 }
+
+#[test]
+fn images_are_drawn_as_textures_and_alt_i_opens_their_adjustments() {
+    use lasercraft_commands::Invocation;
+    use lasercraft_project::raster::Gray;
+    use lasercraft_project::{Geometry, Image};
+    let mut h = Harness::new(&[]);
+    let img = Geometry::Image(Image::new(
+        40.0,
+        20.0,
+        Gray::new(4, 2, vec![0, 80, 160, 255, 255, 160, 80, 0]).unwrap(),
+    ));
+    let shape = format!(
+        r#"{{"id":7,"layer":2,"geometry":{},"transform":[1.0,0.0,0.0,1.0,50.0,50.0]}}"#,
+        serde_json::to_string(&img).unwrap()
+    );
+    h.session
+        .run(&Invocation::new("shape.insert", ["0".to_owned(), shape]))
+        .unwrap();
+    h.frame(Vec::new(), Modifiers::NONE);
+    assert_eq!(h.shell.image_textures(), 1);
+    // Nothing selected: Alt+I only explains.
+    h.session.run_line("select.clear").unwrap();
+    h.key(Key::I, Modifiers::ALT);
+    assert!(!h.texts().iter().any(|t| t == "Adjust image"));
+    h.session.run_line("select.set 7").unwrap();
+    h.key(Key::I, Modifiers::ALT);
+    let texts = h.texts();
+    assert!(
+        texts.iter().any(|t| t == "Adjust image") && texts.iter().any(|t| t == "Image 7"),
+        "{texts:?}"
+    );
+    // Deleting the image drops its texture.
+    h.session.run_line("shape.delete 7").unwrap();
+    h.frame(Vec::new(), Modifiers::NONE);
+    assert_eq!(h.shell.image_textures(), 0);
+}

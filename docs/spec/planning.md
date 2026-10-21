@@ -51,7 +51,8 @@ them itself) but timed at `max_speed`, with a warning per layer.
 - Power: every `burn` move carries the layer's `max_power`, clamped to
   0–100 and to the machine's `max_power`. Nothing in the plan can exceed
   either limit (`docs/spec/safety.md` rule 6). `min_power` only matters for
-  grayscale images (M7) and is not used here.
+  grayscale images, whose planning is in `docs/spec/images.md` (M7): a
+  layer's images are planned after its vector shapes, as rows of dots.
 
 ## Line mode
 

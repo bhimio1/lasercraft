@@ -13,6 +13,7 @@ mod laser_panel;
 mod layers_panel;
 mod preview;
 mod shell;
+mod textures;
 pub mod view;
 
 pub use laser_panel::{ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, LaserAction, LaserView};
@@ -22,7 +23,7 @@ pub use shell::{Action, Shell, ShellView};
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 27] = [
+pub const UI_ACTIONS: [&str; 28] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -53,4 +54,6 @@ pub const UI_ACTIONS: [&str; 27] = [
     "ui.jog_down",
     "ui.jog_left",
     "ui.jog_right",
+    // M7: the Adjust Image window.
+    "ui.adjust_image",
 ];

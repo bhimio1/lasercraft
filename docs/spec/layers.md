@@ -39,9 +39,12 @@ settings later.
 | `output` | Included in preview, export and jobs | on | |
 | `show` | Drawn on the canvas | on | |
 | `air` | Air assist for this layer | off | |
-| `image.dither` | Image method: `grayscale`, `threshold`, `floyd_steinberg`, `jarvis`, `stucki`, `ordered`, `halftone` | `floyd_steinberg` | |
-| `image.interval` | Image line spacing, mm | 0.1 | 0.001–10 |
+| `image.dither` | Image method: `grayscale`, `threshold`, `floyd_steinberg`, `jarvis`, `stucki`, `atkinson`, `ordered`, `halftone` (`docs/spec/images.md`) | `floyd_steinberg` | |
+| `image.interval` | Image line spacing and dot size, mm | 0.1 | 0.001–10 |
 | `image.negative` | Invert the image | off | |
+| `image.halftone_cells` | Halftone screen, cells per inch (M7) | 50 | 1–1000 |
+| `image.halftone_angle` | Halftone screen angle, degrees (M7) | 45 | −360–360 |
+| `image.dot_correction` | Shorten each burned run by this much, half at each end, mm (M7) | 0 | 0–`image.interval` |
 | `kerf` | Line mode: offset closed shapes by this much, mm; positive moves the cut outward from the part, holes the other way (M4) | 0 | −5–5 |
 | `tabs` | Line mode: uncut tabs per closed outer shape; 0 is off (M4) | 0 | 0–100 |
 | `tab_width` | Line mode: length of each tab, mm (M4) | 1 | 0.01–50 |
@@ -60,8 +63,10 @@ settings later.
 - Fill applies to closed shapes. On a fill layer, nested shapes fill by the
   even-odd rule (the ring between them is filled). Open shapes on a fill layer
   are skipped with a warning (M4).
-- Image settings apply to images of that color (M7); the layer list then shows
-  a separate image entry for the color.
+- Image settings apply to images of that color (M7). `bidirectional`,
+  `overscan`, speed, power and passes apply to images too. The layer list
+  says `image` for a color with only images and `line + image` (or
+  `fill + image`) when it has both; vectors are planned first.
 - How the planner uses every setting (order, kerf, tabs, scan geometry,
   overscan distance) is in `docs/spec/planning.md`. The editor shows kerf and
   tabs for line layers only; tab width only when tabs are on.

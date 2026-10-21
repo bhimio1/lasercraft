@@ -1,7 +1,7 @@
 # Spec: main window shell
 
 Milestones: M0 (shell), M1 (canvas, tools, editing menus), M2 (layers panel,
-palette, notes), M6 (Laser panel and menu).
+palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Image).
 
 ## Layout
 
@@ -35,6 +35,16 @@ palette, notes), M6 (Laser panel and menu).
   path, the work area size and origin, the pointer position in mm, and the
   selection's count and size.
 - Window title: project name, prefixed with a dot when modified.
+
+## M7 additions
+
+- Images are drawn on the canvas as textures with a border in the layer
+  color (`docs/spec/images.md`, "Canvas and panels"). The layer list says
+  `image` or `line + image`; the editor's image section holds the method
+  and its settings.
+- Tools → Adjust Image… (Alt+I) opens the adjustments of the selected
+  image; with none selected the console says so. The import prompt takes
+  `.svg`, `.dxf`, `.png` and `.jpg`.
 
 ## M6 additions
 

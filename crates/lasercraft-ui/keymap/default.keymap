@@ -122,3 +122,6 @@ Ctrl+Shift+[   = ui.jog_down
 Ctrl+Shift+{   = ui.jog_down
 Ctrl+Alt+[     = ui.jog_left
 Ctrl+Alt+]     = ui.jog_right
+
+# Images (M7)
+Alt+I          = ui.adjust_image

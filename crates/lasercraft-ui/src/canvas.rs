@@ -11,6 +11,7 @@ use crate::colors::layer_color;
 use crate::interaction::{
     Ctx, Draft, GRID_MM, Interaction, Mods, NodeKey, Tool, moved_part, rotate_handle,
 };
+use crate::textures::Textures;
 use crate::view::{View, ZOOM_STEP};
 
 /// Major grid lines every this many millimetres.
@@ -54,9 +55,17 @@ pub struct Canvas {
     /// The primary button went down on the canvas (so its release is ours).
     pressed_here: bool,
     screen: Option<Rect>,
+    /// Image textures (M7).
+    textures: Textures,
 }
 
 impl Canvas {
+    /// Image textures held for drawing.
+    #[must_use]
+    pub fn image_textures(&self) -> usize {
+        self.textures.count()
+    }
+
     /// The active tool.
     #[must_use]
     pub fn tool(&self) -> Tool {
@@ -111,6 +120,7 @@ impl Canvas {
 
     /// Draws the canvas and returns the commands the user's gestures produced.
     pub fn show(&mut self, ui: &mut egui::Ui, project: &Project) -> Vec<Invocation> {
+        self.textures.update(ui.ctx(), project);
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let screen = rect_of(response.rect);
         self.screen = Some(screen);
@@ -265,13 +275,48 @@ impl Canvas {
                 .part_drag()
                 .filter(|(id, ..)| *id == shape.id())
                 .and_then(|(id, part, to)| moved_part(project, id, part, to));
+            let place = |p: Point| pos(view.to_screen(moved.map_or(p, |t| t.apply(p))));
+            if let (Some(image), Some(texture)) =
+                (shape.geometry().image(), self.textures.get(shape.id()))
+            {
+                let t = shape.transform();
+                let corners = [
+                    Point::new(0.0, 0.0),
+                    Point::new(image.width, 0.0),
+                    Point::new(image.width, image.height),
+                    Point::new(0.0, image.height),
+                ]
+                .map(|p| place(t.apply(p)));
+                let tint = if layer.output {
+                    Color32::WHITE
+                } else {
+                    Color32::WHITE.gamma_multiply(0.4)
+                };
+                let mut mesh = egui::Mesh::with_texture(texture);
+                for (corner, uv) in corners.iter().zip([
+                    Pos2::new(0.0, 0.0),
+                    Pos2::new(1.0, 0.0),
+                    Pos2::new(1.0, 1.0),
+                    Pos2::new(0.0, 1.0),
+                ]) {
+                    mesh.vertices.push(egui::epaint::Vertex {
+                        pos: *corner,
+                        uv,
+                        color: tint,
+                    });
+                }
+                mesh.add_triangle(0, 1, 2);
+                mesh.add_triangle(0, 2, 3);
+                painter.add(egui::Shape::mesh(mesh));
+                painter.add(egui::Shape::closed_line(
+                    corners.to_vec(),
+                    Stroke::new(1.0, color),
+                ));
+            }
             let outlines =
                 edited.map_or_else(|| shape.outlines(tolerance), |p| p.flatten(tolerance));
             for (points, closed) in outlines {
-                let screen: Vec<Pos2> = points
-                    .iter()
-                    .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
-                    .collect();
+                let screen: Vec<Pos2> = points.iter().map(|p| place(*p)).collect();
                 painter.add(if closed {
                     egui::Shape::closed_line(screen, stroke)
                 } else {

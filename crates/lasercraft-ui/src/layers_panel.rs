@@ -89,7 +89,7 @@ impl LayersPanel {
             .show(ui, |ui| {
                 for color in &used {
                     if let Ok(layer) = project.layer(*color) {
-                        self.list_row(ui, layer, &mut out);
+                        self.list_row(ui, project, layer, &mut out);
                     }
                 }
             });
@@ -109,14 +109,32 @@ impl LayersPanel {
             });
             ui.separator();
             if let Ok(layer) = project.layer(color) {
-                self.editor(ui, layer, &mut out);
+                let has_images = project
+                    .shapes()
+                    .iter()
+                    .any(|s| s.layer() == color && s.geometry().is_image());
+                self.editor(ui, layer, has_images, &mut out);
             }
         }
         out
     }
 
-    fn list_row(&mut self, ui: &mut egui::Ui, layer: &Layer, out: &mut Vec<Invocation>) {
+    fn list_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        project: &Project,
+        layer: &Layer,
+        out: &mut Vec<Invocation>,
+    ) {
         let c = layer.color;
+        let on_layer = || project.shapes().iter().filter(move |s| s.layer() == c);
+        let images = on_layer().any(|s| s.geometry().is_image());
+        let vectors = on_layer().any(|s| !s.geometry().is_image());
+        let kind = match (vectors, images) {
+            (true, true) => format!("{} + image", layer.mode),
+            (false, true) => "image".to_owned(),
+            _ => layer.mode.to_string(),
+        };
         swatch(ui, c, 14.0, false);
         let label = ui
             .selectable_label(self.editing == Some(c), &layer.name)
@@ -128,10 +146,7 @@ impl LayersPanel {
                 self.editing = Some(c);
             }
         }
-        ui.label(format!(
-            "{} {} mm/s {}%",
-            layer.mode, layer.speed, layer.max_power
-        ));
+        ui.label(format!("{kind} {} mm/s {}%", layer.speed, layer.max_power));
         let mut output = layer.output;
         if ui
             .checkbox(&mut output, "")
@@ -147,7 +162,13 @@ impl LayersPanel {
         ui.end_row();
     }
 
-    fn editor(&mut self, ui: &mut egui::Ui, layer: &Layer, out: &mut Vec<Invocation>) {
+    fn editor(
+        &mut self,
+        ui: &mut egui::Ui,
+        layer: &Layer,
+        has_images: bool,
+        out: &mut Vec<Invocation>,
+    ) {
         // Keep the draft in step with the project unless the user is in the
         // middle of an edit.
         let editing_now = ui.ctx().dragged_id().is_some() || ui.ctx().text_edit_focused();
@@ -269,51 +290,101 @@ impl LayersPanel {
                     );
                 }
             });
-        egui::CollapsingHeader::new("Images on this layer").show(ui, |ui| {
-            egui::Grid::new("layer_image")
-                .num_columns(2)
-                .show(ui, |ui| {
-                    ui.label("Method");
-                    let before = draft.image.dither;
-                    egui::ComboBox::from_id_salt("dither")
-                        .selected_text(draft.image.dither.as_str())
-                        .show_ui(ui, |ui| {
-                            for d in [
-                                Dither::Grayscale,
-                                Dither::Threshold,
-                                Dither::FloydSteinberg,
-                                Dither::Jarvis,
-                                Dither::Stucki,
-                                Dither::Ordered,
-                                Dither::Halftone,
-                            ] {
-                                ui.selectable_value(&mut draft.image.dither, d, d.as_str());
-                            }
-                        });
-                    if draft.image.dither != before {
-                        edits.push(("image.dither", draft.image.dither.to_string()));
-                    }
-                    ui.end_row();
-                    number(
-                        ui,
-                        "Interval",
-                        &mut draft.image.interval,
-                        (0.001, 10.0),
-                        " mm",
-                        "image.interval",
-                        &mut edits,
-                    );
-                    switch(
-                        ui,
-                        "Negative",
-                        &mut draft.image.negative,
-                        "image.negative",
-                        &mut edits,
-                    );
-                });
-        });
+        egui::CollapsingHeader::new("Images on this layer")
+            .default_open(has_images)
+            .show(ui, |ui| image_settings(ui, draft, &mut edits));
         out.extend(edits.into_iter().map(|(key, value)| set(c, key, value)));
     }
+}
+
+/// The image method and its settings (M7, `docs/spec/images.md`).
+fn image_settings(ui: &mut egui::Ui, draft: &mut Layer, edits: &mut Vec<(&str, String)>) {
+    egui::Grid::new("layer_image")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("Method");
+            let before = draft.image.dither;
+            egui::ComboBox::from_id_salt("dither")
+                .selected_text(draft.image.dither.as_str())
+                .show_ui(ui, |ui| {
+                    for d in [
+                        Dither::Grayscale,
+                        Dither::Threshold,
+                        Dither::FloydSteinberg,
+                        Dither::Jarvis,
+                        Dither::Stucki,
+                        Dither::Atkinson,
+                        Dither::Ordered,
+                        Dither::Halftone,
+                    ] {
+                        ui.selectable_value(&mut draft.image.dither, d, d.as_str());
+                    }
+                });
+            if draft.image.dither != before {
+                edits.push(("image.dither", draft.image.dither.to_string()));
+            }
+            ui.end_row();
+            number(
+                ui,
+                "Interval",
+                &mut draft.image.interval,
+                (0.001, 10.0),
+                " mm",
+                "image.interval",
+                edits,
+            );
+            ui.label("");
+            ui.weak(format!("{:.0} DPI", 25.4 / draft.image.interval));
+            ui.end_row();
+            switch(
+                ui,
+                "Negative",
+                &mut draft.image.negative,
+                "image.negative",
+                edits,
+            );
+            if draft.mode != Mode::Fill {
+                // Shared with fill; shown there for fill layers.
+                switch(
+                    ui,
+                    "Both directions",
+                    &mut draft.bidirectional,
+                    "bidirectional",
+                    edits,
+                );
+                switch(ui, "Overscan", &mut draft.overscan, "overscan", edits);
+            }
+            let interval = draft.image.interval;
+            number(
+                ui,
+                "Dot correction",
+                &mut draft.image.dot_correction,
+                (0.0, interval),
+                " mm",
+                "image.dot_correction",
+                edits,
+            );
+            if draft.image.dither == Dither::Halftone {
+                number(
+                    ui,
+                    "Halftone cells",
+                    &mut draft.image.halftone_cells,
+                    lasercraft_project::layer::HALFTONE_CELLS_RANGE,
+                    " /in",
+                    "image.halftone_cells",
+                    edits,
+                );
+                number(
+                    ui,
+                    "Halftone angle",
+                    &mut draft.image.halftone_angle,
+                    (-360.0, 360.0),
+                    "°",
+                    "image.halftone_angle",
+                    edits,
+                );
+            }
+        });
 }
 
 /// Kerf offset and tabs (line mode, M4).

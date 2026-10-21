@@ -102,7 +102,7 @@ and macOS.
       ping-pong fallback, status polling; jog, home, set origin, job origin
       modes (absolute, current position, user origin); framing,
       start/pause/stop, console. All simulator-tested.
-- [ ] M7 Images: grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki,
+- [x] M7 Images: grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki,
       ordered/Bayer, halftone; brightness/contrast/gamma, negative; DPI/line interval.
 - [ ] M8 Material library (our format, our data), test grids (speed × power),
       per-device profiles.

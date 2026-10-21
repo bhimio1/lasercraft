@@ -30,7 +30,7 @@ lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-pla
 lasercraft-cli ──► lasercraft-device (M6: simulate)
 
 lasercraft-plan ──► lasercraft-project, lasercraft-geom (M4)
-lasercraft-plan ┄► lasercraft-raster [M7]
+lasercraft-project ──► lasercraft-raster (M7: image bitmaps; re-exported as lasercraft_project::raster)
 lasercraft-raster, lasercraft-device, lasercraft-geom: no workspace dependencies
 ```
 
@@ -42,10 +42,10 @@ depends on `lasercraft-project`: it streams lines it is given.
 | Crate | Responsibility | Status |
 | --- | --- | --- |
 | `lasercraft-geom` | Points, affine transforms, bounding boxes; later paths, Béziers, flattening, booleans, offsets. Pure, deterministic. | M1: `Point`, `Affine`, `Rect`, ellipse flattening, polyline queries, snapping, handle math |
-| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M2: name, notes, work area, 30 layers with cut settings in output order, shapes (rect, ellipse, polyline) with transforms and a layer, hit tests, selection and clipboard as view state; compact JSON writer |
+| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M2: name, notes, work area, 30 layers with cut settings in output order, shapes (rect, ellipse, polyline) with transforms and a layer, hit tests, selection and clipboard as view state; compact JSON writer; M7: image shapes (format 5) and image layer settings |
 | `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M3: adds `project.import`, `shape.add_text`, `shape.to_path`, `node.*`, `group.*`, `path.*`, `arrange.*` |
 | `lasercraft-import` | SVG and DXF to geometry; font lookup and text outlines. | M3: SVG (usvg), DXF (own reader), system fonts (fontdb), glyph outlines (ttf-parser) |
-| `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
+| `lasercraft-raster` | Images: grayscale bitmaps, PNG/JPEG decoding, adjustments, dot grid and dithering (`docs/spec/images.md`). Pure, deterministic. | M7: decoding with file resolution, PNG encoding, base64, brightness/contrast/gamma, document-aligned sampling, grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki, Atkinson, Bayer, halftone |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
 | `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5; M6: job placement (Start From, nine-point job origin), laser-off framing (box, convex hull) |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M6: reply parser, I/O-free `Controller` (character counting with send-response fallback, polling, stalls, hold-then-reset stop, spindle stop on pausing `M3` jobs, laser-mode check), simulated GRBL with a laser-on log, `Bench`, device thread (serial and simulator) |
@@ -131,13 +131,14 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `usvg` (no default features) | SVG import: resolves CSS, `<use>`, transforms and units and turns every element into absolute lines and Béziers; text and font features are off, so no font stack is pulled in. Apache-2.0 OR MIT. |
 | `fontdb` (`std`, `fs`, `fontconfig`; no `memmap`) | Finds installed fonts by family name for text (M3). MIT. |
 | `ttf-parser` (`std` only) | Reads glyph outlines, advances, cap height and `kern` pairs from TrueType/OpenType fonts. MIT OR Apache-2.0. |
+| `png` | Reads and writes PNG for image import and the project file's embedded bitmaps (M7). Pure Rust; already in the tree through eframe. MIT OR Apache-2.0. |
+| `zune-jpeg` (`std` only, no SIMD features) | Decodes JPEG to grayscale for image import (M7). Pure Rust; already in the tree. MIT OR Apache-2.0 OR Zlib. |
 | `serialport` (no default features) | Opens and lists serial ports on Linux, Windows and macOS (M6). Without its `libudev` feature it lists Linux ports from sysfs, so no C library is needed. MPL-2.0. |
 
 DXF is read by our own small parser (`lasercraft-import/src/dxf.rs`): the
 available crates pull in large dependency trees for a format whose ASCII
 form is simple group-code pairs.
 
-Planned, to be justified here when added: `image` (M7).
 
 M3 notes: node editing, joining and splitting live in `lasercraft-geom`
 (`nodes`); groups are a chain of group ids on each shape

@@ -1,5 +1,6 @@
 //! Small windows that collect arguments for M3 commands: offset, grid and
-//! circular arrays, and text (`docs/spec/arrange.md`, `docs/spec/text.md`).
+//! circular arrays, and text (`docs/spec/arrange.md`, `docs/spec/text.md`);
+//! and M7's image adjustments (`docs/spec/images.md`).
 //! Each produces one invocation when confirmed; none changes the project.
 
 use lasercraft_commands::Invocation;
@@ -31,6 +32,12 @@ enum Dialog {
         text: String,
         font: String,
         height: f64,
+    },
+    Adjust {
+        id: u32,
+        brightness: f64,
+        contrast: f64,
+        gamma: f64,
     },
 }
 
@@ -75,6 +82,25 @@ impl Dialogs {
         true
     }
 
+    /// Opens the adjustments of the first selected image; `false` if no
+    /// image is selected.
+    pub fn open_adjust(&mut self, project: &Project) -> bool {
+        let found = project.selection().into_iter().find_map(|id| {
+            let image = project.shape(id)?.geometry().image()?;
+            Some((id, image.adjust))
+        });
+        let Some((id, a)) = found else {
+            return false;
+        };
+        self.open = Some(Dialog::Adjust {
+            id,
+            brightness: a.brightness,
+            contrast: a.contrast,
+            gamma: a.gamma,
+        });
+        true
+    }
+
     /// Opens the text window for a click at `at`.
     pub fn open_text(&mut self, at: Point) {
         let font = lasercraft_import::fonts::default_family().unwrap_or_default();
@@ -99,6 +125,7 @@ impl Dialogs {
             Dialog::Grid { .. } => "Grid array",
             Dialog::Circular { .. } => "Circular array",
             Dialog::Text { .. } => "Add text",
+            Dialog::Adjust { .. } => "Adjust image",
         };
         if let Dialog::Circular { center, .. } = dialog
             && center.is_none()
@@ -189,6 +216,24 @@ fn fields(ui: &mut egui::Ui, dialog: &mut Dialog, families: &[String]) {
                 });
             number(ui, "Capital height", height, 0.1, " mm");
         }
+        Dialog::Adjust {
+            id,
+            brightness,
+            contrast,
+            gamma,
+        } => {
+            ui.label(format!("Image {id}"));
+            ui.add(egui::Slider::new(brightness, -100.0..=100.0).text("Brightness %"));
+            ui.add(egui::Slider::new(contrast, -99.0..=99.0).text("Contrast"));
+            ui.add(
+                egui::Slider::new(gamma, 0.1..=10.0)
+                    .logarithmic(true)
+                    .text("Gamma"),
+            );
+            if ui.button("Reset").clicked() {
+                (*brightness, *contrast, *gamma) = (0.0, 0.0, 1.0);
+            }
+        }
     }
 }
 
@@ -235,12 +280,61 @@ fn invocation(dialog: &Dialog, color: Color) -> Invocation {
                 format!("@{color}"),
             ],
         ),
+        Dialog::Adjust {
+            id,
+            brightness,
+            contrast,
+            gamma,
+        } => {
+            // Sliders give long fractions; keep what a person can see.
+            let round = |v: f64, places: i32| {
+                let f = 10f64.powi(places);
+                n((v * f).round() / f)
+            };
+            Invocation::new(
+                "image.adjust",
+                [
+                    id.to_string(),
+                    format!("brightness={}", round(*brightness, 1)),
+                    format!("contrast={}", round(*contrast, 1)),
+                    format!("gamma={}", round(*gamma, 2)),
+                ],
+            )
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adjust_opens_on_a_selected_image_and_rounds_values() {
+        use lasercraft_geom::Affine;
+        use lasercraft_project::raster::Gray;
+        use lasercraft_project::{Geometry, Image};
+        let mut p = Project::default();
+        let mut d = Dialogs::default();
+        assert!(!d.open_adjust(&p), "nothing selected");
+        let img = Image::new(2.0, 2.0, Gray::new(1, 1, vec![0]).unwrap());
+        let id = p
+            .add_shape_on(Geometry::Image(img), Affine::IDENTITY, 0)
+            .unwrap();
+        p.set_selection([id]).unwrap();
+        assert!(d.open_adjust(&p));
+        if let Some(Dialog::Adjust {
+            brightness, gamma, ..
+        }) = d.open.as_mut()
+        {
+            *brightness = 12.345;
+            *gamma = 1.23456;
+        }
+        let inv = invocation(d.open.as_ref().unwrap(), 0);
+        assert_eq!(
+            inv.to_string(),
+            format!("image.adjust {id} brightness=12.3 contrast=0 gamma=1.23")
+        );
+    }
 
     #[test]
     fn dialogs_build_the_matching_commands() {

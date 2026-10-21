@@ -1264,6 +1264,7 @@ dependencies = [
  "lasercraft-geom",
  "lasercraft-import",
  "lasercraft-project",
+ "serde_json",
 ]
 
 [[package]]

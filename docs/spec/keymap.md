@@ -2,7 +2,7 @@
 
 Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
 (notes, side panels), M3 (import, text, nodes, groups, booleans, alignment), M4
-(job preview), M6 (laser: start, frame, pause/stop, home, jog).
+(job preview), M6 (laser: start, frame, pause/stop, home, jog), M7 (adjust image).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -67,7 +67,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+W / Ctrl+B | Weld / boolean helper | M3 / later |
 | Alt++ / Alt+- / Alt+* | Union / subtract / intersect | M3 / M3 / not bindable (below) |
 | Alt+Shift+C / Ctrl+K / Alt+B | Cut shapes / trim / break apart | later / later / M3 |
-| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset (window) / convert to path / convert to bitmap | M3 / M3 / M7 |
+| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset (window) / convert to path / convert to bitmap | M3 / M3 / later |
+| Alt+I | Adjust the selected image (`ui.adjust_image`; Tools → Adjust Image…) | M7 |
 | Alt+J / Alt+Shift+O / Alt+D | Join open paths / optimize / delete duplicates | M3 / later / later |
 | Ctrl+G / Ctrl+U | Group / ungroup | M3 |
 | Alt+←/→/↑/↓ | Align left / right / top / bottom | M3 |
@@ -132,6 +133,11 @@ image" in v2.0 and "cut shapes" moved to Alt+Shift+C, so the legacy Alt+C
 conflict is gone.
 
 ## Sources
+
+- Alt+I (Adjust Image) and Ctrl+Shift+B (Convert to Bitmap):
+  https://docs.lightburnsoftware.com/2.1/Reference/UI/ToolsMenu/,
+  https://docs.lightburnsoftware.com/2.1/Reference/ConvertToBitmap/ (read
+  2026-10-21).
 
 - LightBurn 2.0 Windows hotkey cheat sheet, rev. 2.0, 13 Nov 2025:
   https://docs.lightburnsoftware.com/2.0/download/LightBurnWindowsHotkeysV2.0.pdf
