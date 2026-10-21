@@ -8,6 +8,6 @@ unlit 404 mm (8.5 s)
 travel 524.665 mm (7.4 s)
 total time 1 min 38 s
 bounds (9.9, 9.9) – (90.1, 40.1), 80.2 × 30.2 mm
-warning: layer 2: speed 150 mm/s is above the machine's 100 mm/s; timed at the machine's
+warning: layer 2: speed 150 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
 fits the work area (400 × 400 mm)
 wrote m4.svg

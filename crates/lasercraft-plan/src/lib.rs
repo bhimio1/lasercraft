@@ -95,7 +95,7 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
                 &mut warnings,
                 layer,
                 format!(
-                    "speed {} mm/s is above the machine's {} mm/s; timed at the machine's",
+                    "speed {} mm/s is above the machine's {} mm/s; the estimate uses the machine's speed",
                     num(layer.speed),
                     num(machine.max_speed)
                 ),
