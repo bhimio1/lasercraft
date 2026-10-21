@@ -1095,6 +1095,7 @@ version = "0.1.0"
 dependencies = [
  "eframe",
  "lasercraft-commands",
+ "lasercraft-plan",
  "lasercraft-project",
  "lasercraft-ui",
  "serde_json",
@@ -1105,6 +1106,8 @@ name = "lasercraft-cli"
 version = "0.1.0"
 dependencies = [
  "lasercraft-commands",
+ "lasercraft-geom",
+ "lasercraft-plan",
  "lasercraft-project",
  "serde_json",
 ]
@@ -1142,6 +1145,11 @@ version = "0.1.0"
 [[package]]
 name = "lasercraft-plan"
 version = "0.1.0"
+dependencies = [
+ "lasercraft-commands",
+ "lasercraft-geom",
+ "lasercraft-project",
+]
 
 [[package]]
 name = "lasercraft-project"

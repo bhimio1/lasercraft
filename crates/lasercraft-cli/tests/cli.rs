@@ -146,3 +146,80 @@ fn bad_usage_exits_with_two() {
     assert_eq!(out.status.code(), Some(2));
     assert!(stderr(&out).contains("usage:"));
 }
+
+/// Runs the CLI in `dir`.
+fn cli_in(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_lasercraft-cli"))
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("spawn lasercraft-cli")
+}
+
+#[test]
+fn m4_preview_matches_golden_output_and_writes_svg() {
+    let dir = temp_dir("preview");
+    let script = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/m4-planning.lcs"
+    );
+    let out = cli_in(&dir, &["script", script]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let out = cli_in(&dir, &["preview", "m4-planning.lcproj", "--svg", "m4.svg"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/m4-preview.out");
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(golden_path, stdout(&out)).unwrap();
+    }
+    assert_eq!(stdout(&out), std::fs::read_to_string(golden_path).unwrap());
+    let svg = std::fs::read_to_string(dir.join("m4.svg")).unwrap();
+    assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
+    assert!(
+        svg.contains("stroke-dasharray=\"1 1\""),
+        "travel drawn dashed"
+    );
+    assert!(svg.contains("stroke=\"#f80\""), "overscan and tabs drawn");
+    assert!(svg.trim_end().ends_with("</svg>"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn preview_lists_moves_takes_machine_flags_and_reports_bounds() {
+    let dir = temp_dir("preview-moves");
+    let file = dir.join("edge.lcproj");
+    let f = path_str(&file);
+    assert!(cli(&["new", f, "100", "50"]).status.success());
+    let out = cli(&[
+        "run",
+        f,
+        "shape.add_rect 1 10 20 10 @4",
+        "layer.set 4 mode fill",
+        "layer.set 4 interval 2",
+        "layer.set 4 speed 100",
+        "layer.set 4 overscan on",
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let out = cli(&["preview", f, "--moves"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(
+        text.contains("\nburn   (1, 19) -> (21, 19) @4 p1 #1 F100 S20\n"),
+        "{text}"
+    );
+    assert!(text.contains("overscan 5 mm"), "{text}");
+    assert!(
+        text.contains("does not fit: shape 1 on layer 4 goes 4.000 mm past the left edge"),
+        "{text}"
+    );
+    // A gentler acceleration needs more run-on; a lower speed cap less.
+    let text = stdout(&cli(&["preview", f, "--accel", "500", "--max-speed", "50"]));
+    assert!(text.contains("overscan 2.5 mm"), "{text}");
+    assert!(text.contains("does not fit"), "{text}");
+    let text = stdout(&cli(&["preview", f, "--max-speed", "40"]));
+    assert!(text.contains("overscan 0.8 mm"), "{text}");
+    assert!(text.contains("fits the work area (100 × 50 mm)"), "{text}");
+    let out = cli(&["preview", f, "--accel", "0"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stderr(&out).contains("acceleration"), "{}", stderr(&out));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

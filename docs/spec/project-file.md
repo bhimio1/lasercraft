@@ -50,7 +50,7 @@ item per line.
 | `work_area.origin` | Bed corner where machine coordinates are zero: `front_left`, `front_right`, `rear_left`, `rear_right`. "Front" is the side nearest the operator. |
 | `next_id` | Next object id to hand out; greater than every shape id. |
 | `layers.order` | Output order: all 30 colors exactly once. |
-| `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. |
+| `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. The planning settings `kerf`, `tabs` and `tab_width` (M4) are optional: they are written only when they differ from their defaults and read as defaults when missing, so they did not need a version bump. |
 | `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, or `polyline` with `points` as `[x, y]` pairs and `closed`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
 
 Document coordinates are millimetres with x to the right and y downwards

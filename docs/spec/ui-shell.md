@@ -25,6 +25,9 @@ palette, notes).
   otherwise it becomes the current color.
 - F12 or View → Side Panels hides and shows the tool palette and the layers
   panel. File → Project Notes… (Ctrl+Alt+N) edits the notes.
+- View → Job Preview… (Alt+P) opens the job preview window
+  (`docs/spec/preview.md`, M4). The shell emits `Action::Preview`; the app
+  plans the job and hands the shell the moves and text to draw.
 - Center: the canvas (`docs/spec/canvas.md`).
 - Console (bottom, resizable): a line where any command can be typed and run,
   and a log of each command with its message or error.

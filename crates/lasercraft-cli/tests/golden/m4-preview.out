@@ -1,0 +1,13 @@
+job "Name tag"
+start (0, 400), 296 move(s)
+layer 2 "Engrave": fill, 1 pass(es), 150 mm/s, power 35%, overscan 5 mm
+layer 3 "Score": line, 1 pass(es), 30 mm/s, power 30%
+layer 1 "Cut": line, 2 pass(es), 8 mm/s, power 90%
+burn 2536.193 mm (1 min 22 s)
+unlit 404 mm (8.5 s)
+travel 524.665 mm (7.4 s)
+total time 1 min 38 s
+bounds (9.9, 9.9) – (90.1, 40.1), 80.2 × 30.2 mm
+warning: layer 2: speed 150 mm/s is above the machine's 100 mm/s; timed at the machine's
+fits the work area (400 × 400 mm)
+wrote m4.svg

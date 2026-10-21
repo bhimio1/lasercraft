@@ -22,6 +22,18 @@ pub const MAX_PASSES: u32 = 1000;
 /// Allowed line interval range, mm.
 pub const INTERVAL_RANGE: (f64, f64) = (0.001, 10.0);
 
+/// Largest kerf offset either way, mm.
+pub const MAX_KERF: f64 = 5.0;
+
+/// Most tabs per shape.
+pub const MAX_TABS: u32 = 100;
+
+/// Allowed tab width range, mm.
+pub const TAB_WIDTH_RANGE: (f64, f64) = (0.01, 50.0);
+
+/// Default tab width, mm.
+pub const DEFAULT_TAB_WIDTH: f64 = 1.0;
+
 /// A palette color index, 0–29.
 pub type Color = u8;
 
@@ -203,6 +215,40 @@ pub struct Layer {
     pub air: bool,
     /// Image settings.
     pub image: ImageSettings,
+    /// Line mode: kerf offset for closed shapes, mm; positive moves the cut
+    /// outward from the part (M4).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub kerf: f64,
+    /// Line mode: tabs left uncut per closed outer shape; 0 is off (M4).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub tabs: u32,
+    /// Line mode: width of each tab, mm (M4).
+    #[serde(
+        default = "default_tab_width",
+        skip_serializing_if = "is_default_tab_width"
+    )]
+    pub tab_width: f64,
+}
+
+// Planning settings (M4) are left out of files while at their defaults, so
+// older files and goldens stay as they were.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
+fn default_tab_width() -> f64 {
+    DEFAULT_TAB_WIDTH
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_default_tab_width(v: &f64) -> bool {
+    *v == DEFAULT_TAB_WIDTH
 }
 
 impl Layer {
@@ -226,6 +272,9 @@ impl Layer {
             show: true,
             air: false,
             image: ImageSettings::default(),
+            kerf: 0.0,
+            tabs: 0,
+            tab_width: DEFAULT_TAB_WIDTH,
         }
     }
 
@@ -275,6 +324,19 @@ impl Layer {
             self.image.interval,
             INTERVAL_RANGE.0,
             INTERVAL_RANGE.1,
+        )?;
+        in_range("kerf", self.kerf, -MAX_KERF, MAX_KERF)?;
+        if self.tabs > MAX_TABS {
+            return Err(ProjectError::invalid(
+                "tabs",
+                format!("must be 0–{MAX_TABS}"),
+            ));
+        }
+        in_range(
+            "tab_width",
+            self.tab_width,
+            TAB_WIDTH_RANGE.0,
+            TAB_WIDTH_RANGE.1,
         )
     }
 
@@ -303,6 +365,9 @@ impl Layer {
             "image.dither" => self.image.dither.to_string(),
             "image.interval" => self.image.interval.to_string(),
             "image.negative" => on(self.image.negative),
+            "kerf" => self.kerf.to_string(),
+            "tabs" => self.tabs.to_string(),
+            "tab_width" => self.tab_width.to_string(),
             other => return Err(unknown_setting(other)),
         })
     }
@@ -322,11 +387,7 @@ impl Layer {
             "speed" => next.speed = number(key, value)?,
             "max_power" => next.max_power = number(key, value)?,
             "min_power" => next.min_power = number(key, value)?,
-            "passes" => {
-                next.passes = value.parse().map_err(|_| {
-                    ProjectError::invalid(key, format!("`{value}` is not a whole number"))
-                })?;
-            }
+            "passes" => next.passes = whole(key, value)?,
             "interval" => next.interval = interval(key, value)?,
             "angle" => next.angle = number(key, value)?,
             "bidirectional" => next.bidirectional = switch(key, value)?,
@@ -338,6 +399,9 @@ impl Layer {
             "image.dither" => next.image.dither = value.parse()?,
             "image.interval" => next.image.interval = interval(key, value)?,
             "image.negative" => next.image.negative = switch(key, value)?,
+            "kerf" => next.kerf = number(key, value)?,
+            "tabs" => next.tabs = whole(key, value)?,
+            "tab_width" => next.tab_width = number(key, value)?,
             other => return Err(unknown_setting(other)),
         }
         next.validate()?;
@@ -347,7 +411,7 @@ impl Layer {
 }
 
 /// Every setting name `layer.set` accepts.
-pub const SETTINGS: [&str; 17] = [
+pub const SETTINGS: [&str; 20] = [
     "name",
     "mode",
     "speed",
@@ -365,6 +429,9 @@ pub const SETTINGS: [&str; 17] = [
     "image.dither",
     "image.interval",
     "image.negative",
+    "kerf",
+    "tabs",
+    "tab_width",
 ];
 
 fn unknown_setting(key: &str) -> ProjectError {
@@ -383,6 +450,12 @@ fn in_range(field: &str, value: f64, min: f64, max: f64) -> Result<(), ProjectEr
             format!("must be between {min} and {max}, got {value}"),
         ))
     }
+}
+
+fn whole(field: &str, value: &str) -> Result<u32, ProjectError> {
+    value
+        .parse()
+        .map_err(|_| ProjectError::invalid(field, format!("`{value}` is not a whole number")))
 }
 
 fn number(field: &str, value: &str) -> Result<f64, ProjectError> {
@@ -478,11 +551,14 @@ mod tests {
             ("image.dither", "stucki"),
             ("image.interval", "0.05"),
             ("image.negative", "on"),
+            ("kerf", "-0.08"),
+            ("tabs", "4"),
+            ("tab_width", "0.5"),
         ] {
             l.set(key, value).unwrap();
             assert_eq!(l.get(key).unwrap(), value, "{key}");
         }
-        assert_eq!(SETTINGS.len(), 17);
+        assert_eq!(SETTINGS.len(), 20);
         for key in SETTINGS {
             assert!(l.get(key).is_ok(), "{key}");
         }
@@ -517,6 +593,12 @@ mod tests {
             ("output", "maybe"),
             ("name", "  "),
             ("bogus", "1"),
+            ("kerf", "5.5"),
+            ("kerf", "-6"),
+            ("tabs", "101"),
+            ("tabs", "-1"),
+            ("tab_width", "0"),
+            ("tab_width", "51"),
         ] {
             assert!(l.set(key, value).is_err(), "{key} {value}");
         }
@@ -524,6 +606,23 @@ mod tests {
         // Lowering max below min fails; lower min first.
         l.set("min_power", "15").unwrap();
         assert!(l.set("max_power", "10").is_err());
+    }
+
+    #[test]
+    fn planning_settings_default_and_stay_out_of_files() {
+        let l = Layer::new(4);
+        assert_eq!((l.kerf, l.tabs, l.tab_width), (0.0, 0, DEFAULT_TAB_WIDTH));
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(!json.contains("kerf") && !json.contains("tab"), "{json}");
+        // Older layer JSON without the fields still reads.
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), l);
+        let mut changed = l.clone();
+        changed.set("kerf", "0.1").unwrap();
+        changed.set("tabs", "2").unwrap();
+        changed.set("tab_width", "0.4").unwrap();
+        let json = serde_json::to_string(&changed).unwrap();
+        assert!(json.contains("\"kerf\":0.1") && json.contains("\"tab_width\":0.4"));
+        assert_eq!(serde_json::from_str::<Layer>(&json).unwrap(), changed);
     }
 
     #[test]

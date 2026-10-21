@@ -267,6 +267,27 @@ mod tests {
     }
 
     #[test]
+    fn planning_settings_set_and_undo() {
+        let mut s = session(&[]);
+        s.run_line("layer.set 4 kerf 0.12").unwrap();
+        s.run_line("layer.set 4 tabs 3").unwrap();
+        s.run_line("layer.set 4 tab_width 0.8").unwrap();
+        let layer = s.project().layer(4).unwrap();
+        assert_eq!((layer.kerf, layer.tabs, layer.tab_width), (0.12, 3, 0.8));
+        for bad in [
+            "layer.set 4 kerf 9",
+            "layer.set 4 tabs 2.5",
+            "layer.set 4 tab_width 0",
+        ] {
+            assert!(s.run_line(bad).is_err(), "{bad}");
+        }
+        for _ in 0..3 {
+            s.run_line("edit.undo").unwrap();
+        }
+        assert_eq!(s.project(), &Project::default());
+    }
+
+    #[test]
     fn copy_settings_keeps_the_name() {
         let mut s = session(&[
             "layer.set 1 mode fill",

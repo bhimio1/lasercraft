@@ -8,6 +8,8 @@ use std::path::Path;
 use lasercraft_commands::{CommandError, Invocation, Registry, SESSION_COMMANDS, Session};
 use lasercraft_project::Project;
 
+mod preview;
+
 /// Usage text printed by `help` and on bad arguments.
 pub const USAGE: &str = "\
 usage:
@@ -15,6 +17,8 @@ usage:
   lasercraft-cli run <project.lcproj> <command> [<command> ...]
   lasercraft-cli script <script.lcs> [<project.lcproj>]
   lasercraft-cli show <project.lcproj> [--json]
+  lasercraft-cli preview <project.lcproj> [--svg <out.svg>] [--moves]
+                 [--max-speed <mm/s>] [--accel <mm/s²>] [--max-power <%>]
   lasercraft-cli commands
   lasercraft-cli help";
 
@@ -74,6 +78,7 @@ pub fn run(args: &[String]) -> Result<String, CliError> {
         "run" => run_commands(rest),
         "script" => script(rest),
         "show" => show(rest),
+        "preview" => preview::preview(rest),
         "commands" if rest.is_empty() => Ok(commands()),
         "help" | "--help" | "-h" => Ok(format!("{USAGE}\n")),
         other => Err(usage(&format!("unknown subcommand `{other}`"))),
@@ -199,6 +204,14 @@ fn layer_settings(l: &lasercraft_project::Layer) -> String {
             if l.crosshatch { ", crosshatch" } else { "" }
         );
     }
+    if l.mode == lasercraft_project::Mode::Line {
+        if l.kerf != 0.0 {
+            let _ = write!(text, ", kerf {} mm", mm(l.kerf));
+        }
+        if l.tabs > 0 {
+            let _ = write!(text, ", {} tab(s) of {} mm", l.tabs, mm(l.tab_width));
+        }
+    }
     for (on, word) in [
         (!l.output, "output off"),
         (!l.show, "hidden"),
@@ -282,6 +295,12 @@ mod tests {
             &["show", "x", "--yaml"],
             &["script"],
             &["commands", "extra"],
+            &["preview"],
+            &["preview", "x.lcproj", "--frobnicate"],
+            &["preview", "x.lcproj", "--accel"],
+            &["preview", "x.lcproj", "--max-speed", "fast"],
+            &["preview", "x.lcproj", "--svg"],
+            &["preview", "a.lcproj", "b.lcproj"],
         ] {
             let err = run(&args(bad)).unwrap_err();
             assert_eq!(err.exit_code(), 2, "{bad:?}");
