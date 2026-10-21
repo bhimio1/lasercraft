@@ -1,6 +1,6 @@
 //! Shapes: an id, local geometry and a transform (`docs/spec/shapes.md`).
 
-use lasercraft_geom::{Affine, Point, Rect, flatten, polyline};
+use lasercraft_geom::{Affine, Path, Point, Rect, flatten, polyline};
 use serde::{Deserialize, Serialize};
 
 use crate::ProjectError;
@@ -38,6 +38,9 @@ pub enum Geometry {
         /// Whether the last point joins back to the first.
         closed: bool,
     },
+    /// Lines and cubic Béziers in one or more subpaths: imported art, text,
+    /// edited nodes and boolean results.
+    Path(Path),
 }
 
 fn check_size(field: &str, value: f64) -> Result<(), ProjectError> {
@@ -93,6 +96,21 @@ impl Geometry {
                 }
                 points.iter().try_for_each(|p| check_point(*p))
             }
+            Self::Path(path) => {
+                if !path.is_valid() {
+                    return Err(ProjectError::invalid(
+                        "path",
+                        "needs at least one segment in every subpath and finite points",
+                    ));
+                }
+                if path.points().count() > MAX_POINTS {
+                    return Err(ProjectError::invalid(
+                        "path",
+                        format!("has more than {MAX_POINTS} points"),
+                    ));
+                }
+                path.points().try_for_each(check_point)
+            }
         }
     }
 
@@ -102,22 +120,27 @@ impl Geometry {
         match self {
             Self::Rect { .. } | Self::Ellipse { .. } => true,
             Self::Polyline { closed, .. } => *closed,
+            Self::Path(path) => path.is_closed(),
         }
     }
 
-    /// The outline in local coordinates, within `tolerance` mm of the true
-    /// curve.
+    /// The outlines in local coordinates, within `tolerance` mm of the true
+    /// curve, each with its closed flag. Only paths have more than one.
     #[must_use]
-    pub fn local_outline(&self, tolerance: f64) -> Vec<Point> {
+    pub fn local_outlines(&self, tolerance: f64) -> Vec<(Vec<Point>, bool)> {
         match self {
-            Self::Rect { width, height } => vec![
-                Point::new(0.0, 0.0),
-                Point::new(*width, 0.0),
-                Point::new(*width, *height),
-                Point::new(0.0, *height),
-            ],
-            Self::Ellipse { rx, ry } => flatten::ellipse_points(*rx, *ry, tolerance),
-            Self::Polyline { points, .. } => points.clone(),
+            Self::Rect { width, height } => vec![(
+                vec![
+                    Point::new(0.0, 0.0),
+                    Point::new(*width, 0.0),
+                    Point::new(*width, *height),
+                    Point::new(0.0, *height),
+                ],
+                true,
+            )],
+            Self::Ellipse { rx, ry } => vec![(flatten::ellipse_points(*rx, *ry, tolerance), true)],
+            Self::Polyline { points, closed } => vec![(points.clone(), *closed)],
+            Self::Path(path) => path.flatten(tolerance),
         }
     }
 
@@ -132,6 +155,7 @@ impl Geometry {
                 (_, true) => "polygon",
                 _ => "polyline",
             },
+            Self::Path(_) => "path",
         }
     }
 }
@@ -234,18 +258,31 @@ impl Shape {
         self.transform = transform;
     }
 
-    /// The outline in document coordinates within `tolerance` mm, and
-    /// whether it is closed.
+    /// The outlines in document coordinates within `tolerance` mm, each
+    /// with its closed flag.
     #[must_use]
-    pub fn outline(&self, tolerance: f64) -> (Vec<Point>, bool) {
+    pub fn outlines(&self, tolerance: f64) -> Vec<(Vec<Point>, bool)> {
         let local_tolerance = tolerance / self.transform.max_stretch().max(f64::EPSILON);
-        let points = self
-            .geometry
-            .local_outline(local_tolerance)
+        self.geometry
+            .local_outlines(local_tolerance)
             .into_iter()
-            .map(|p| self.transform.apply(p))
-            .collect();
-        (points, self.geometry.is_closed())
+            .map(|(points, closed)| {
+                let points = points
+                    .into_iter()
+                    .map(|p| self.transform.apply(p))
+                    .collect();
+                (points, closed)
+            })
+            .collect()
+    }
+
+    /// The closed outlines in document coordinates (open ones are left out).
+    #[must_use]
+    pub fn closed_contours(&self, tolerance: f64) -> Vec<Vec<Point>> {
+        self.outlines(tolerance)
+            .into_iter()
+            .filter_map(|(points, closed)| closed.then_some(points))
+            .collect()
     }
 
     /// Exact bounding box in document coordinates.
@@ -264,6 +301,10 @@ impl Shape {
             }
             Geometry::Polyline { points, .. } => Rect::bounding(points.iter().map(|p| t.apply(*p)))
                 .unwrap_or_else(|| Rect::from_corners(Point::ZERO, Point::ZERO)),
+            Geometry::Path(path) => path
+                .transformed(t)
+                .bounds()
+                .unwrap_or_else(|| Rect::from_corners(Point::ZERO, Point::ZERO)),
         }
     }
 
@@ -279,18 +320,55 @@ impl Shape {
         if !grown.contains(p) {
             return false;
         }
-        let (points, closed) = self.outline(tolerance * 0.25);
-        (closed && polyline::contains(&points, p))
-            || polyline::distance_to_polyline(&points, closed, p) <= tolerance
+        let outlines = self.outlines(tolerance * 0.25);
+        // Even-odd across the closed outlines, so holes are not hits.
+        let inside = outlines
+            .iter()
+            .filter(|(points, closed)| *closed && polyline::contains(points, p))
+            .count()
+            % 2
+            == 1;
+        inside
+            || outlines.iter().any(|(points, closed)| {
+                polyline::distance_to_polyline(points, *closed, p) <= tolerance
+            })
     }
 
-    /// Whether the outline crosses or lies inside `rect`, or a closed shape
-    /// contains it.
+    /// Whether an outline crosses or lies inside `rect`, or the shape's
+    /// inside (even-odd across its closed outlines) contains the box.
     #[must_use]
     pub fn touches(&self, rect: &Rect, tolerance: f64) -> bool {
-        let (points, closed) = self.outline(tolerance);
-        polyline::touches_rect(&points, closed, rect)
+        let outlines = self.outlines(tolerance);
+        // Points inside or segments crossing, without containment; the
+        // closing segment is checked separately.
+        let crosses = outlines.iter().any(|(points, closed)| {
+            polyline::touches_rect(points, false, rect) || (*closed && edges_touch(points, rect))
+        });
+        let inside = outlines
+            .iter()
+            .filter(|(points, closed)| *closed && polyline::contains(points, rect.center()))
+            .count()
+            % 2
+            == 1;
+        crosses || inside
     }
+}
+
+/// Whether a closed outline's segments (including the closing one) touch
+/// `rect`, ignoring containment.
+fn edges_touch(points: &[Point], rect: &Rect) -> bool {
+    let corners = rect.corners();
+    let edges = [
+        (corners[0], corners[1]),
+        (corners[1], corners[2]),
+        (corners[2], corners[3]),
+        (corners[3], corners[0]),
+    ];
+    polyline::segments(points, true).any(|(a, b)| {
+        edges
+            .iter()
+            .any(|(c, d)| polyline::segments_intersect(a, b, *c, *d))
+    })
 }
 
 /// Snap targets of a box: corners, edge midpoints and center.
@@ -372,7 +450,7 @@ mod tests {
         assert!(b.min.approx_eq(Point::new(40.0, 30.0), TOL), "{b:?}");
         assert!(b.max.approx_eq(Point::new(60.0, 70.0), TOL), "{b:?}");
         // Flattened outline stays inside the exact bounds.
-        let (pts, closed) = e.outline(0.01);
+        let (pts, closed) = e.outlines(0.01).remove(0);
         assert!(closed);
         let grown = Rect::from_corners(b.min - Point::new(TOL, TOL), b.max + Point::new(TOL, TOL));
         assert!(pts.iter().all(|p| grown.contains(*p)));
@@ -408,6 +486,55 @@ mod tests {
         assert!(line.hit(Point::new(5.2, 5.0), 0.5));
         assert!(!line.hit(Point::new(2.0, 8.0), 0.5));
         assert_eq!(line.geometry().kind(), "line");
+    }
+
+    #[test]
+    fn path_shapes_round_trip_and_hit_test_with_holes() {
+        use lasercraft_geom::{Segment, SubPath};
+        let outer = SubPath::from_points(
+            &[
+                Point::new(0.0, 0.0),
+                Point::new(20.0, 0.0),
+                Point::new(20.0, 20.0),
+                Point::new(0.0, 20.0),
+            ],
+            true,
+        )
+        .unwrap();
+        let hole = SubPath {
+            start: Point::new(5.0, 5.0),
+            segments: vec![
+                Segment::Line(Point::new(15.0, 5.0)),
+                Segment::Cubic(
+                    Point::new(15.0, 10.0),
+                    Point::new(15.0, 15.0),
+                    Point::new(10.0, 15.0),
+                ),
+                Segment::Line(Point::new(5.0, 15.0)),
+            ],
+            closed: true,
+        };
+        let path = Path {
+            subpaths: vec![outer, hole],
+        };
+        let shape = Shape::new(1, Geometry::Path(path), Affine::translate(100.0, 0.0)).unwrap();
+        assert_eq!(shape.geometry().kind(), "path");
+        let json = serde_json::to_string(&shape).unwrap();
+        assert!(json.contains(r#""kind":"path","subpaths""#), "{json}");
+        assert_eq!(serde_json::from_str::<Shape>(&json).unwrap(), shape);
+        let b = shape.bounds();
+        assert_eq!(
+            (b.min, b.max),
+            (Point::new(100.0, 0.0), Point::new(120.0, 20.0))
+        );
+        // Solid ring is a hit; the hole is not, except near its edge.
+        assert!(shape.hit(Point::new(102.0, 2.0), 0.1));
+        assert!(!shape.hit(Point::new(108.0, 10.0), 0.1));
+        assert!(shape.hit(Point::new(105.05, 10.0), 0.1));
+        assert_eq!(shape.outlines(0.01).len(), 2);
+        assert_eq!(shape.closed_contours(0.01).len(), 2);
+        let empty = Geometry::Path(Path::default());
+        assert!(Shape::new(2, empty, Affine::IDENTITY).is_err());
     }
 
     #[test]

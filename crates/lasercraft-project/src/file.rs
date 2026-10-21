@@ -9,7 +9,7 @@ use crate::{Project, ProjectError};
 pub const FORMAT: &str = "lasercraft-project";
 
 /// The newest format version this build reads and the one it writes.
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// Just enough of a file to decide whether we can read the rest.
 #[derive(serde::Deserialize)]
@@ -250,7 +250,7 @@ mod tests {
             Project::from_json("not json"),
             Err(ProjectError::Format(_))
         ));
-        let newer = GOLDEN.replace("\"version\": 3", "\"version\": 99");
+        let newer = GOLDEN.replace("\"version\": 4", "\"version\": 99");
         assert_eq!(
             Project::from_json(&newer),
             Err(ProjectError::UnsupportedVersion(99))

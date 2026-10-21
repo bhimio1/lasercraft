@@ -4,18 +4,21 @@
 //! y grows downwards, as in SVG (`docs/spec/geometry.md`). Everything here is
 //! pure and deterministic.
 //!
-//! M1 has polylines and ellipses; Bézier paths, booleans and offsets arrive
-//! with M3 and M4.
+//! Polylines, ellipses and Bézier paths; booleans and offsets through
+//! `i_overlay`.
 
 mod affine;
+pub mod boolean;
 pub mod flatten;
 pub mod manipulate;
+pub mod path;
 mod point;
 pub mod polyline;
 mod rect;
 pub mod snap;
 
 pub use affine::Affine;
+pub use path::{Path, Segment, SubPath};
 pub use point::Point;
 pub use rect::Rect;
 

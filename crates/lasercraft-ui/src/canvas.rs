@@ -236,11 +236,6 @@ impl Canvas {
                 continue;
             }
             let moved = preview.and_then(|(ids, t)| ids.contains(&shape.id()).then_some(t));
-            let (points, closed) = shape.outline(tolerance);
-            let screen: Vec<Pos2> = points
-                .iter()
-                .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
-                .collect();
             let mut color = layer_color(shape.layer());
             if !layer.output {
                 color = color.gamma_multiply(0.3);
@@ -251,11 +246,17 @@ impl Canvas {
                 1.25
             };
             let stroke = Stroke::new(width, color);
-            painter.add(if closed {
-                egui::Shape::closed_line(screen, stroke)
-            } else {
-                egui::Shape::line(screen, stroke)
-            });
+            for (points, closed) in shape.outlines(tolerance) {
+                let screen: Vec<Pos2> = points
+                    .iter()
+                    .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
+                    .collect();
+                painter.add(if closed {
+                    egui::Shape::closed_line(screen, stroke)
+                } else {
+                    egui::Shape::line(screen, stroke)
+                });
+            }
         }
         paint_selection(
             painter,

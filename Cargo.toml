@@ -21,6 +21,7 @@ lasercraft-device = { path = "crates/lasercraft-device" }
 lasercraft-ui = { path = "crates/lasercraft-ui" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+i_overlay = "9.1"
 egui = "0.37"
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 

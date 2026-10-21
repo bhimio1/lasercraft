@@ -111,6 +111,7 @@ depends on `lasercraft-project`: it streams lines it is given.
 | Dependency | Why |
 | --- | --- |
 | `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses. `float_roundtrip` makes parsing bit-exact, so saving and undo never drift; `preserve_order` keeps field order for the compact file writer. |
+| `i_overlay` | Pure-Rust polygon booleans and offsets (union, subtract, intersect, weld, offset, kerf); MIT. |
 | `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |
 
