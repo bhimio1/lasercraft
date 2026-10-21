@@ -116,13 +116,15 @@ pub(crate) fn scan(outlines: &[Outline], angle_deg: f64, interval: f64) -> Vec<S
             .collect();
         crossings.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.2.cmp(&y.2)));
         let segments: Vec<Segment> = crossings
-            .chunks_exact(2)
-            .filter(|pair| pair[1].0 - pair[0].0 > MIN_SEGMENT)
-            .map(|pair| Segment {
-                u0: pair[0].0,
-                u1: pair[1].0,
-                shape0: pair[0].1,
-                shape1: pair[1].1,
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .filter(|[a, b]| b.0 - a.0 > MIN_SEGMENT)
+            .map(|[a, b]| Segment {
+                u0: a.0,
+                u1: b.0,
+                shape0: a.1,
+                shape1: b.1,
             })
             .collect();
         if !segments.is_empty() {
