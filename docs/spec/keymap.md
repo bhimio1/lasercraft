@@ -1,7 +1,7 @@
 # Spec: keyboard shortcuts
 
 Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
-(notes, side panels).
+(notes, side panels), M4 (job preview).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -75,7 +75,7 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | P (canvas focus) | Move to the bed center *(legacy)* | M3 |
 | Ctrl+Shift+M / Ctrl+2 | Mirror across a line / two-point rotate and scale | M3 |
 | Alt+M | Measure | M3 |
-| Alt+Shift+W | Toggle outline / filled display (with the fill preview) | M4 |
+| Alt+Shift+W | Toggle outline / filled display (with the fill preview) | later (not bound in M4; the job preview shows fills) |
 | F12 | Toggle side panels (`ui.toggle_panels`) | M2 |
 | F1 | Help for the item under the pointer | M10 |
 
@@ -83,8 +83,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 
 | Chord | Action | Bound |
 | --- | --- | --- |
-| Ctrl+Tab | Add tabs | M4 |
-| Alt+P | Preview the job | M4 |
+| Ctrl+Tab | Add tabs by hand | later (M4 has automatic tabs only) |
+| Alt+P | Preview the job (`ui.preview`; works without a device) | M4 |
 | Alt+L | Move the head to a clicked point | M6 |
 | Ctrl+Shift+[ / Ctrl+Shift+] | Jog down / up | M6 |
 | Ctrl+Alt+[ / Ctrl+Alt+] | Jog left / right | M6 |

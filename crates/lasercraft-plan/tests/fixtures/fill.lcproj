@@ -1,0 +1,90 @@
+{
+  "format": "lasercraft-project",
+  "version": 4,
+  "name": "Fill",
+  "notes": "",
+  "work_area": { "width_mm": 100.0, "height_mm": 100.0, "origin": "front_left" },
+  "next_id": 5,
+  "layers": {
+    "order": [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+    ],
+    "changed": [
+      {
+        "color": 3,
+        "name": "Ring",
+        "mode": "fill",
+        "speed": 50.0,
+        "max_power": 30.0,
+        "min_power": 0.0,
+        "passes": 1,
+        "interval": 2.5,
+        "angle": 0.0,
+        "bidirectional": true,
+        "overscan": true,
+        "crosshatch": false,
+        "output": true,
+        "show": true,
+        "air": false,
+        "image": {
+          "dither": "floyd_steinberg",
+          "interval": 0.1,
+          "negative": false
+        }
+      },
+      {
+        "color": 4,
+        "name": "Hatch",
+        "mode": "fill",
+        "speed": 40.0,
+        "max_power": 25.0,
+        "min_power": 0.0,
+        "passes": 1,
+        "interval": 4.0,
+        "angle": 45.0,
+        "bidirectional": false,
+        "overscan": false,
+        "crosshatch": true,
+        "output": true,
+        "show": true,
+        "air": false,
+        "image": {
+          "dither": "floyd_steinberg",
+          "interval": 0.1,
+          "negative": false
+        }
+      }
+    ]
+  },
+  "shapes": [
+    {
+      "id": 1,
+      "layer": 3,
+      "geometry": { "kind": "rect", "width": 20.0, "height": 20.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 10.0, 10.0]
+    },
+    {
+      "id": 2,
+      "layer": 3,
+      "geometry": { "kind": "rect", "width": 10.0, "height": 10.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 15.0, 15.0]
+    },
+    {
+      "id": 3,
+      "layer": 3,
+      "geometry": {
+        "kind": "polyline",
+        "points": [[10.0, 40.0], [30.0, 40.0]],
+        "closed": false
+      },
+      "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    },
+    {
+      "id": 4,
+      "layer": 4,
+      "geometry": { "kind": "rect", "width": 10.0, "height": 10.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 50.0, 50.0]
+    }
+  ]
+}

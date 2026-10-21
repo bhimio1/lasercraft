@@ -20,18 +20,21 @@ named in brackets.
 lasercraft-app ──► lasercraft-ui ──► lasercraft-commands ──► lasercraft-project ──► lasercraft-geom
 lasercraft-ui, lasercraft-commands ──► lasercraft-geom
 lasercraft-commands ┄► lasercraft-import [M3]
-lasercraft-app ┄► lasercraft-device [M6], lasercraft-plan, lasercraft-gcode [M4/M5]
+lasercraft-app ──► lasercraft-plan (M4)
+lasercraft-app ┄► lasercraft-device [M6], lasercraft-gcode [M5]
 
-lasercraft-cli ──► lasercraft-commands, lasercraft-project
-      └┄► lasercraft-plan, lasercraft-gcode, lasercraft-device (simulator) [M4–M6]
+lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
+      └┄► lasercraft-gcode, lasercraft-device (simulator) [M5–M6]
 
-lasercraft-plan ┄► lasercraft-project, lasercraft-geom, lasercraft-raster [M4]
+lasercraft-plan ──► lasercraft-project, lasercraft-geom (M4)
+lasercraft-plan ┄► lasercraft-raster [M7]
 lasercraft-gcode ┄► lasercraft-plan [M5]
 lasercraft-raster, lasercraft-device, lasercraft-geom: no workspace dependencies
 ```
 
 Rules: `lasercraft-ui` never depends on `lasercraft-device`, `-plan` or
-`-gcode` directly; it shows what the app hands it. `lasercraft-device` never
+`-gcode` directly; it shows what the app hands it (the job preview gets plain
+`lasercraft_ui::Preview` data that the app builds from a `Plan`). `lasercraft-device` never
 depends on `lasercraft-project`: it streams lines it is given.
 
 | Crate | Responsibility | Status |
@@ -41,11 +44,11 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M2: `project.*`, `shape.*`, `select.*`, `layer.*`, `edit.*` |
 | `lasercraft-import` | SVG and DXF to geometry. | Empty until M3 |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
-| `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested. | Empty until M4 |
+| `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
 | `lasercraft-gcode` | GRBL-dialect output, with work-area and power checks. | Empty until M5 |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M0: message types, GRBL real-time bytes, state names, Linux permission help |
-| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands` |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap |
+| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags) |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields |
 | `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0 |
 
 ## Command registry
@@ -85,7 +88,8 @@ depends on `lasercraft-project`: it streams lines it is given.
   which GRBL acts on even mid-line and with a full receive buffer.
 - **Planning** (M4) may run on a worker thread for large jobs. It takes an
   immutable snapshot of the project and returns a plan through a channel, so a
-  long plan never freezes the UI.
+  long plan never freezes the UI. M4 itself plans on the UI thread, only while
+  the preview window is open and the session's revision has changed.
 - The CLI uses the same channels with the simulated device, which is how M6 is
   tested without hardware.
 
@@ -100,8 +104,10 @@ depends on `lasercraft-project`: it streams lines it is given.
   drives the whole shell through egui headlessly with synthetic pointer and
   key events and applies the emitted commands to a real session.
 - Golden files: `crates/lasercraft-project/tests/golden/` (file format),
-  `crates/lasercraft-cli/tests/golden/` (script output). Planner and G-code
-  goldens follow in M4/M5.
+  `crates/lasercraft-cli/tests/golden/` (script and preview output),
+  `crates/lasercraft-plan/tests/golden/` (fixture project + machine → plan
+  dump; regenerate with `LASERCRAFT_UPDATE_GOLDEN=1` and review the diff).
+  G-code goldens follow in M5.
 - CLI integration tests spawn the real binary.
 - Device tests (M6) run against the simulated GRBL device only.
   Hardware checks are manual (`docs/hardware-testing.md`).

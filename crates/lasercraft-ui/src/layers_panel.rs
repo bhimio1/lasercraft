@@ -227,6 +227,9 @@ impl LayersPanel {
                     last.1 = format!("{}", passes.round());
                 }
                 switch(ui, "Air assist", &mut draft.air, "air", &mut edits);
+                if draft.mode == Mode::Line {
+                    line_settings(ui, draft, &mut edits);
+                }
                 if draft.mode == Mode::Fill {
                     number(
                         ui,
@@ -313,6 +316,43 @@ impl LayersPanel {
     }
 }
 
+/// Kerf offset and tabs (line mode, M4).
+fn line_settings(ui: &mut egui::Ui, draft: &mut Layer, edits: &mut Vec<(&str, String)>) {
+    number(
+        ui,
+        "Kerf offset",
+        &mut draft.kerf,
+        (
+            -lasercraft_project::layer::MAX_KERF,
+            lasercraft_project::layer::MAX_KERF,
+        ),
+        " mm",
+        "kerf",
+        edits,
+    );
+    let mut tabs = f64::from(draft.tabs);
+    number(
+        ui,
+        "Tabs per shape",
+        &mut tabs,
+        (0.0, f64::from(lasercraft_project::layer::MAX_TABS)),
+        "",
+        "tabs",
+        edits,
+    );
+    if draft.tabs > 0 {
+        number(
+            ui,
+            "Tab width",
+            &mut draft.tab_width,
+            lasercraft_project::layer::TAB_WIDTH_RANGE,
+            " mm",
+            "tab_width",
+            edits,
+        );
+    }
+}
+
 /// A labelled number field. Dragging previews in the draft; the change is
 /// committed when the drag ends or a typed value is entered.
 fn number<'a>(
@@ -324,8 +364,10 @@ fn number<'a>(
     key: &'a str,
     edits: &mut Vec<(&'a str, String)>,
 ) {
-    // Passes are whole numbers; everything else allows three decimals.
-    let decimals = if key == "passes" { 0 } else { 3 };
+    // Passes and tabs are whole numbers; everything else allows three
+    // decimals.
+    let whole = matches!(key, "passes" | "tabs");
+    let decimals = if whole { 0 } else { 3 };
     ui.label(label);
     let r = ui.add(
         DragValue::new(value)
@@ -335,7 +377,12 @@ fn number<'a>(
             .max_decimals(decimals),
     );
     if r.drag_stopped() || (r.changed() && !r.dragged()) {
-        edits.push((key, value.to_string()));
+        let text = if whole {
+            value.round().to_string()
+        } else {
+            value.to_string()
+        };
+        edits.push((key, text));
     }
     ui.end_row();
 }

@@ -42,6 +42,9 @@ settings later.
 | `image.dither` | Image method: `grayscale`, `threshold`, `floyd_steinberg`, `jarvis`, `stucki`, `ordered`, `halftone` | `floyd_steinberg` | |
 | `image.interval` | Image line spacing, mm | 0.1 | 0.001–10 |
 | `image.negative` | Invert the image | off | |
+| `kerf` | Line mode: offset closed shapes by this much, mm; positive moves the cut outward from the part, holes the other way (M4) | 0 | −5–5 |
+| `tabs` | Line mode: uncut tabs per closed outer shape; 0 is off (M4) | 0 | 0–100 |
+| `tab_width` | Line mode: length of each tab, mm (M4) | 1 | 0.01–50 |
 
 - `interval` and `image.interval` also accept `<n>lpi` or `<n>dpi`, meaning
   25.4 / n mm, rounded to the nearest nanometre (so `254lpi` is exactly
@@ -58,6 +61,9 @@ settings later.
   are skipped with a warning (M4).
 - Image settings apply to images of that color (M7); the layer list then shows
   a separate image entry for the color.
+- How the planner uses every setting (order, kerf, tabs, scan geometry,
+  overscan distance) is in `docs/spec/planning.md`. The editor shows kerf and
+  tabs for line layers only; tab width only when tabs are on.
 
 ## Commands
 
@@ -88,6 +94,10 @@ settings later.
   https://docs.lightburnsoftware.com/2.1/Reference/CutSettingsEditor/LineMode/,
   https://docs.lightburnsoftware.com/2.1/Reference/CutSettingsEditor/FillMode/,
   https://docs.lightburnsoftware.com/2.1/Explainers/LayerModes/
+- Kerf offset (closed shapes, positive outward) and tabs (count per shape,
+  tab size): https://docs.lightburnsoftware.com/2.1/Reference/CutSettingsEditor/LineMode/,
+  https://docs.lightburnsoftware.com/2.1/Reference/AddTabs/ (read 2026-10-21;
+  ranges and defaults are our own).
 - Image settings and DPI = 25.4 / interval:
   https://docs.lightburnsoftware.com/2.1/Reference/CutSettingsEditor/ImageMode/
 - All read 2026-10-21. Own design: palette color values, settings stored for

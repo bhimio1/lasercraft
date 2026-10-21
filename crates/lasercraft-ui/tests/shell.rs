@@ -63,6 +63,8 @@ impl Harness {
             if let Action::Run(invocation) = action {
                 self.session.run(&invocation).unwrap();
                 self.log.push(invocation.to_string());
+            } else {
+                self.log.push(format!("{action:?}"));
             }
         }
     }
@@ -240,4 +242,61 @@ fn layers_panel_lists_used_layers() {
         }
     }
     assert!(found, "layer name not drawn");
+}
+
+#[test]
+fn alt_p_opens_the_preview_and_draws_what_it_is_given() {
+    use lasercraft_ui::{Preview, PreviewKind, PreviewMove};
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    assert!(!h.shell.preview_open());
+    h.key(Key::P, Modifiers::ALT);
+    assert_eq!(h.log, ["Preview"]);
+    assert!(h.shell.preview_open());
+    h.shell.set_preview(Preview {
+        moves: vec![PreviewMove {
+            from: Point::new(10.0, 10.0),
+            to: Point::new(30.0, 10.0),
+            kind: PreviewKind::Burn(0),
+            start: 0.0,
+            end: 2.0,
+        }],
+        total_time: 2.0,
+        lines: vec!["Estimated time 2.0 s".to_owned()],
+        error: Some("shape 1 goes past the right edge".to_owned()),
+        warnings: vec!["layer 0: a warning".to_owned()],
+    });
+    let input = RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+        ..RawInput::default()
+    };
+    let mut output = h.ctx.run_ui(input, |ui| {
+        let view = ShellView {
+            project: h.session.project(),
+            file: None,
+            modified: false,
+            undo: None,
+            can_redo: false,
+        };
+        let _ = h.shell.show(ui, &view);
+    });
+    output.textures_delta.clear();
+    let texts: Vec<String> = output
+        .shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Text(t) => Some(t.galley.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    for wanted in [
+        "Job preview",
+        "Estimated time 2.0 s",
+        "Cannot run: shape 1 goes past the right edge",
+        "Warning: layer 0: a warning",
+    ] {
+        assert!(
+            texts.iter().any(|t| t == wanted),
+            "{wanted} not in {texts:?}"
+        );
+    }
 }

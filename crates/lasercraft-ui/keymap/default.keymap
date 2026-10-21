@@ -46,6 +46,9 @@ Ctrl+Equals  = view.zoom_in
 Ctrl+Minus   = view.zoom_out
 Ctrl+0       = view.zoom_fit
 
+# Laser (M4)
+Alt+P        = ui.preview
+
 # Nudge: 1 mm, Shift 10 mm, Ctrl 0.1 mm (y grows downwards)
 Left         = shape.move -1 0
 Right        = shape.move 1 0

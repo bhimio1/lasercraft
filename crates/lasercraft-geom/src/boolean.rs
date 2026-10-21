@@ -91,7 +91,12 @@ pub fn offset(contours: &[Vec<Point>], distance: f64, join: Join) -> Contours {
     }
     let join = match join {
         Join::Miter => LineJoin::Miter(0.01),
-        Join::Round(tolerance) => LineJoin::Round(tolerance.max(1e-6)),
+        // i_overlay takes the arc step as an angle (segment length / radius);
+        // a chord of angle θ strays r·(1 − cos θ/2) from the arc.
+        Join::Round(tolerance) => {
+            let ratio = (tolerance.max(1e-6) / distance.abs()).min(1.0);
+            LineJoin::Round(2.0 * (1.0 - ratio).acos())
+        }
         Join::Bevel => LineJoin::Bevel,
     };
     let style = OutlineStyle::new(distance).line_join(join);

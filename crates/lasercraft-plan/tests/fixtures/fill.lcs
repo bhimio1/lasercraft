@@ -1,0 +1,24 @@
+# Fill: a ring (even-odd) scanned both ways with overscan, then a square
+# scanned one way with crosshatch at 45°, and an open line that is skipped.
+#   lasercraft-cli script fill.lcs   (from this directory)
+project.rename Fill
+project.set_work_area 100 100
+shape.add_rect 10 10 20 20 @3                       # 1: ring outside
+shape.add_rect 15 15 10 10 @3                       # 2: ring hole
+shape.add_line 10 40 30 40 @3                       # 3: open, skipped
+shape.add_rect 50 50 10 10 @4                       # 4: square
+layer.set 3 name Ring
+layer.set 3 mode fill
+layer.set 3 speed 50
+layer.set 3 max_power 30
+layer.set 3 interval 2.5
+layer.set 3 overscan on
+layer.set 4 name Hatch
+layer.set 4 mode fill
+layer.set 4 speed 40
+layer.set 4 max_power 25
+layer.set 4 interval 4
+layer.set 4 angle 45
+layer.set 4 bidirectional off
+layer.set 4 crosshatch on
+project.save fill.lcproj

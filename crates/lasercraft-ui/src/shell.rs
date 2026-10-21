@@ -10,6 +10,7 @@ use crate::canvas::Canvas;
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
 use crate::layers_panel::{LayersPanel, palette_strip};
+use crate::preview::{Preview, PreviewWindow};
 
 /// Tools in the tool palette: label, `ui.tool` argument.
 const TOOLS: [(&str, &str, Tool); 4] = [
@@ -73,6 +74,9 @@ pub enum Action {
     SaveAs(PathBuf),
     /// Close the window.
     Quit,
+    /// Plan the job and hand it to [`Shell::set_preview`]; the preview
+    /// window is open and wants it.
+    Preview,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +96,8 @@ pub struct Shell {
     panels: bool,
     /// The notes window: open, with its text once loaded from the project.
     notes: Option<Option<String>>,
+    /// The job preview window, while open.
+    preview: Option<PreviewWindow>,
 }
 
 impl Shell {
@@ -107,6 +113,21 @@ impl Shell {
             layers: LayersPanel::default(),
             panels: true,
             notes: None,
+            preview: None,
+        }
+    }
+
+    /// Whether the job preview window is open (the app then keeps its
+    /// contents up to date with [`Shell::set_preview`]).
+    #[must_use]
+    pub fn preview_open(&self) -> bool {
+        self.preview.is_some()
+    }
+
+    /// Shows a planned job in the preview window, if it is open.
+    pub fn set_preview(&mut self, preview: Preview) {
+        if let Some(window) = &mut self.preview {
+            window.set(preview);
         }
     }
 
@@ -177,6 +198,11 @@ impl Shell {
             });
         self.path_prompt(ui, &mut actions);
         self.notes_window(ui, view.project, &mut actions);
+        if let Some(window) = &mut self.preview
+            && !window.show(ui.ctx(), view.project)
+        {
+            self.preview = None;
+        }
         actions
     }
 
@@ -278,6 +304,10 @@ impl Shell {
                 self.panels = !self.panels;
                 return None;
             }
+            "ui.preview" => {
+                self.preview.get_or_insert_with(PreviewWindow::new);
+                Action::Preview
+            }
             "view.zoom_in" | "view.zoom_out" | "view.zoom_fit" => {
                 self.canvas.zoom(&invocation.name);
                 return None;
@@ -356,6 +386,7 @@ impl Shell {
                 self.menu_line(ui, "Fit Bed", "view.zoom_fit", true, actions);
                 ui.separator();
                 self.menu_line(ui, "Side Panels", "ui.toggle_panels", true, actions);
+                self.menu_line(ui, "Job Preview…", "ui.preview", true, actions);
             });
         });
     }

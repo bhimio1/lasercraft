@@ -11,6 +11,8 @@ use lasercraft_project::Project;
 use lasercraft_ui::keymap::Keymap;
 use lasercraft_ui::{Action, Shell, ShellView};
 
+mod preview;
+
 struct Options {
     file: Option<PathBuf>,
     keymap: Option<PathBuf>,
@@ -55,6 +57,8 @@ struct App {
     pending: Option<Action>,
     /// The user confirmed closing with unsaved changes.
     closing: bool,
+    /// Session revision the open preview was planned from.
+    previewed: Option<u64>,
 }
 
 impl App {
@@ -66,6 +70,7 @@ impl App {
             clean: Project::default(),
             pending: None,
             closing: false,
+            previewed: None,
         };
         if let Some(path) = file {
             app.open(path);
@@ -112,7 +117,7 @@ impl App {
         let discards = match &action {
             Action::New | Action::Open(_) | Action::Quit => true,
             Action::Run(inv) => inv.name == "project.new" || inv.name == "project.load",
-            Action::Save | Action::SaveAs(_) => false,
+            Action::Save | Action::SaveAs(_) | Action::Preview => false,
         };
         if discards && self.modified() && self.pending.is_none() {
             self.pending = Some(action);
@@ -150,6 +155,22 @@ impl App {
                 self.closing = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            Action::Preview => self.refresh_preview(true),
+        }
+    }
+
+    /// Plans the job for the open preview window when it is new or the
+    /// project changed since (`docs/spec/preview.md`).
+    fn refresh_preview(&mut self, force: bool) {
+        if !self.shell.preview_open() {
+            self.previewed = None;
+            return;
+        }
+        let revision = self.session.revision();
+        if force || self.previewed != Some(revision) {
+            let preview = preview::build(self.session.project());
+            self.shell.set_preview(preview);
+            self.previewed = Some(revision);
         }
     }
 
@@ -213,6 +234,7 @@ impl eframe::App for App {
         for action in actions {
             self.apply(action, &ctx);
         }
+        self.refresh_preview(false);
         self.confirm_discard(&ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.title()));
     }
