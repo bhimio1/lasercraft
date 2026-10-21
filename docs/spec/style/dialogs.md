@@ -81,10 +81,10 @@ unknown).
 
 | Kind | Members | What stays usable while it is open | How it closes |
 |---|---|---|---|
-| Tool window | Offset, Grid array, Circular array, Path array, Combine shapes, Fit slots to thickness, Barcode, Add text, Select circles, History | Pan and zoom on the canvas, every view action (zoom chords, F12, panel tabs, View menu), the job bar and every Machine panel control that does not change the project. Everything that would change the project or the selection (canvas editing, menu and toolbar commands, Layers panel edits, editing chords) is disabled; such menu rows and buttons show the second tooltip line "Close the ‹title› window first." | primary button, Cancel, the title strip's close button (same as Cancel), Esc |
+| Tool window | Offset, Grid array, Circular array, Path array, Combine shapes, Close nearly closed paths, Simplify, Fit slots to thickness, Barcode, Add text, Select circles, History | Pan and zoom on the canvas, every view action (zoom chords, F12, panel tabs, View menu), the job bar and every Machine panel control that does not change the project. Everything that would change the project or the selection (canvas editing, menu and toolbar commands, Layers panel edits, editing chords) is disabled; such menu rows and buttons show the second tooltip line "Close the ‹title› window first." | primary button, Cancel, the title strip's close button (same as Cancel), Esc |
 | Settings window | Preferences, Keyboard shortcuts, Cut order, Project notes, Restore preferences, Font browser, Edit list | Everything. The window only edits its draft; nothing changes until its primary button | primary button, Cancel, close button (= Cancel), Esc |
 | Info window | Measurements, Quick reference (and Job preview, `job-preview.md`) | Everything | "Close", close button, Esc |
-| Message | Unsaved changes, No selection, Nesting failed, Replace file?, Switch device profile?, Before you start, Low-power frame, and `machine-panels.md`'s confirmations | Nothing except the job bar and the Pause and Stop chords. A backdrop dims the rest of the main window | one of its buttons; close button and Esc = its Cancel; in a message with no Cancel, they press its safe button (the one with focus that runs or changes nothing: "Keep the switch on" in No selection, "Keep ‹current name›" in Switch device profile?, OK when it has only OK) |
+| Message | Unsaved changes, No selection, Nesting failed, Replace file?, Switch device profile?, Before you start, Low-power frame, and `machine-panels.md`'s confirmations | Nothing except the job bar and the Pause and Stop chords. A backdrop dims the rest of the main window | one of its buttons; close button and Esc = its Cancel; in a message with no Cancel, they press its safe button (the one with focus that runs or changes nothing: OK in No selection, "Keep ‹current name›" in Switch device profile?, OK when it has only OK) |
 | Wizard | Device scan and New device profile (`machine-panels.md`), the camera, registration and centre-finding wizards (`later-windows.md`) | As a tool window, plus the machine controls a page asks for | Finish, Cancel, close button (= Cancel), Esc |
 | File prompt | Open project, Save project as, Import vector art, Save G-code | As a settings window | OK, Cancel, close button (= Cancel), Esc |
 
@@ -125,7 +125,8 @@ Tier: **Own** (the six kinds and their rules; the reference's are unknown).
 - Every dialog is drawn by egui inside the main window (decision 12: one
   look on every platform), so its title strip is LaserCraft's own chrome,
   not the operating system's.
-- Title strip: `panel-title` background, one `row` tall, the title in
+- Title strip: `panel-title` background, a little shorter than `row`
+  (as `layout.md` and `visual-language.md` draw every title strip), the title in
   `type-body` `text` at the left, the close button (a small cross,
   `icon-small`, `text-muted`; `hover` background under the pointer) at the
   right. No icon before the title and no app name or version in it (the
@@ -241,8 +242,8 @@ Section headings and groups:
 
 - A heading in `type-heading` `text` stands above each named group,
   left-aligned with the content edge, `gap` above its first row. This is the
-  only place `type-heading` is used (`_tokens`: dialog section headings
-  only); wizard page headings use it too, as section headings of a page.
+  only place `type-heading` is used (`visual-language.md`: dialog section
+  headings only); wizard page headings use it too, as section headings of a page.
 - Groups have no boxes or frames (own; differs from the reference's
   recessed boxes): headings and `gap-wide` spacing separate them. Where two
   stacked parts of a window have no heading (a form, then a summary), a thin
@@ -506,8 +507,8 @@ The error band:
 
 - Sits across the content width just above the button rule, `gap` from the
   form. `danger-soft` background, a small `danger` mark (`icon-small`,
-  `icons.md` "error") at its left, text in `type-body` `text`.
-- Warnings use the same band in `warning-soft` with the `warning` mark and
+  `mark-error` in `icons.md`) at its left, text in `type-body` `text`.
+- Warnings use the same band in `warning-soft` with the `warning` mark (`mark-warning`) and
   the lead-in "Warning: " (tests look for it, `naming.md`). Warnings never
   disable the primary button.
 - Shows at most three messages, then "and ‹n› more".
@@ -591,10 +592,10 @@ decision 17):
 
 | Kind | Icon concept | Icon token | Used by |
 |---|---|---|---|
-| Error | a filled circle holding an exclamation mark | `danger` | Nesting failed (nothing fits, no arrangement), Registration failed (`later-windows.md`) |
-| Warning | a triangle holding an exclamation mark | `warning` | Unsaved changes, No selection, Nesting failed (some parts do not fit), Replace file? |
+| Error | `message-error`: a circle outline holding an exclamation mark | `danger` | Nesting failed (nothing fits, no arrangement), Registration failed (`later-windows.md`) |
+| Warning | `message-warning`: a triangle outline holding an exclamation mark | `warning` | Unsaved changes, No selection, Nesting failed (some parts do not fit), Replace file? |
 | Question | a circle holding a question mark | `accent` | Switch device profile? (M8) |
-| Info | a circle holding a small letter i | `accent` | notices that must be acknowledged (rare; most notices go to the Messages field instead) |
+| Info | `message-info`: a circle outline holding the information mark (a dot over a short stem; no letters inside icons) | `accent` | notices that must be acknowledged (rare; most notices go to the Messages field instead) |
 | Task | none | — | Before you start, Low-power frame (their content carries its own marks) |
 
 - Backdrop: while a message is shown, the rest of the main window is
@@ -1075,6 +1076,88 @@ preview), **Own** (labels, anchor rule).
 Tier: **Echo** (row of large picture buttons with hover preview, reset,
 OK and Cancel), **Own** (captions, instructions, states).
 
+### Close nearly closed paths (later)
+
+#### Reference
+
+- The reference's Edit menu has an item, greyed while no open path is
+  selected, that opens a dialog for closing open paths whose two ends lie
+  within a distance the user chooses [R34].
+- The dialog's look, fields, defaults and buttons are not described in the
+  notes (unknown).
+
+#### LaserCraft
+
+- Title "Close nearly closed paths" (the menu row without its ellipsis,
+  `naming.md` title rule). Kind: tool window, not resizable, small. Opened
+  by Edit → Close nearly closed paths… (`menus.md`), enabled when a selected
+  path is open. No chord (`menus.md`: none). Later.
+- Contents, top to bottom:
+
+| # | Part | Contents |
+|---|---|---|
+| 1 | Tolerance (mm) | number field, focused on open with its text selected; range 0.01–100; default the value last used in this run, else today's DXF join tolerance (`import.md`), so imported and edited paths close alike; hint "Ends closer than this are joined" |
+| 2 | Summary | one line in `type-small` `text-muted`, updated as the value changes: "‹n› of ‹m› open paths will close." or, when none qualify, "No open path has its ends within ‹t› mm." |
+
+- Preview (as Live previews on the canvas): every path that will close is
+  drawn with its closing segment in `drawing`; open paths that will stay
+  open keep their normal look, so the difference is the new segments only.
+- Buttons: right group "OK", "Cancel". OK is disabled while the summary
+  says no path will close, with the second tooltip line "No open path is
+  close enough to close." Enter presses OK; Esc cancels.
+- OK runs one undoable command (new, later: `path.close_within ‹tolerance›`
+  over the selected ids; proposed change to arrange.md). Each qualifying
+  path gets one straight segment from its last node to its first; nothing
+  else moves. Closed paths and paths whose ends are farther apart are left
+  as they are and are not reported as errors.
+- Errors keep the window open in the error band: "Tolerance must be
+  between 0.01 and 100 mm."
+
+Tier: **Echo** (a distance dialog from the Edit menu that closes nearly
+closed paths), **Own** (field, range, default, summary, preview, labels).
+
+### Simplify (later)
+
+#### Reference
+
+- The reference's Edit menu has an item, shown with Alt+Shift+O, that
+  opens a dialog which smooths the selected shapes or refits them to arcs
+  and lines within a tolerance [R34].
+- The dialog's look, fields, defaults and buttons are not described in the
+  notes (unknown).
+
+#### LaserCraft
+
+- Title "Simplify". Kind: tool window, not resizable, small. Opened by Edit
+  → Simplify… (`menus.md`), enabled when something is selected; Alt+Shift+O
+  once keymap.md binds it (later; keymap.md calls the action "optimize",
+  proposed change in `naming.md`). Later.
+- Contents, top to bottom:
+
+| # | Part | Contents |
+|---|---|---|
+| 1 | Tolerance (mm) | number field, focused on open with its text selected; range 0.001–10; default the value last used in this run, else 0.05; hint "How far the result may stray from the original" |
+| 2 | Fit arcs | switch, off; on: runs of nodes that lie on a circle within the tolerance become arc segments. Shown only once `geometry.md` keeps arcs as segments (today arcs become curves on import); until then the row is absent, not greyed (Open questions) |
+| 3 | Summary | two read-outs side by side in `type-small` `text-muted`, updated with the preview: "Nodes before: ‹n›" and "Nodes after: ‹n›" |
+
+- Preview: the simplified result in `drawing` over the originals, which
+  are drawn dashed as in Offset's preview (Echo of the reference's offset
+  preview, [R3]), so the change in shape is visible at a glance. When the
+  result has as many nodes as the original, the summary adds "Nothing to
+  simplify at this tolerance." and OK is disabled with that text as its
+  second tooltip line.
+- Buttons: right group "OK", "Cancel". Enter presses OK; Esc cancels.
+- OK runs one undoable command (new, later: `path.simplify ‹tolerance›
+  ‹arcs›` over the selected ids; proposed change to geometry.md and
+  arrange.md). Text, images and barcodes in the selection are skipped and
+  listed in the Messages field ("Skipped 2 objects that are not paths.").
+- Errors keep the window open in the error band: "Tolerance must be
+  between 0.001 and 10 mm."
+
+Tier: **Echo** (a tolerance dialog from the Edit menu that reduces nodes,
+with an optional fit to arcs), **Own** (fields, ranges, defaults, node
+read-outs, preview, labels).
+
 ### Measurements
 
 #### Reference
@@ -1315,9 +1398,11 @@ button, option switches with sweep choices, defaults buttons at the left),
   `type-body`. Selected tab: `field` background joined to the page below
   and an `accent` marker line along its top edge (decision 3); others
   `panel` with `text`. Tabs, in order: "General", "Grid and snapping",
-  "Display", "Import and export", "Camera" (M9; absent before). Icon
-  concepts (`icons.md`): slider knobs, a grid with a dot on a crossing, an
-  eye, a page with arrows in and out, a camera.
+  "Display", "Import and export", "Camera" (M9; absent before). Tab
+  icons (`icons.md`): `prefs-general` (an outlined switch), `prefs-grid`
+  (a grid with a dot on its centre crossing), `prefs-display` (a split
+  window), `prefs-import-export` (a sheet with an arrow in and an arrow
+  out), `camera`.
 - Buttons: right group "Apply", "OK", "Cancel". Apply and OK run the front-
   end action `ui.set_preferences ‹settings›` (new; preferences are not
   project data and not undoable); Cancel discards changes not yet applied.
@@ -1339,19 +1424,20 @@ General tab:
 | Text | Single-line font folder (SHX)… | Normal button, then the chosen folder path in `type-small` `text-muted`, then a small "Clear folder" button | none | later, with single-line fonts |
 | Text | Right-to-left text | switch | off | later; text.md has no right-to-left shaping today |
 | Text | Double-click edits text | switch | off | later; proposed change to text.md (editable text) |
+| Layers | New projects use saved layer defaults | switch | off | M8, with the per-device layer defaults (`layers-panel.md`, Buttons): on, File → New project and the first start load every color's saved default for the current device profile; off, they keep the layer settings last used, as today. Echo [R14] |
 | Layout | Simple layout | switch | off | later, optional (decision 11) |
 
 Grid and snapping tab:
 
 | Group (heading) | Label | Control | Default | Notes |
 |---|---|---|---|---|
-| Grid | Grid spacing (mm) | number field | 10.00 (`canvas.md`) | major lines every fifth line, as today |
+| Grid | Grid spacing (mm) | number field; hint "0 means automatic" | 0 (automatic) | 0 keeps `canvas.md`'s adaptive levels (minor step from the 1, 2, 5 sequence, major always ten minor steps); a value above 0 fixes the minor step at that spacing and major lines still fall every ten minor steps, so the rule of `canvas.md` holds either way; needs the proposed change to canvas.md |
 | Grid | Grid strength | dropdown: Off, Faint, Medium, Strong | Faint | how dark the grid lines are drawn (`grid-minor`, `grid-major`) |
 | Snapping | Snap to grid | switch | on | |
 | Snapping | Snap to shapes | switch | on | Ctrl while dragging still turns snapping off (keymap.md) |
 | Snapping | Snap spacing (mm) | number field | 10.00 (today's grid snap, `canvas.md`) | independent of Grid spacing |
-| Snapping | Snap distance (screen points) | whole-number field | today's snap radius (`canvas.md`) | screen distance in egui logical points, which scale with the display; independent of zoom |
-| Snapping | Click tolerance (screen points) | whole-number field | today's click tolerance (`canvas.md`) | screen distance in egui logical points, which scale with the display; independent of zoom |
+| Snapping | Snap distance (px) | whole-number field | today's snap radius (`canvas.md`) | a screen distance, independent of zoom; the code measures it in egui logical points, which scale with the display (the label says px as `canvas.md` and `naming.md` do) |
+| Snapping | Click tolerance (px) | whole-number field | today's click tolerance (`canvas.md`) | as Snap distance (px) |
 | Nudge distances | Small (mm) | number field | 0.10 (keymap.md, Ctrl+arrows) | |
 | Nudge distances | Normal (mm) | number field | 1.00 (arrows) | |
 | Nudge distances | Large (mm) | number field | 10.00 (Shift+arrows) | the three fields sit on one row, Echo [R14] |
@@ -1392,7 +1478,22 @@ the system-clipboard switch, opening files in a running copy, the error
 sound for failed sends, ignoring shapes outside the bed, the file-dialog
 choice, antialiasing, high-resolution scaling switches, curve quality, the
 dark canvas, rotary and cylinder switches, the plotter-file and print
-settings. Open questions: inverted wheel zoom, returning to Select after
+settings. The reference's other import and export switches [R14] are
+not offered either, each for its own reason:
+
+- Importing hidden layers from one vendor's drawing format: LaserCraft
+  imports SVG and DXF only (`import.md`); there is no such format to read.
+- Importing onto the reference's tool layers: guide layers are an owner
+  decision (`naming.md`, `layers-panel.md` guide swatches); if adopted, the
+  switch is decided with them.
+- Ignoring DXF text: `import.md` decides what DXF entities are read; a
+  switch is a proposed change there if text import is ever added.
+- DXF export as arcs or as lines: LaserCraft has no DXF export
+  (`import.md` is import only); decided with any future export spec.
+- HPGL and plotter-file precision and print line width: no plotter import
+  and no printing.
+
+Open questions: inverted wheel zoom, returning to Select after
 drawing, a full-window cursor crosshair, a bed-centre cross, and the
 reference's import switches (group, select and centre imported shapes).
 
@@ -1525,7 +1626,8 @@ device list), **Own** (labels, safety backup before restoring).
   General Public License, version 3 or later, and comes with no warranty.";
   the main libraries used (from ARCHITECTURE.md) in `type-small`; buttons
   "License…", "Copy system info", "Report a problem" (`menus.md` actions).
-  No logo until `icons.md` defines one.
+  Above the name, the app icon of `icons.md` (App icon) at `icon-big`,
+  once the owner approves it (M10); until then nothing stands there.
 - Buttons: "Close".
 
 Tier: **Match** (one window with shortcut, tips and about tabs), **Own**
@@ -1572,8 +1674,9 @@ modifier-click, no setting that makes every frame fire, and no chord.
   with dynamic power (`M4`), so a Pause turns the beam off (safety.md rule
   9). The power is clamped (rule 6).
 - While it runs: the job bar's state reads "Framing" followed by "laser on
-  ‹p›%" in `warning`; the head marker uses `danger` (`_tokens`:
-  `head-marker`); the path is drawn in `frame-preview` (`canvas.md`); Stop
+  ‹p›%" in `text` with a `mark-warning` before it (no `warning` text,
+  `visual-language.md`); the head marker uses `danger` (`head-marker` in
+  `visual-language.md`); the path is drawn in `frame-preview` (`canvas.md`); Stop
   and Pause work as always.
 - The typed power is not remembered after the window closes.
 - New command `machine.frame_lit ‹box|outline› ‹power›` (proposed change to
@@ -1629,10 +1732,13 @@ enabling rule, labels).
   "Selected shapes only" is on and nothing is selected (`machine-panels.md`).
 - Text: "Selected shapes only is on, but nothing is selected." then "Select
   the shapes to use, or use all shapes."
-- Buttons: "Keep the switch on" (primary, focus: keeps the switch on, runs
-  nothing; also what Esc and the close button do), "Use all shapes"
-  (Normal: turns the switch off, runs nothing; the user starts again). No
-  "OK": confirmations name their result (`naming.md`, Confirmations).
+- Buttons: "OK" (primary, focus: keeps the switch on, runs nothing; also
+  what Esc and the close button do), "Use all shapes" (Normal: turns the
+  switch off, runs nothing; the user starts again). The labels are
+  `naming.md`'s and `machine-panels.md`'s; "OK" is allowed here because
+  the message is a notice, not a confirmation: neither button loses work
+  or runs anything (`naming.md` question 19 asks whether the owner prefers
+  a verb).
 
 Tier: **Match** (two choices, nothing runs), **Own** (labels, text).
 
@@ -1983,6 +2089,16 @@ From `current-ui.md` (commit 151eb26); paths relative to the repo root.
   `shape.add_barcode` and `shape.set_barcode`.
 - **Proposed change to canvas.md**: an invalid barcode's preview is a cross
   through its box in `danger`.
+- **Proposed change to arrange.md** and **proposed change to geometry.md**
+  (later): `path.close_within ‹tolerance›` and `path.simplify ‹tolerance›
+  ‹arcs›` for the Close nearly closed paths and Simplify windows, each one
+  undoable step; geometry.md decides whether arc segments are kept.
+- **Proposed change to docs/spec/canvas.md**: the Grid spacing (mm)
+  preference, 0 meaning the adaptive levels of `canvas.md` (style), a value
+  above 0 fixing the minor step with major lines every ten.
+- **Proposed change to layers.md** (M8): the General preference "New
+  projects use saved layer defaults", with today's last-used behaviour as
+  the default.
 - **Proposed change to text.md**: the Font browser, and font samples
   drawn from outlines supplied by the app; Add text's OK disabled before
   the command would fail with "nothing to draw".
@@ -2004,11 +2120,9 @@ From `current-ui.md` (commit 151eb26); paths relative to the repo root.
   "Length (mm)", "From (mm)", "To (mm)", "Change (mm)", "Angle (°)",
   "Circle radius (mm)", "Circle centre (mm)", "Copy values"; each is a
   generic geometric term checked against `docs/clean-room.md`, and naming.md
-  should record them as such); No selection's "Keep the switch on"
-  (replacing its "OK"); the screen-distance unit "(screen points)" for Snap
-  distance and Click tolerance; "Up to (mm)" hint; Cut order's "Rules",
+  should record them as such); "Up to (mm)" hint; Cut order's "Rules",
   "Options", the three rule rows; the Preferences group headings
-  ("Saving", "Starting jobs", "Text", "Layout", "Grid", "Snapping", "Nudge
+  ("Saving", "Starting jobs", "Text", "Layers", "Layout", "Grid", "Snapping", "Nudge
   distances", "Interface", "Canvas", "DXF", "SVG", "Output") and the size
   values ("Smaller", "Normal", "Larger", "Largest"); Keyboard shortcuts'
   "All commands", "Canvas keys", "Machine keys", "Command", "Shortcut";
@@ -2019,7 +2133,11 @@ From `current-ui.md` (commit 151eb26); paths relative to the repo root.
   browser's "Search fonts", "Preview size", "All fonts", "Favorites",
   "Recently used", "Single-line", "Use font"; Low-power frame's "Trace",
   "Bounding box", "Outline", "Frame power (%)", "Frame at ‹p›%";
-  "Start job"; "Place the parts that fit"; "Edit list" as a title; the
+  "Start job"; "Place the parts that fit"; "New projects use saved layer
+  defaults"; Grid spacing (mm)'s hint "0 means automatic"; Close nearly
+  closed paths' "Tolerance (mm)" (`naming.md` already uses that word for
+  it) and its summary wording, Simplify's "Tolerance (mm)", "Fit arcs",
+  "Nodes before", "Nodes after"; "Edit list" as a title; the
   History row "Start".
 
 ## Open questions
@@ -2068,9 +2186,14 @@ From `current-ui.md` (commit 151eb26); paths relative to the repo root.
 18. Barcode: which library and which symbologies; the Wi-Fi security
     choices; the reference's extra spacing option for retail codes.
 19. Font browser: offer hiding fonts from the font lists?
-20. Native file dialogs: which crate, and keep the typed prompt in the
+20. Simplify: offer "Fit arcs" at all (it needs arc segments in
+    `geometry.md` and arc output in the G-code writer), and is 0.05 mm a
+    good default tolerance?
+21. Close nearly closed paths: is today's DXF join tolerance the right
+    default, or should it have its own?
+22. Native file dialogs: which crate, and keep the typed prompt in the
     menus as an alternative?
-21. "Replace file?": ask before overwriting with the typed prompt now, or
+23. "Replace file?": ask before overwriting with the typed prompt now, or
     only once native dialogs (which ask themselves) arrive?
 
 ## Sources
@@ -2114,6 +2237,7 @@ only; no wording is taken from them.
 31. [R31] https://docs.lightburnsoftware.com/2.1/Reference/Preview/ — the preview as a separate resizable window with a grip
 32. [R32] https://docs.lightburnsoftware.com/2.1/Reference/Devices/ — device list: OK keeps every change, Cancel drops everything including new devices
 33. [R33] https://docs.lightburnsoftware.com/2.1/Reference/UI/Tooltips/ — F1 over a control opens its online page
+34. [R34] https://docs.lightburnsoftware.com/2.1/Reference/UI/EditMenu/ — the Edit menu items that open a dialog to close open paths within a chosen distance (greyed with no open path) and one to smooth or refit shapes to arcs and lines within a tolerance, with Alt+Shift+O
 
 Existing specs and documents used: `docs/spec/ui-shell.md` (windows build
 one command on OK, closing runs nothing; typed-path windows; Unsaved
@@ -2155,4 +2279,6 @@ Keyboard shortcuts categories, conflict and fixed-chord rules; the restore
 safety backup; the Quick reference contents; the whole Low-power frame
 window; Before you start's switches and list editor; the Nesting failed
 cases; the Fit slots summary; the Barcode layout and dropdown; the Font
-browser sample and layout; and the egui notes and tests.
+browser sample and layout; the Close nearly closed paths and Simplify
+windows (fields, ranges, defaults, summaries, previews); the layer-defaults
+preference and the reasons for the omitted import and export switches; and the egui notes and tests.

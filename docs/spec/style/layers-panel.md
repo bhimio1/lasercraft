@@ -1109,6 +1109,11 @@ session that builds the change.
   settings (each a later change, as naming.md already notes).
 - **Proposed change to layers.md** (Commands): a command behind Put line
   layers last (already proposed in `menus.md`).
+- **Proposed change to naming.md** (layer setting labels): add "Turn angle
+  each pass (°)" (fill and image scanning; rotates the scan direction by
+  this many degrees on every pass, 0 keeps it fixed; Echo, Later) and "Ramp
+  outer edges too" (switch after Ramp length (mm), disabled while the ramp
+  is 0; Own wording, Later), each with its doc term in the mapping column.
 - No change to keymap.md: this file binds no new chords and shows none
   that `crates/lasercraft-ui/keymap/default.keymap` does not bind.
 

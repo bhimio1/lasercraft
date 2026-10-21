@@ -1,5 +1,9 @@
 # Spec: main window shell
 
+Look and feel, names and the target layout are in `docs/spec/style/`
+(start with its README). Where it proposes changes to this spec, they are
+labelled there and land here before code.
+
 Milestones: M0 (shell), M1 (canvas, tools, editing menus), M2 (layers panel,
 palette, notes).
 

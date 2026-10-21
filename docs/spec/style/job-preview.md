@@ -351,8 +351,9 @@ Milestone: Now (restyle), M7 (images, grey levels).
 ### LaserCraft
 
 - A filled dot in `preview-head` (an `accent` dot) about the size of a
-  canvas scale handle, with a thin `field` ring around it so it stays
-  visible over dark layer colors and over the inverted sheet (Own).
+  canvas scale handle, with a thin `handle-fill` halo around it so it
+  stays visible over dark layer colors and over the inverted sheet (Own;
+  `visual-language.md` defines `preview-head` this way).
 - A dot, not a crosshair: the canvas's `head-marker` crosshair means the
   *real* head and is never drawn in the preview, and the simulated head is
   never drawn on the canvas (`canvas.md`, "The job preview and the
@@ -383,7 +384,7 @@ Milestone: Now.
 
 - When the bounds check fails (`Plan::check_bounds`), the furthest-out
   point it names is marked with a `danger` ring, *heavy*, about twice the
-  head dot's size, with a thin `field` ring outside it for contrast.
+  head dot's size, with a thin `handle-fill` halo outside it for contrast.
 - The part of the bed edge that the job crosses is drawn *heavy* in
   `danger` along the offending side, so the problem is visible even when
   the ring is off screen.
@@ -421,9 +422,10 @@ Milestone: Now (with the restyle; needs the data change).
 
 - Look: label `type-body` `text`, right-aligned to the slider like every
   label in LaserCraft (`visual-language.md` density). Slider groove a thin
-  `border` line; the part left of the handle filled `text-muted` (egui's
-  trailing fill, kept neutral because decision 3 does not list slider
-  fills among the uses of `accent`; open question 15 proposes adding it);
+  `border` line; the part left of the handle filled `accent` (egui's
+  trailing fill; "slider filled part" is an allowed `accent` use in
+  `visual-language.md`, and `later-windows.md` fills its sliders the
+  same way);
   handle a small round knob in `field` with a `border` ring, `accent`
   focus ring when focused (focus rings are an allowed `accent` use; Echo
   of [R1]). Value field `field`
@@ -602,7 +604,7 @@ bounds with overscan.
 | Line | Text (‹…› filled by the app) | Look |
 |---|---|---|
 | 1 | "Burn ‹d› mm (‹t›), unlit ‹d› mm (‹t›), travel ‹d› mm (‹t›)" | `type-body`, `text` |
-| 2 | "Estimated time ‹t› for ‹n› moves" | `type-body`, `text`; the time in bold weight of the same family |
+| 2 | "Estimated time ‹t› for ‹n› moves" | `type-body`, `text`, regular weight like the rest of the line (bold is kept for `type-heading`, `visual-language.md`) |
 | 3 | "Job bounds (‹x›, ‹y›) – (‹x›, ‹y›) mm, ‹w› × ‹h› mm with overscan" | `type-small`, `text-muted` |
 | 3 (empty job) | "Nothing to cut: no output layer has shapes." | `type-small`, `text-muted` (the same text is in the empty-state chip) |
 
@@ -695,9 +697,12 @@ Milestone: Now (check and warnings restyled), M6 (notes).
 | 3 | "Play" / "Stop playback" | "Animate the job at the playback speed" | a job exists | later |
 | 4 | "Close" | "Close the job preview" | always | Now (new; today only ×) |
 
-- Buttons are text-only push buttons of equal width (the widest label sets
-  it), `row` tall, `gap` apart, right-aligned (Match [R1]). None is styled
-  as the primary (`accent`) button and none is the default for Enter: the
+- Buttons are text-only push buttons, except Play, which shows the
+  `play-preview` icon (`icons.md`, `icon-small`) before its label; while
+  playing, the icon is dropped and the button reads "Stop playback". The
+  buttons are of equal width (the widest label plus icon sets it), `row`
+  tall, `gap` apart, right-aligned (Match [R1]). None is styled as the
+  primary (`accent`) button and none is the default for Enter: the
   preview has no "confirm" action, and Run from here must never be one key
   press away (Own).
 - Close is last, at the far right (Match the reference's closing button
@@ -722,7 +727,7 @@ Milestone: Now (check and warnings restyled), M6 (notes).
 - Edits to the project during playback re-plan and stop playback.
 - Playback asks egui to repaint every frame only while playing; when idle
   the window does not repaint continuously.
-- The Reduce motion preference (`canvas.md`) does not affect Play: the
+- The Reduce motion preference (`naming.md`, `dialogs.md`) does not affect Play: the
   user started it.
 
 ### Save image… (later)
@@ -858,7 +863,7 @@ Milestone: Now (wheel; the rest with the restyle), later (click to jump).
 | Grid, bed edge, origin marker | as on the canvas | as on the canvas in the dark theme (`canvas.md` "Dark theme"), including the light halo outside `bed-edge` |
 | Burn, unlit and travel moves on the bed | as defined | unchanged (they lie on the light sheet) |
 | Moves off the bed (on the dark surround) | as defined | the same tokens with a thin `bed`-colored halo, so dark layer colors and grey travel stay visible |
-| Simulated head, out-of-bounds marker | `preview-head`, `danger` with `field` rings | the same marks with `bed`-colored rings (as for off-bed halos), since the dark `field` would vanish on the dark surround |
+| Simulated head, out-of-bounds marker | `preview-head`, `danger`, each with a `handle-fill` halo | unchanged: `handle-fill` stays white in both themes, so the halo still separates the marks from the dark surround |
 | Legend, busy and empty chips | `field` chip, `border`, `text` | the dark `field`, `border`, `text`; the layer-color sample keeps its colors |
 | Invert colors | dark sheet, light burns | identical: Invert colors is a property of the picture, not of the theme |
 
@@ -932,7 +937,7 @@ From `current-ui.md` 1.3, 1.8 and the color table, and the code in
 | Unlit moves bright orange, thin dashed (`preview.rs:13`, `preview.rs:210-216`) | orange means "selected" on the canvas | `move-unlit`, *hairline*, *dotted* |
 | Travel moves strong red, thin dashed (`preview.rs:14`, `preview.rs:218-224`) | red means danger; travel is safe | `move-travel`, *hairline*, *dashed* |
 | Burn moves in layer color, a fixed thin weight (`preview.rs:207-209`) | weight not on the ladder | `move-burn`, *normal* |
-| Head: royal blue dot shown only after the slider moved (`preview.rs:15`, `preview.rs:229-233`) | invisible at first; no ring for contrast | `preview-head` dot with a `field` ring, always shown ("Simulated head") |
+| Head: royal blue dot shown only after the slider moved (`preview.rs:15`, `preview.rs:229-233`) | invisible at first; no ring for contrast | `preview-head` dot with a `handle-fill` halo, always shown ("Simulated head") |
 | "Cannot run: …" in deep red text (`preview.rs:16`, `preview.rs:139-142`) | color-only signal | `danger-soft` band with a `danger` mark; out-of-bounds point and edge marked on the drawing (needs the point in `Preview`) |
 | "Fits the work area." plain label (`preview.rs:143-145`) | — | `success` check mark plus the same text |
 | Warnings as weak text (`preview.rs:147-149`) | easy to miss | `warning-soft` bands, folding after three |
@@ -1028,10 +1033,9 @@ Labels the tests look for stay unchanged: "Job preview", "Cannot run:" and
 13. **Per-layer breakdown.** Add the per-layer table under the summary?
 14. **Time format.** `naming.md` asks for h:mm:ss in summaries; the CLI
     keeps "4 min 05 s". Align both, or keep them different?
-15. **Slider fill.** Decision 3 limits `accent` to a fixed list, so the
-    time slider's filled groove uses `text-muted`. Add "slider fill" to
-    decision 3 and `visual-language.md` as an `accent` use (closer to the
-    reference's saturated fill), or keep it neutral?
+15. **Slider fill.** Closed: `visual-language.md` lists "slider filled
+    part" among the uses of `accent`, so the time slider's filled groove is
+    `accent` ("Time row").
 
 ---
 
@@ -1088,8 +1092,8 @@ Own design: every label, tooltip and message; the in-app non-modal window,
 its size rules and the constraint below the toolbar band; the exact row
 contents and alignment; the three move styles (layer-colored solid burns,
 light grey dotted unlit moves, mid grey dashed travel, never red); the
-`accent` dot for the simulated head with its ring; the out-of-bounds
-marker; the check and notes bands; the read-out with the move number; the
+`accent` dot for the simulated head with its `handle-fill` halo; the
+`play-preview` icon on Play; the out-of-bounds marker; the check and notes bands; the read-out with the move number; the
 playback speed snapping; colored shading by power and the inverted
 rendering; the legend's chip and line samples; Stop playback; the Save
 image… rules; every safety rule of Run from here; the slider keys and the

@@ -111,9 +111,10 @@ differ, `dialogs.md` wins.
   always paired with a number field at the right that shows and accepts
   the exact value (Echo [R5][R9]; the reference's slider color follows the
   operating system, ours is always `accent`).
-- Selected list, tree or table row: `accent-soft`; when the list does not
-  have keyboard focus, `field-alt` (Echo [R1]: the reference uses a strong
-  blue band with white text; ours is the pale tint used everywhere).
+- Selected list, tree or table row: `accent-soft`, shown the same whether
+  or not the list has keyboard focus (`visual-language.md`, Tables and
+  lists; Echo [R1]: the reference uses a strong blue band with white text;
+  ours is the pale tint used everywhere).
 - Job buttons inside dialogs (Job preview…, Frame, Start, Pause, Stop,
   Save G-code…): the big tier, `row-big` tall, `icon-big` left of the
   label, the same icon and look as in the Machine panel
@@ -246,8 +247,8 @@ Contents, top to bottom:
   kind of layer it holds (own meaning; the reference's leaf glyph is
   unexplained [R1]). A second pictogram, a small chain, marks entries that
   a layer of the open project follows.
-- Selected entry `accent-soft`; while the entry form is open, `field-alt`
-  (Echo [R1]).
+- Selected entry `accent-soft`, also while the entry form is open
+  (Echo [R1]; `visual-language.md`, Tables and lists).
 - Sorted by material, then thickness, then description, each
   alphabetically and numerically (own design).
 - Double-click on an entry = Apply to layer (own design; not documented
@@ -317,7 +318,7 @@ Contents, top to bottom:
   naming.md). OK is enabled when Material and Description are not empty
   and either Thickness (mm) is above zero or Group name is not empty.
 - While the form is open the tree stays visible and browsable, but its
-  selection is shown `field-alt`; choosing another entry asks nothing and
+  selection keeps its `accent-soft` row; choosing another entry asks nothing and
   keeps the form (own design).
 
 **Bottom row**
@@ -1008,7 +1009,14 @@ hidden until a camera is set up, then shown (`layout.md`). Milestone: M9.
   settings stored with the camera), not the project (own design).
 - Picture age answers the canvas's stale-picture question (`canvas.md`):
   a picture taken before the last jog, frame or job reads "Picture taken
-  before the head last moved" in `warning` (own design).
+  before the head last moved" in `text`, led by an `icon-small` warning
+  mark in `warning` (`visual-language.md`: `warning` is never a text
+  color in the light theme; own design).
+- No overlay resolution control: the reference shows an overlay
+  resolution slider beside opacity in one variant [R9], but LaserCraft
+  derives the overlay's scale from the camera's lens correction and bed
+  alignment, so a second, hand-set resolution could only disagree with
+  them (own design; listed under Deliberately omitted).
 
 **Camera block** (one per camera of the active device profile)
 
@@ -1523,17 +1531,19 @@ without the wizard (`menus.md`). A small movable window, not modal. M9.
 
 | Page | Main content | Buttons |
 |---|---|---|
-| 1. Target 1 | `icon-big` pictogram (ring and cross with a small 1); caption "Select the first target on the canvas, move the head over its printed mark, then click Set target 1." (proposed) | "Set target 1" (default); "Clear registration"; footer Close |
-| 2. Target 2 | left column: pictogram with a 2, caption "Select the second target, move the head over its mark, then click Set target 2.", "Set target 2" (default); right column: jog pictogram, caption "Move the head to where target 2 should be.", "Go to expected target 2" (proposed) | "Clear registration"; footer Back, Close |
-| 3. Fit | two columns: "Fit job to targets" ("Moves, turns and scales the job to match both targets") and "Place job on targets (no scaling)" ("Moves and turns the job only"), each with its pictogram, caption and button | "Clear registration"; footer Back, Close |
+| 1. Target 1 | `icon-big` pictogram `set-target-1` (the registration sheet with its upper-left corner mark in `accent`; no digit); caption "Select the first target on the canvas, move the head over its printed mark, then click Set target 1." (proposed) | "Set target 1" (default); "Clear registration"; footer Close |
+| 2. Target 2 | left column: pictogram `set-target-2` (the same sheet with its lower-right corner mark in `accent`; no digit), caption "Select the second target, move the head over its mark, then click Set target 2.", "Set target 2" (default); right column: jog pictogram (`icons.md`), caption "Move the head to where target 2 should be.", "Go to expected target 2" (proposed) | "Clear registration"; footer Back, Close |
+| 3. Fit | two columns: "Fit job to targets" ("Moves, turns and scales the job to match both targets") and "Place job on targets (no scaling)" ("Moves and turns the job only"), each with its pictogram (`fit-to-targets`, `place-on-targets`), caption and button | "Clear registration"; footer Back, Close |
 
 - Choosing either fit button applies it and closes the window (Match
   [R16]); the result is an undoable command on the project's registration
   setting, not a change to the shapes.
 - Captions in `type-body`, centered under their pictogram, at most two
-  lines; pictograms are our own (`icons.md`: ring-and-cross target with a
-  number, a head with an arrow, a frame with scale arrows, a target with a
-  turn arrow).
+  lines; pictograms are our own and come from `icons.md`: `set-target-1`
+  and `set-target-2` carry no digits and tell the targets apart by which
+  corner mark carries the accent; `fit-to-targets` is a frame with two
+  diagonal scale arrows; `place-on-targets` is a corner-tick mark with a
+  short arrow sliding it into place.
 - **Preconditions shown in the window**: at the top, an `info-soft` line
   lists what is missing ("Connect the machine first.", "Home the machine
   first.", "Select exactly one shape or group as the target.") and the
@@ -1807,6 +1817,8 @@ Tier: **Own** (the set for these windows), **Match** (the idea, [R21]).
 - The focus test's minimum-power field and controller-file save of the DSP
   variant [R4].
 - Camera presets for known machines and vendor lens presets [R10].
+- The Camera panel's overlay resolution slider [R9]: the overlay's scale
+  follows the lens correction and bed alignment instead (Camera panel).
 - The camera-buying helper and its window [R9][R33].
 - The message about the reference's older camera file format (it concerns
   its own format; naming.md, Omitted) [R10].
