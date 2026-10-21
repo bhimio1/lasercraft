@@ -1,0 +1,14 @@
+# Kerf outward on the part, inward on its hole; two tabs on the part only.
+#   lasercraft-cli script kerf-tabs.lcs   (from this directory)
+project.rename Kerf and tabs
+project.set_work_area 100 100
+shape.add_rect 10 10 30 20 @2                       # 1: part
+shape.add_rect 20 15 10 10 @2                       # 2: hole
+shape.add_line 10 50 40 50 @2                       # 3: open line, kerf ignored
+layer.set 2 name Cut
+layer.set 2 speed 15
+layer.set 2 max_power 100
+layer.set 2 kerf 0.1
+layer.set 2 tabs 2
+layer.set 2 tab_width 1.5
+project.save kerf-tabs.lcproj

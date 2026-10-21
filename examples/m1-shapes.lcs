@@ -1,0 +1,17 @@
+# LaserCraft M1: shapes, selection and transforms, headless.
+#   lasercraft-cli script examples/m1-shapes.lcs
+project.rename Coaster set
+project.set_work_area 300 200
+shape.add_rect 10 10 80 80                 # 1: coaster outline
+shape.add_ellipse 50 50 30 30              # 2: inner ring
+shape.add_line 20 50 80 50                 # 3: center mark
+select.in_rect 0 0 100 100 contained       # all three
+edit.copy
+edit.paste 150 50                          # 4, 5, 6 centered at (150, 50)
+shape.rotate 45                            # rotate the pasted copy
+shape.flip horizontal 3                    # mirror the original line
+select.at 50 50 0.5                        # topmost hit: the line (3)
+shape.delete
+edit.undo                                  # line is back
+shape.to_back 3
+shape.scale_about 0.5 0.5 50 50 2          # shrink the ring about its center

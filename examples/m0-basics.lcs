@@ -1,0 +1,10 @@
+# LaserCraft M0 walkthrough: run with
+#   lasercraft-cli script examples/m0-basics.lcs
+project.rename Coaster set
+project.set_work_area 400 300
+project.set_origin rear-left
+project.set_notes "3 mm birch plywood"
+edit.undo                      # notes back to empty
+edit.redo                      # and restored
+edit.batch "project.set_work_area 600 400" "project.rename Big bed"
+edit.undo                      # one step undoes both

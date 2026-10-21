@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+lasercraft-geom = { path = "crates/lasercraft-geom" }
+lasercraft-project = { path = "crates/lasercraft-project" }
+lasercraft-commands = { path = "crates/lasercraft-commands" }
+lasercraft-import = { path = "crates/lasercraft-import" }
+lasercraft-raster = { path = "crates/lasercraft-raster" }
+lasercraft-plan = { path = "crates/lasercraft-plan" }
+lasercraft-gcode = { path = "crates/lasercraft-gcode" }
+lasercraft-device = { path = "crates/lasercraft-device" }
+lasercraft-ui = { path = "crates/lasercraft-ui" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+i_overlay = "9.1"
+egui = "0.37"
+usvg = { version = "0.48.1", default-features = false }
+fontdb = { version = "0.24.0", default-features = false, features = ["std", "fs", "fontconfig"] }
+ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
+serialport = { version = "4.10", default-features = false }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

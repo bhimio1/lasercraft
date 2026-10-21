@@ -1,0 +1,23 @@
+[package]
+name = "lasercraft-cli"
+description = "Headless LaserCraft front end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lasercraft-commands.workspace = true
+lasercraft-device.workspace = true
+lasercraft-project.workspace = true
+lasercraft-plan.workspace = true
+lasercraft-geom.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "lasercraft-cli"
+path = "src/main.rs"

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- LaserCraft import fixture (own work, GPL-3.0-or-later). 80 x 60 mm. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60">
+  <rect x="5" y="5" width="70" height="50" rx="5" fill="none" stroke="#000000"/>
+  <g transform="translate(20 30)">
+    <circle r="8" fill="none" stroke="#ff0000"/>
+  </g>
+  <path d="M40 15 h20 v20 h-20 z M45 20 v10 h10 v-10 z" fill="#0000ff"/>
+  <path d="M10 50 Q40 40 70 50" stroke="#00a000" fill="none"/>
+  <text x="10" y="10">text is not imported</text>
+</svg>

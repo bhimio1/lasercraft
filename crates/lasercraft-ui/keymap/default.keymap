@@ -1,0 +1,124 @@
+# LaserCraft default keymap.
+#
+# One binding per line:  <chord> = <invocation>
+# A chord is optional modifiers (Ctrl, Shift, Alt) and a key name, joined by `+`.
+# Ctrl means Cmd on macOS. Key names follow egui (Space, F5, A, Plus, Minus, ...).
+# Invocations are registry commands, or `ui.*` / `view.*` actions handled by
+# the UI.
+#
+# Defaults follow LightBurn's published hotkey list where one exists
+# (docs/spec/keymap.md gives the source page and verification status).
+
+# File
+Ctrl+N       = ui.new
+Ctrl+O       = ui.open
+Ctrl+S       = ui.save
+Ctrl+Shift+S = ui.save_as
+Ctrl+Q       = ui.quit
+Ctrl+Alt+N   = ui.notes
+
+# Edit
+Ctrl+Z       = edit.undo
+Ctrl+Shift+Z = edit.redo
+
+# Selection and clipboard
+Ctrl+A       = select.all
+Ctrl+Shift+I = select.invert
+Ctrl+X       = edit.cut
+Ctrl+C       = edit.copy
+Ctrl+V       = ui.paste
+Alt+V        = edit.paste_in_place
+Ctrl+D       = shape.duplicate
+Delete       = shape.delete
+Backspace    = shape.delete
+Tab          = select.next
+Shift+Tab    = select.previous
+
+# Tools
+Escape       = ui.tool select
+Ctrl+L       = ui.tool line
+Ctrl+R       = ui.tool rect
+Ctrl+E       = ui.tool ellipse
+
+# View
+F12          = ui.toggle_panels
+Ctrl+Equals  = view.zoom_in
+Ctrl+Minus   = view.zoom_out
+Ctrl+0       = view.zoom_fit
+
+# Laser (M4)
+Alt+P        = ui.preview
+
+# Nudge: 1 mm, Shift 10 mm, Ctrl 0.1 mm (y grows downwards)
+Left         = shape.move -1 0
+Right        = shape.move 1 0
+Up           = shape.move 0 -1
+Down         = shape.move 0 1
+Shift+Left   = shape.move -10 0
+Shift+Right  = shape.move 10 0
+Shift+Up     = shape.move 0 -10
+Shift+Down   = shape.move 0 10
+Ctrl+Left    = shape.move -0.1 0
+Ctrl+Right   = shape.move 0.1 0
+Ctrl+Up      = shape.move 0 -0.1
+Ctrl+Down    = shape.move 0 0.1
+
+# Rotate (positive is clockwise) and mirror
+Period             = shape.rotate 90
+Comma              = shape.rotate -90
+Shift+Period       = shape.rotate 45
+Shift+Comma        = shape.rotate -45
+Ctrl+Period        = shape.rotate 15
+Ctrl+Comma         = shape.rotate -15
+Ctrl+Shift+Period  = shape.rotate 1.5
+Ctrl+Shift+Comma   = shape.rotate -1.5
+Ctrl+Shift+H       = shape.flip horizontal
+Ctrl+Shift+V       = shape.flip vertical
+
+# Drawing order
+PageUp       = shape.raise
+PageDown     = shape.lower
+Ctrl+PageUp  = shape.to_front
+Ctrl+PageDown = shape.to_back
+
+# M3: import, text, nodes, groups, booleans, alignment (docs/spec/keymap.md)
+Ctrl+I         = ui.import
+Ctrl+T         = ui.tool text
+Ctrl+Backtick  = ui.tool nodes
+Ctrl+Shift+C   = shape.to_path
+Ctrl+G         = group.create
+Ctrl+U         = group.ungroup
+Ctrl+W         = path.weld
+# `+` is Shift+= on many layouts, so both forms are bound.
+Alt+Plus       = path.union
+Alt+Shift+Plus = path.union
+Alt+Minus      = path.subtract
+Alt+O          = ui.offset
+Alt+B          = path.break_apart
+Alt+J          = path.join
+Alt+Left       = arrange.align left
+Alt+Right      = arrange.align right
+Alt+Up         = arrange.align top
+Alt+Down       = arrange.align bottom
+Alt+PageUp     = arrange.align center-x
+Alt+PageDown   = arrange.align center-y
+Alt+Home       = arrange.align center
+Alt+Shift+H    = arrange.move_together horizontal
+Alt+Shift+V    = arrange.move_together vertical
+
+# G-code (M5)
+Alt+Shift+L  = ui.export_gcode
+
+# Laser (M6). Shift+] types `}` on many layouts, so both are bound.
+Alt+S          = ui.device_start
+Alt+R          = ui.device_frame
+Alt+Shift+R    = ui.device_frame_outline
+Pause          = ui.device_pause
+Ctrl+Pause     = device.stop
+Ctrl+H         = device.home
+Ctrl+Shift+]   = ui.jog_up
+Ctrl+Shift+}   = ui.jog_up
+Ctrl+Shift+[   = ui.jog_down
+Ctrl+Shift+{   = ui.jog_down
+Ctrl+Alt+[     = ui.jog_left
+Ctrl+Alt+]     = ui.jog_right

@@ -1,0 +1,23 @@
+renamed to Coaster set
+work area 300 × 200 mm
+added rect 1
+added ellipse 2
+added line 3
+3 selected
+copied 3 shape(s)
+pasted 3 shape(s)
+rotated 3 shape(s) by 45°
+scaled 1 shape(s) by (-1, 1)
+1 selected
+deleted 1 shape(s)
+undid `shape.delete`
+drawing order changed
+scaled 1 shape(s) by (0.5, 0.5)
+project "Coaster set": work area 300 × 200 mm, origin front-left, 6 shape(s)
+  layer  0 "Layer 00": line 10 mm/s, power 0–20%, 1 pass(es)
+     3 @0  line     (20, 50) – (80, 50)
+     1 @0  rect     (10, 10) – (90, 90)
+     2 @0  ellipse  (35, 35) – (65, 65)
+     4 @0  rect     (93.431, -6.569) – (206.569, 106.569)
+     5 @0  ellipse  (120, 20) – (180, 80)
+     6 @0  line     (128.787, 28.787) – (171.213, 71.213)

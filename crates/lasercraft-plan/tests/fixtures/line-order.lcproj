@@ -1,0 +1,78 @@
+{
+  "format": "lasercraft-project",
+  "version": 4,
+  "name": "Line order",
+  "notes": "",
+  "work_area": { "width_mm": 200.0, "height_mm": 100.0, "origin": "front_left" },
+  "next_id": 6,
+  "layers": {
+    "order": [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+      19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29
+    ],
+    "changed": [
+      {
+        "color": 1,
+        "name": "Cut",
+        "mode": "line",
+        "speed": 20.0,
+        "max_power": 80.0,
+        "min_power": 0.0,
+        "passes": 2,
+        "interval": 0.1,
+        "angle": 0.0,
+        "bidirectional": true,
+        "overscan": false,
+        "crosshatch": false,
+        "output": true,
+        "show": true,
+        "air": false,
+        "image": {
+          "dither": "floyd_steinberg",
+          "interval": 0.1,
+          "negative": false
+        }
+      }
+    ]
+  },
+  "shapes": [
+    {
+      "id": 1,
+      "layer": 1,
+      "geometry": { "kind": "rect", "width": 60.0, "height": 40.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 10.0, 10.0]
+    },
+    {
+      "id": 2,
+      "layer": 1,
+      "geometry": {
+        "kind": "polyline",
+        "points": [[20.0, 20.0], [30.0, 20.0], [25.0, 30.0]],
+        "closed": true
+      },
+      "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    },
+    {
+      "id": 3,
+      "layer": 1,
+      "geometry": { "kind": "rect", "width": 10.0, "height": 10.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 50.0, 20.0]
+    },
+    {
+      "id": 4,
+      "layer": 1,
+      "geometry": {
+        "kind": "polyline",
+        "points": [[150.0, 90.0], [100.0, 90.0]],
+        "closed": false
+      },
+      "transform": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    },
+    {
+      "id": 5,
+      "layer": 1,
+      "geometry": { "kind": "rect", "width": 20.0, "height": 20.0 },
+      "transform": [1.0, 0.0, 0.0, 1.0, 120.0, 10.0]
+    }
+  ]
+}
