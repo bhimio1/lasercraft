@@ -163,17 +163,44 @@ fn show(args: &[String]) -> Result<String, CliError> {
     })
 }
 
-/// One-line description of a project.
+/// A length for listings: at most three decimals, no trailing zeros.
+fn mm(value: f64) -> String {
+    let text = format!("{value:.3}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" {
+        "0".to_owned()
+    } else {
+        text.to_owned()
+    }
+}
+
+/// Description of a project: one header line, then one line per shape in
+/// drawing order with its bounds.
 #[must_use]
 pub fn summary(project: &Project) -> String {
     let area = project.work_area();
-    format!(
-        "project \"{}\": work area {} × {} mm, origin {}",
+    let mut out = format!(
+        "project \"{}\": work area {} × {} mm, origin {}, {} shape(s)",
         project.name(),
         area.width_mm,
         area.height_mm,
-        area.origin
-    )
+        area.origin,
+        project.shapes().len()
+    );
+    for shape in project.shapes() {
+        let b = shape.bounds();
+        let _ = write!(
+            out,
+            "\n  {:>4} {:<8} ({}, {}) – ({}, {})",
+            shape.id(),
+            shape.geometry().kind(),
+            mm(b.min.x),
+            mm(b.min.y),
+            mm(b.max.x),
+            mm(b.max.y)
+        );
+    }
+    out
 }
 
 fn commands() -> String {

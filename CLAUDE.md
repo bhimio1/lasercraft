@@ -87,7 +87,7 @@ and macOS.
 ## Milestones
 
 - [x] M0 Workspace, docs, command registry, CLI, project save/load, undo/redo.
-- [ ] M1 Canvas with bed grid; shapes (rect, ellipse, line, polyline); select,
+- [x] M1 Canvas with bed grid; shapes (rect, ellipse, line, polyline); select,
       move, scale, rotate; snapping; zoom/pan; LightBurn-style default shortcuts.
 - [ ] M2 Layers ("cuts") with colors; line, fill and image modes; speed,
       power min/max, passes, interval, output on/off; cuts/layers panel.

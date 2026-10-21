@@ -49,7 +49,7 @@ fn new_run_and_show() {
     let out = cli(&["show", f]);
     assert_eq!(
         stdout(&out),
-        "project \"Name tags\": work area 500 × 300 mm, origin rear-right\n"
+        "project \"Name tags\": work area 500 × 300 mm, origin rear-right, 0 shape(s)\n"
     );
     let json = stdout(&cli(&["show", f, "--json"]));
     assert!(json.contains("\"origin\": \"rear_right\""));
@@ -83,6 +83,14 @@ fn example_script_matches_golden_output() {
     assert!(out.status.success(), "{}", stderr(&out));
     let golden = include_str!("golden/m0-basics.out");
     assert_eq!(stdout(&out), golden);
+}
+
+#[test]
+fn m1_shapes_script_matches_golden_output() {
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/m1-shapes.lcs");
+    let out = cli(&["script", script]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(stdout(&out), include_str!("golden/m1-shapes.out"));
 }
 
 #[test]

@@ -17,12 +17,10 @@ Solid edges exist today; `┄►` edges are planned and added by the milestone
 named in brackets.
 
 ```
-lasercraft-app ──► lasercraft-ui ──► lasercraft-commands ──► lasercraft-project
-      │                                     ┆                     ┆
-      │                                     ┆ [M3]                ┆ [M1]
-      │                                     └┄► lasercraft-import ┴┄► lasercraft-geom
-      ├┄► lasercraft-device [M6]
-      └┄► lasercraft-plan, lasercraft-gcode [M4/M5]
+lasercraft-app ──► lasercraft-ui ──► lasercraft-commands ──► lasercraft-project ──► lasercraft-geom
+lasercraft-ui, lasercraft-commands ──► lasercraft-geom
+lasercraft-commands ┄► lasercraft-import [M3]
+lasercraft-app ┄► lasercraft-device [M6], lasercraft-plan, lasercraft-gcode [M4/M5]
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project
       └┄► lasercraft-plan, lasercraft-gcode, lasercraft-device (simulator) [M4–M6]
@@ -38,16 +36,16 @@ depends on `lasercraft-project`: it streams lines it is given.
 
 | Crate | Responsibility | Status |
 | --- | --- | --- |
-| `lasercraft-geom` | Points, affine transforms, bounding boxes; later paths, Béziers, flattening, booleans, offsets. Pure, deterministic. | M0: `Point`, `Affine`, `Rect` |
-| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M0: name, notes, work area, id allocator |
-| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M0: `project.*`, `edit.*` |
+| `lasercraft-geom` | Points, affine transforms, bounding boxes; later paths, Béziers, flattening, booleans, offsets. Pure, deterministic. | M1: `Point`, `Affine`, `Rect`, ellipse flattening, polyline queries, snapping, handle math |
+| `lasercraft-project` | Document model and the JSON `.lcproj` format (`docs/spec/project-file.md`). Validating setters; no I/O beyond load/save. | M1: name, notes, work area, shapes (rect, ellipse, polyline) with transforms, hit tests, selection and clipboard as view state |
+| `lasercraft-commands` | `Command` trait, `Registry`, `Invocation` text form, `Session` with undo/redo, batches and coalescing (`docs/spec/commands.md`). | M1: `project.*`, `shape.*`, `select.*`, `edit.*` |
 | `lasercraft-import` | SVG and DXF to geometry. | Empty until M3 |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested. | Empty until M4 |
 | `lasercraft-gcode` | GRBL-dialect output, with work-area and power checks. | Empty until M5 |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M0: message types, GRBL real-time bytes, state names, Linux permission help |
-| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M0: `new`, `run`, `script`, `show`, `commands` |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M0: shell, keymap |
+| `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M1: `new`, `run`, `script`, `show` (with shapes), `commands` |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M1: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine), keymap |
 | `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0 |
 
 ## Command registry
@@ -97,6 +95,10 @@ depends on `lasercraft-project`: it streams lines it is given.
   every undoable command, then undoes, redoes and undoes again, comparing the
   project with snapshots; another test fails when a new command is not
   classified into it.
+- Canvas gestures are a state machine over plain data
+  (`lasercraft_ui::interaction`) with unit tests; `crates/lasercraft-ui/tests/`
+  drives the whole shell through egui headlessly with synthetic pointer and
+  key events and applies the emitted commands to a real session.
 - Golden files: `crates/lasercraft-project/tests/golden/` (file format),
   `crates/lasercraft-cli/tests/golden/` (script output). Planner and G-code
   goldens follow in M4/M5.
@@ -108,8 +110,8 @@ depends on `lasercraft-project`: it streams lines it is given.
 
 | Dependency | Why |
 | --- | --- |
-| `serde`, `serde_json` | The `.lcproj` JSON format; later, JSON arguments in undo inverses and MCP. |
-| `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic. |
+| `serde`, `serde_json` (`float_roundtrip`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses. `float_roundtrip` makes parsing bit-exact, so saving and undo never drift. |
+| `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |
 
 Planned, each to be justified here when added: `serialport` (M6, serial I/O),
@@ -118,6 +120,8 @@ loader (M3 text).
 
 ## Deferred decisions
 
+- A compact project-file writer (one line per point and matrix) if pretty
+  JSON grows too large with imported art (M3).
 - File dialogs: M0 asks for a path in a text field. A native dialog crate
   (e.g. `rfd`) needs a portal on Flatpak; decide in M1.
 - Whether the MCP server is a separate crate (as in MusicCraft).

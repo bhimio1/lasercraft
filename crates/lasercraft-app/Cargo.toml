@@ -15,6 +15,7 @@ lasercraft-commands.workspace = true
 lasercraft-project.workspace = true
 lasercraft-ui.workspace = true
 eframe.workspace = true
+serde_json.workspace = true
 
 [[bin]]
 name = "lasercraft"

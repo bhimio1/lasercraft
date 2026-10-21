@@ -244,6 +244,9 @@ impl Session {
             self.undo_stack.push(entry);
             return Err(err);
         }
+        // Ids handed out by the undone command become free again, so the
+        // project is exactly as it was before the command.
+        self.project.set_next_id(entry.next_id);
         let message = format!("undid `{}`", entry.command);
         self.redo_stack.push(HistoryEntry {
             coalesce: None,
@@ -405,31 +408,67 @@ mod tests {
         assert_eq!(width(&s), 400.0);
     }
 
-    /// Runs every undoable command, then undoes, redoes and undoes again,
-    /// comparing the project with snapshots at every step.
-    #[test]
-    fn every_undoable_command_round_trips() {
-        let script = [
+    /// Every undoable command, in an order where each line is valid.
+    fn round_trip_script() -> Vec<String> {
+        let inserted = Invocation::new(
+            "shape.insert",
+            [
+                "0",
+                r#"{"id":40,"geometry":{"kind":"rect","width":1.0,"height":2.0},"transform":[1.0,0.0,0.0,1.0,0.0,0.0]}"#,
+            ],
+        );
+        [
             "project.rename Round trip",
             r#"project.set_notes "cut at 80%""#,
             "project.set_work_area 610 305",
             "project.set_origin rear-right",
             r#"edit.batch "project.rename Batched" "project.set_work_area 300 200""#,
-        ];
+            "shape.add_rect 0 0 20 10",
+            "shape.add_ellipse 50 50 10 5",
+            "shape.add_line 0 0 10 10",
+            "shape.add_polyline closed 0 0 10 0 5 8",
+            "shape.move 3 4 1 2",
+            "shape.scale 2 0.5 1",
+            "shape.scale_about 1.5 1.5 10 10 2 3",
+            "shape.rotate 33 1 2",
+            "shape.rotate_about -12 5 5 4",
+            "shape.flip vertical 1 4",
+            "shape.set_transform 3 1 0 0 1 7 7",
+            "shape.duplicate 2",
+            "shape.raise 1",
+            "shape.lower 5",
+            "shape.to_front 1",
+            "shape.to_back 3",
+            "shape.set_order 5 4 3 2 1",
+            "shape.delete 2 4",
+            &inserted.to_string(),
+            "edit.cut 1",
+            "edit.paste 100 100",
+            "edit.paste_in_place",
+        ]
+        .map(str::to_owned)
+        .to_vec()
+    }
+
+    /// Runs every undoable command, then undoes, redoes and undoes again,
+    /// comparing the project with snapshots at every step.
+    #[test]
+    fn every_undoable_command_round_trips() {
+        let script = round_trip_script();
         let mut s = session();
         let mut snapshots = vec![s.project().clone()];
-        for line in script {
-            run(&mut s, line).unwrap();
+        for line in &script {
+            run(&mut s, line).unwrap_or_else(|e| panic!("{line}: {e}"));
             snapshots.push(s.project().clone());
         }
         assert_eq!(s.undo_depth(), script.len());
-        for expected in snapshots.iter().rev().skip(1) {
+        for (expected, line) in snapshots.iter().rev().skip(1).zip(script.iter().rev()) {
             run(&mut s, "edit.undo").unwrap();
-            assert_eq!(s.project(), expected);
+            assert_eq!(s.project(), expected, "undo of `{line}`");
         }
-        for expected in snapshots.iter().skip(1) {
+        for (expected, line) in snapshots.iter().skip(1).zip(&script) {
             run(&mut s, "edit.redo").unwrap();
-            assert_eq!(s.project(), expected);
+            assert_eq!(s.project(), expected, "redo of `{line}`");
         }
         for expected in snapshots.iter().rev().skip(1) {
             run(&mut s, "edit.undo").unwrap();
@@ -439,23 +478,19 @@ mod tests {
 
     #[test]
     fn every_builtin_undoable_command_is_in_the_round_trip() {
-        // Keep `every_undoable_command_round_trips` complete: if a new
-        // undoable command is added, add it to that script and here.
-        let undoable = [
-            "project.rename",
-            "project.set_notes",
-            "project.set_work_area",
-            "project.set_origin",
-        ];
-        let not_undoable = ["project.new", "project.load", "project.save"];
-        let registry = Registry::with_builtin();
-        for command in registry.iter() {
+        // Keep `round_trip_script` complete: every command is either covered
+        // there or listed as not undoable here.
+        let script = round_trip_script();
+        let not_undoable = ["project.new", "project.load", "project.save", "edit.copy"];
+        for command in Registry::with_builtin().iter() {
+            let name = command.name();
+            let covered = script
+                .iter()
+                .any(|line| line.split_whitespace().next() == Some(name));
             assert!(
-                undoable.contains(&command.name()) || not_undoable.contains(&command.name()),
-                "classify `{}` in this test and cover it in the round trip",
-                command.name()
+                covered || not_undoable.contains(&name) || name.starts_with("select."),
+                "add `{name}` to the round-trip script or list it as not undoable"
             );
         }
-        assert_eq!(registry.len(), undoable.len() + not_undoable.len());
     }
 }

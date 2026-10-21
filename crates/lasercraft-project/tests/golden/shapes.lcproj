@@ -1,0 +1,75 @@
+{
+  "format": "lasercraft-project",
+  "version": 2,
+  "name": "Untitled",
+  "notes": "",
+  "work_area": {
+    "width_mm": 400.0,
+    "height_mm": 400.0,
+    "origin": "front_left"
+  },
+  "next_id": 4,
+  "shapes": [
+    {
+      "id": 1,
+      "geometry": {
+        "kind": "rect",
+        "width": 20.0,
+        "height": 10.0
+      },
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        5.0,
+        5.0
+      ]
+    },
+    {
+      "id": 2,
+      "geometry": {
+        "kind": "ellipse",
+        "rx": 8.0,
+        "ry": 4.0
+      },
+      "transform": [
+        0.8660254037844387,
+        0.49999999999999994,
+        -0.49999999999999994,
+        0.8660254037844387,
+        50.0,
+        50.0
+      ]
+    },
+    {
+      "id": 3,
+      "geometry": {
+        "kind": "polyline",
+        "points": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            30.0,
+            0.0
+          ],
+          [
+            15.0,
+            20.0
+          ]
+        ],
+        "closed": true
+      },
+      "transform": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        100.0,
+        100.0
+      ]
+    }
+  ]
+}

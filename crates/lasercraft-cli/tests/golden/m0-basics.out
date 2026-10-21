@@ -6,4 +6,4 @@ undid `project.set_notes "3 mm birch plywood"`
 redid `project.set_notes "3 mm birch plywood"`
 work area 600 × 400 mm; renamed to Big bed
 undid `edit.batch "project.set_work_area 600 400" "project.rename Big bed"`
-project "Coaster set": work area 400 × 300 mm, origin rear-left
+project "Coaster set": work area 400 × 300 mm, origin rear-left, 0 shape(s)

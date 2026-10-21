@@ -9,8 +9,9 @@ use crate::Point;
 /// y' = b·x + d·y + f
 /// ```
 ///
-/// `t1 * t2` applies `t2` first, then `t1`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// `t1 * t2` applies `t2` first, then `t1`. Serialized as `[a, b, c, d, e, f]`.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct Affine {
     /// Coefficients `[a, b, c, d, e, f]`.
     pub m: [f64; 6],
@@ -98,6 +99,22 @@ impl Affine {
         })
     }
 
+    /// The largest factor by which the transform can stretch a length.
+    #[must_use]
+    pub fn max_stretch(&self) -> f64 {
+        let [a, b, c, d, ..] = self.m;
+        // Largest singular value of the linear part.
+        let p = (a * a + b * b + c * c + d * d) / 2.0;
+        let q = ((a * a + b * b - c * c - d * d).powi(2) / 4.0 + (a * c + b * d).powi(2)).sqrt();
+        (p + q).sqrt()
+    }
+
+    /// Whether every coefficient is finite.
+    #[must_use]
+    pub fn is_finite(&self) -> bool {
+        self.m.iter().all(|v| v.is_finite())
+    }
+
     /// Whether every coefficient is within `tolerance` of `other`'s.
     #[must_use]
     pub fn approx_eq(&self, other: &Self, tolerance: f64) -> bool {
@@ -163,6 +180,21 @@ mod tests {
         assert!((inv * t).approx_eq(&Affine::IDENTITY, TOL));
         let p = Point::new(7.0, 11.0);
         assert!(inv.apply(t.apply(p)).approx_eq(p, TOL));
+    }
+
+    #[test]
+    fn max_stretch_is_the_largest_singular_value() {
+        assert!((Affine::scale(3.0, -2.0).max_stretch() - 3.0).abs() < TOL);
+        let r = Affine::rotate_degrees(33.0) * Affine::scale(0.5, 4.0);
+        assert!((r.max_stretch() - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn serializes_as_six_numbers() {
+        let t = Affine::translate(1.5, -2.0);
+        let json = serde_json::to_string(&t).unwrap();
+        assert_eq!(json, "[1.0,0.0,0.0,1.0,1.5,-2.0]");
+        assert_eq!(serde_json::from_str::<Affine>(&json).unwrap(), t);
     }
 
     #[test]

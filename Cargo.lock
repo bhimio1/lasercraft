@@ -1055,6 +1055,7 @@ dependencies = [
  "lasercraft-commands",
  "lasercraft-project",
  "lasercraft-ui",
+ "serde_json",
 ]
 
 [[package]]
@@ -1070,6 +1071,7 @@ dependencies = [
 name = "lasercraft-commands"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-geom",
  "lasercraft-project",
  "serde_json",
 ]
@@ -1085,6 +1087,10 @@ version = "0.1.0"
 [[package]]
 name = "lasercraft-geom"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "lasercraft-import"
@@ -1098,6 +1104,7 @@ version = "0.1.0"
 name = "lasercraft-project"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-geom",
  "serde",
  "serde_json",
 ]
@@ -1112,6 +1119,7 @@ version = "0.1.0"
 dependencies = [
  "egui",
  "lasercraft-commands",
+ "lasercraft-geom",
  "lasercraft-project",
 ]
 

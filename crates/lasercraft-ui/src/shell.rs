@@ -1,12 +1,44 @@
-//! The main window: menu bar, work area outline, console and status bar.
+//! The main window: menu bar, tools, canvas, console and status bar.
 
 use std::path::{Path, PathBuf};
 
-use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use lasercraft_commands::Invocation;
-use lasercraft_project::{Origin, Project};
+use lasercraft_geom::Point;
+use lasercraft_project::Project;
 
+use crate::canvas::Canvas;
+use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
+
+/// Tools in the tool palette: label, `ui.tool` argument.
+const TOOLS: [(&str, &str, Tool); 4] = [
+    ("Select", "select", Tool::Select),
+    ("Line", "line", Tool::Line),
+    ("Rectangle", "rect", Tool::Rect),
+    ("Ellipse", "ellipse", Tool::Ellipse),
+];
+
+/// Menu entries that act on the selection: label, invocation.
+const SELECTION_EDITS: [(&str, &str); 5] = [
+    ("Cut", "edit.cut"),
+    ("Copy", "edit.copy"),
+    ("Duplicate", "shape.duplicate"),
+    ("Delete", "shape.delete"),
+    ("Invert Selection", "select.invert"),
+];
+
+const ARRANGE: [(&str, &str); 10] = [
+    ("Rotate 90° Clockwise", "shape.rotate 90"),
+    ("Rotate 90° Counter-clockwise", "shape.rotate -90"),
+    ("Mirror Horizontally", "shape.flip horizontal"),
+    ("Mirror Vertically", "shape.flip vertical"),
+    ("Forward", "shape.raise"),
+    ("Backward", "shape.lower"),
+    ("To Front", "shape.to_front"),
+    ("To Back", "shape.to_back"),
+    ("Select Next", "select.next"),
+    ("Select Previous", "select.previous"),
+];
 
 /// How many console lines are kept.
 const LOG_LINES: usize = 200;
@@ -54,6 +86,7 @@ pub struct Shell {
     console: String,
     log: Vec<String>,
     prompt: Option<(PromptKind, String)>,
+    canvas: Canvas,
 }
 
 impl Shell {
@@ -65,6 +98,7 @@ impl Shell {
             console: String::new(),
             log: Vec::new(),
             prompt: None,
+            canvas: Canvas::default(),
         }
     }
 
@@ -77,6 +111,18 @@ impl Shell {
         }
     }
 
+    /// The canvas's zoom and pan, once it has been laid out.
+    #[must_use]
+    pub fn canvas_view(&self) -> Option<crate::view::View> {
+        self.canvas.view()
+    }
+
+    /// The active canvas tool.
+    #[must_use]
+    pub fn tool(&self) -> Tool {
+        self.canvas.tool()
+    }
+
     /// Asks the user for a path to save to.
     pub fn prompt_save_as(&mut self) {
         self.prompt = Some((PromptKind::SaveAs, String::new()));
@@ -86,12 +132,21 @@ impl Shell {
     pub fn show(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>) -> Vec<Action> {
         let mut actions = self.shortcuts(ui);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, view, &mut actions));
-        egui::Panel::bottom("status").show(ui, |ui| status_bar(ui, view));
+        let pointer = self.canvas.pointer();
+        egui::Panel::bottom("status").show(ui, |ui| status_bar(ui, view, pointer));
         egui::Panel::bottom("console")
             .resizable(true)
-            .default_size(140.0)
+            .default_size(120.0)
             .show(ui, |ui| self.console(ui, &mut actions));
-        egui::CentralPanel::default().show(ui, |ui| work_area(ui, view.project));
+        egui::Panel::left("tools")
+            .resizable(false)
+            .show(ui, |ui| self.tool_palette(ui, &mut actions));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ui, |ui| {
+                let drawn = self.canvas.show(ui, view.project);
+                actions.extend(drawn.into_iter().map(Action::Run));
+            });
         self.path_prompt(ui, &mut actions);
         actions
     }
@@ -112,6 +167,17 @@ impl Shell {
                         modifiers,
                         ..
                     } => Some(Chord::from_event(*key, *modifiers)),
+                    // The windowing layer turns the platform's clipboard
+                    // chords into these events instead of key presses.
+                    egui::Event::Copy => {
+                        Some(Chord::from_event(egui::Key::C, egui::Modifiers::COMMAND))
+                    }
+                    egui::Event::Cut => {
+                        Some(Chord::from_event(egui::Key::X, egui::Modifiers::COMMAND))
+                    }
+                    egui::Event::Paste(_) | egui::Event::PasteImage(_) => {
+                        Some(Chord::from_event(egui::Key::V, egui::Modifiers::COMMAND))
+                    }
                     _ => None,
                 })
                 .collect()
@@ -140,6 +206,21 @@ impl Shell {
                 return None;
             }
             "ui.quit" => Action::Quit,
+            "ui.tool" => {
+                match invocation.args.first().and_then(|t| Tool::parse(t)) {
+                    Some(tool) => self.canvas.set_tool(tool),
+                    None => self.log(format!("unknown tool in `{invocation}`")),
+                }
+                return None;
+            }
+            "ui.paste" => Action::Run(match self.canvas.pointer() {
+                Some(p) => Invocation::new("edit.paste", [p.x.to_string(), p.y.to_string()]),
+                None => Invocation::bare("edit.paste"),
+            }),
+            "view.zoom_in" | "view.zoom_out" | "view.zoom_fit" => {
+                self.canvas.zoom(&invocation.name);
+                return None;
+            }
             _ => Action::Run(invocation),
         })
     }
@@ -179,8 +260,75 @@ impl Shell {
                 if self.menu_item(ui, "Redo", "edit.redo", view.can_redo) {
                     actions.push(Action::Run(Invocation::bare("edit.redo")));
                 }
+                ui.separator();
+                let selected = !view.project.selection().is_empty();
+                for (label, line) in SELECTION_EDITS {
+                    self.menu_line(ui, label, line, selected, actions);
+                }
+                let pastable = !view.project.clipboard().is_empty();
+                self.menu_line(ui, "Paste", "ui.paste", pastable, actions);
+                self.menu_line(
+                    ui,
+                    "Paste in Place",
+                    "edit.paste_in_place",
+                    pastable,
+                    actions,
+                );
+                self.menu_line(ui, "Select All", "select.all", true, actions);
+            });
+            ui.menu_button("Tools", |ui| {
+                for (label, name, _) in TOOLS {
+                    self.menu_line(ui, label, &format!("ui.tool {name}"), true, actions);
+                }
+            });
+            ui.menu_button("Arrange", |ui| {
+                let selected = !view.project.selection().is_empty();
+                for (label, line) in ARRANGE {
+                    let enabled = selected || line.starts_with("select.");
+                    self.menu_line(ui, label, line, enabled, actions);
+                }
+            });
+            ui.menu_button("View", |ui| {
+                self.menu_line(ui, "Zoom In", "view.zoom_in", true, actions);
+                self.menu_line(ui, "Zoom Out", "view.zoom_out", true, actions);
+                self.menu_line(ui, "Fit Bed", "view.zoom_fit", true, actions);
             });
         });
+    }
+
+    /// A menu item that runs `line` (shown with its bound chord).
+    fn menu_line(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        line: &str,
+        enabled: bool,
+        actions: &mut Vec<Action>,
+    ) {
+        if self.menu_item(ui, label, line, enabled)
+            && let Ok(invocation) = Invocation::parse(line)
+        {
+            actions.extend(self.resolve(invocation));
+        }
+    }
+
+    fn tool_palette(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.add_space(4.0);
+        for (label, name, tool) in TOOLS {
+            let line = format!("ui.tool {name}");
+            let hint = self
+                .keymap
+                .chord_for(&line)
+                .map_or_else(String::new, |c| format!(" ({c})"));
+            let active = self.canvas.tool() == tool;
+            if ui
+                .selectable_label(active, label)
+                .on_hover_text(format!("{label} tool{hint}"))
+                .clicked()
+            {
+                actions.extend(self.resolve(Invocation::new("ui.tool", [name])));
+            }
+        }
     }
 
     fn console(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -241,7 +389,7 @@ impl Shell {
     }
 }
 
-fn status_bar(ui: &mut egui::Ui, view: &ShellView<'_>) {
+fn status_bar(ui: &mut egui::Ui, view: &ShellView<'_>, pointer: Option<Point>) {
     ui.horizontal(|ui| {
         let file = view
             .file
@@ -254,33 +402,19 @@ fn status_bar(ui: &mut egui::Ui, view: &ShellView<'_>) {
             "Work area {} × {} mm, origin {}",
             area.width_mm, area.height_mm, area.origin
         ));
+        if let Some(p) = pointer {
+            ui.separator();
+            ui.monospace(format!("x {:.2}  y {:.2} mm", p.x, p.y));
+        }
+        let selection = view.project.selection();
+        if let Ok(Some(b)) = view.project.bounds_of(&selection) {
+            ui.separator();
+            ui.label(format!(
+                "{} selected, {:.2} × {:.2} mm",
+                selection.len(),
+                b.width(),
+                b.height()
+            ));
+        }
     });
-}
-
-/// Draws the work area to scale with its origin corner marked. The full
-/// canvas arrives with M1.
-fn work_area(ui: &mut egui::Ui, project: &Project) {
-    let area = project.work_area();
-    let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::hover());
-    let space = response.rect.shrink(24.0);
-    let scale = (space.width() / area.width_mm as f32).min(space.height() / area.height_mm as f32);
-    let size = Vec2::new(area.width_mm as f32, area.height_mm as f32) * scale;
-    let bed = Rect::from_center_size(space.center(), size);
-    let stroke = Stroke::new(1.5, ui.visuals().strong_text_color());
-    painter.rect_stroke(bed, 0.0, stroke, StrokeKind::Middle);
-    // Screen y grows downwards, so the front of the bed is at the bottom.
-    let corner = match area.origin {
-        Origin::FrontLeft => bed.left_bottom(),
-        Origin::FrontRight => bed.right_bottom(),
-        Origin::RearLeft => bed.left_top(),
-        Origin::RearRight => bed.right_top(),
-    };
-    painter.circle_filled(corner, 5.0, Color32::from_rgb(220, 60, 40));
-    painter.text(
-        Pos2::new(bed.center().x, bed.top() - 4.0),
-        egui::Align2::CENTER_BOTTOM,
-        format!("{} × {} mm", area.width_mm, area.height_mm),
-        egui::FontId::proportional(13.0),
-        ui.visuals().text_color(),
-    );
 }

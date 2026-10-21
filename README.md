@@ -5,9 +5,11 @@ engravers, for Linux, Windows and macOS. Its workflow and default shortcuts aim
 to feel familiar to people coming from LightBurn. It is an independent project,
 not affiliated with or endorsed by LightBurn Software.
 
-**Status: milestone M0.** The project model, command registry with undo/redo,
-`.lcproj` files, a CLI and a minimal window exist. It does not drive a laser
-yet. See the milestone list in `CLAUDE.md`.
+**Status: milestone M1.** You can draw rectangles, ellipses, lines and
+polylines on a gridded bed; select, move, scale, rotate, mirror, duplicate,
+copy and paste them with snapping and LightBurn-style shortcuts; undo
+everything; and save `.lcproj` files. A CLI does all of it headlessly. It does
+not drive a laser yet. See the milestone list in `CLAUDE.md`.
 
 ## Build and run
 
@@ -15,7 +17,7 @@ yet. See the milestone list in `CLAUDE.md`.
 cargo build --release
 target/release/lasercraft [project.lcproj]
 target/release/lasercraft-cli help
-target/release/lasercraft-cli script examples/m0-basics.lcs
+target/release/lasercraft-cli script examples/m1-shapes.lcs
 ```
 
 On Linux the window needs `libxkbcommon-x11` and an OpenGL driver at runtime;

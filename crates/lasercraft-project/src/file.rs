@@ -9,7 +9,7 @@ use crate::{Project, ProjectError};
 pub const FORMAT: &str = "lasercraft-project";
 
 /// The newest format version this build reads and the one it writes.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// Just enough of a file to decide whether we can read the rest.
 #[derive(serde::Deserialize)]
@@ -48,9 +48,11 @@ impl Project {
             Some(v) if v > FORMAT_VERSION => return Err(ProjectError::UnsupportedVersion(v)),
             Some(_) => {}
         }
-        let project: Self =
+        let mut project: Self =
             serde_json::from_str(text).map_err(|e| ProjectError::Format(e.to_string()))?;
         project.validate()?;
+        // Older versions are upgraded in memory and saved as the current one.
+        project.version = FORMAT_VERSION;
         Ok(project)
     }
 
@@ -93,10 +95,86 @@ mod tests {
     use crate::Origin;
 
     const GOLDEN: &str = include_str!("../tests/golden/default.lcproj");
+    const GOLDEN_SHAPES: &str = include_str!("../tests/golden/shapes.lcproj");
+    const V1: &str = include_str!("../tests/golden/v1-default.lcproj");
 
     #[test]
     fn default_project_matches_golden_file() {
         assert_eq!(Project::default().to_json(), GOLDEN);
+    }
+
+    #[test]
+    fn shapes_match_golden_file() {
+        let mut p = Project::default();
+        p.add_shape(
+            crate::Geometry::Rect {
+                width: 20.0,
+                height: 10.0,
+            },
+            lasercraft_geom::Affine::translate(5.0, 5.0),
+        )
+        .unwrap();
+        p.add_shape(
+            crate::Geometry::Ellipse { rx: 8.0, ry: 4.0 },
+            lasercraft_geom::Affine::rotate_about(30.0, lasercraft_geom::Point::new(50.0, 50.0))
+                * lasercraft_geom::Affine::translate(50.0, 50.0),
+        )
+        .unwrap();
+        p.add_shape(
+            crate::Geometry::Polyline {
+                points: vec![
+                    lasercraft_geom::Point::new(0.0, 0.0),
+                    lasercraft_geom::Point::new(30.0, 0.0),
+                    lasercraft_geom::Point::new(15.0, 20.0),
+                ],
+                closed: true,
+            },
+            lasercraft_geom::Affine::translate(100.0, 100.0),
+        )
+        .unwrap();
+        assert_eq!(p.to_json(), GOLDEN_SHAPES);
+        assert_eq!(Project::from_json(GOLDEN_SHAPES).unwrap(), p);
+    }
+
+    #[test]
+    fn floats_round_trip_bit_exactly() {
+        let mut p = Project::default();
+        for degrees in [-12.0, 33.0, 0.1, 1.5, 89.99] {
+            let t = lasercraft_geom::Affine::rotate_about(
+                degrees,
+                lasercraft_geom::Point::new(0.1, 0.7),
+            ) * lasercraft_geom::Affine::scale(1.0 / 3.0, 0.3);
+            p.add_shape(
+                crate::Geometry::Ellipse {
+                    rx: 0.1 + 0.2,
+                    ry: 7.0 / 9.0,
+                },
+                t,
+            )
+            .unwrap();
+        }
+        assert_eq!(Project::from_json(&p.to_json()).unwrap(), p);
+    }
+
+    #[test]
+    fn version_1_files_load_and_upgrade() {
+        let p = Project::from_json(V1).unwrap();
+        assert_eq!(p, Project::default());
+        assert_eq!(p.to_json(), GOLDEN);
+    }
+
+    #[test]
+    fn rejects_duplicate_ids_and_stale_next_id() {
+        let dup = GOLDEN_SHAPES.replace("\"id\": 2", "\"id\": 1");
+        assert!(matches!(
+            Project::from_json(&dup),
+            Err(ProjectError::InvalidValue { .. })
+        ));
+        let stale = GOLDEN_SHAPES.replace("\"next_id\": 4", "\"next_id\": 3");
+        assert!(matches!(
+            Project::from_json(&stale),
+            Err(ProjectError::InvalidValue { .. })
+        ));
     }
 
     #[test]
@@ -120,7 +198,7 @@ mod tests {
             Project::from_json("not json"),
             Err(ProjectError::Format(_))
         ));
-        let newer = GOLDEN.replace("\"version\": 1", "\"version\": 99");
+        let newer = GOLDEN.replace("\"version\": 2", "\"version\": 99");
         assert_eq!(
             Project::from_json(&newer),
             Err(ProjectError::UnsupportedVersion(99))

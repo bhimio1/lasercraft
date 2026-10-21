@@ -32,13 +32,12 @@ and must have tests there. This software drives a real laser.
    immediately and sends soft reset `0x18`. These are real-time bytes, so they
    bypass the streaming queue and GRBL acts on them mid-line. The device
    thread handles them before any queued work. (M6)
-9. **Open decision for the owner (before M5/M6).** GRBL's documentation says a
-   feed hold stops motion but not the spindle output, and that `M3` (constant
-   power) keeps the laser at its set power while stopped, whereas `M4`
-   (dynamic power) turns it off when not moving. Proposal: generate `M4` by
-   default; for jobs that use `M3`, label Pause as "motion only, laser may stay
-   on" and make Stop the highlighted action. The proposal stays unimplemented
-   until the owner chooses.
+9. GRBL's documentation says a feed hold stops motion but not the spindle
+   output, and that `M3` (constant power) keeps the laser at its set power
+   while stopped, whereas `M4` (dynamic power) turns it off when not moving.
+   Therefore: G-code uses `M4` by default (M5); a job that uses `M3` labels
+   Pause as "motion only, the laser may stay on" and makes Stop the
+   highlighted action (M6). (Decided 2026-10-21, owner delegated the call.)
 
 ## Faults
 

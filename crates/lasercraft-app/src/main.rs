@@ -48,8 +48,9 @@ struct App {
     session: Session,
     shell: Shell,
     file: Option<PathBuf>,
-    /// Session revision at the last save or load.
-    clean_revision: u64,
+    /// The document at the last save or load. Selection and clipboard do not
+    /// count: project equality ignores them.
+    clean: Project,
     /// An action waiting for "discard unsaved changes?".
     pending: Option<Action>,
     /// The user confirmed closing with unsaved changes.
@@ -62,7 +63,7 @@ impl App {
             session: Session::new(Project::default(), Registry::with_builtin()),
             shell: Shell::new(keymap),
             file: None,
-            clean_revision: 0,
+            clean: Project::default(),
             pending: None,
             closing: false,
         };
@@ -73,7 +74,7 @@ impl App {
     }
 
     fn modified(&self) -> bool {
-        self.session.revision() != self.clean_revision
+        self.session.project() != &self.clean
     }
 
     /// Runs an invocation, logging the outcome. Returns whether it succeeded.
@@ -95,7 +96,7 @@ impl App {
         let invocation = Invocation::new("project.load", [path.display().to_string()]);
         if self.run(&invocation) {
             self.file = Some(path);
-            self.clean_revision = self.session.revision();
+            self.clean = self.session.project().clone();
         }
     }
 
@@ -103,7 +104,7 @@ impl App {
         let invocation = Invocation::new("project.save", [path.display().to_string()]);
         if self.run(&invocation) {
             self.file = Some(path);
-            self.clean_revision = self.session.revision();
+            self.clean = self.session.project().clone();
         }
     }
 
@@ -122,15 +123,21 @@ impl App {
                 // Console `project.new`/`project.load` replace the document too.
                 if invocation.name == "project.load" && invocation.args.len() == 1 {
                     self.open(PathBuf::from(&invocation.args[0]));
-                } else if self.run(&invocation) && invocation.name == "project.new" {
-                    self.file = None;
-                    self.clean_revision = self.session.revision();
+                } else if self.run(&invocation) {
+                    match invocation.name.as_str() {
+                        "project.new" => {
+                            self.file = None;
+                            self.clean = self.session.project().clone();
+                        }
+                        "edit.copy" | "edit.cut" => self.share_clipboard(ctx),
+                        _ => {}
+                    }
                 }
             }
             Action::New => {
                 if self.run(&Invocation::bare("project.new")) {
                     self.file = None;
-                    self.clean_revision = self.session.revision();
+                    self.clean = self.session.project().clone();
                 }
             }
             Action::Open(path) => self.open(path),
@@ -143,6 +150,14 @@ impl App {
                 self.closing = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+        }
+    }
+
+    /// Puts copied shapes on the system clipboard as JSON. Besides being
+    /// useful elsewhere, this makes the platform's paste chord reach us.
+    fn share_clipboard(&self, ctx: &egui::Context) {
+        if let Ok(json) = serde_json::to_string(self.session.project().clipboard()) {
+            ctx.copy_text(json);
         }
     }
 
@@ -216,7 +231,11 @@ fn main() -> ExitCode {
         eframe::run_native(
             "LaserCraft",
             native,
-            Box::new(move |_cc| Ok(Box::new(App::new(keymap, options.file)))),
+            Box::new(move |cc| {
+                // Ctrl+= / Ctrl+- / Ctrl+0 zoom the canvas, not the whole UI.
+                cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+                Ok(Box::new(App::new(keymap, options.file)))
+            }),
         )
         .map_err(|e| e.to_string())
     });

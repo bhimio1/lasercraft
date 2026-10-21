@@ -1,6 +1,6 @@
 {
   "format": "lasercraft-project",
-  "version": 1,
+  "version": 2,
   "name": "Untitled",
   "notes": "",
   "work_area": {
@@ -8,5 +8,6 @@
     "height_mm": 400.0,
     "origin": "front_left"
   },
-  "next_id": 1
+  "next_id": 1,
+  "shapes": []
 }

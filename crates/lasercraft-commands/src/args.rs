@@ -2,6 +2,9 @@
 
 use std::str::FromStr;
 
+use lasercraft_geom::Point;
+use lasercraft_project::Project;
+
 use crate::CommandError;
 
 /// Positional arguments of one invocation, with helpers that produce consistent
@@ -79,5 +82,53 @@ impl<'a> Args<'a> {
         } else {
             Err(self.invalid(format!("{what} must be a finite number")))
         }
+    }
+}
+
+impl Args<'_> {
+    /// Shape ids from argument `from` on, or the selection when there are
+    /// none. Ids are checked, deduplicated and returned in drawing order.
+    pub fn ids(&self, from: usize, project: &Project) -> Result<Vec<u32>, CommandError> {
+        let given = self.items.get(from..).unwrap_or_default();
+        if given.is_empty() {
+            let selection = project.selection();
+            if selection.is_empty() {
+                return Err(self.invalid("nothing selected"));
+            }
+            return Ok(selection);
+        }
+        self.parse_ids(given, project)
+    }
+
+    /// Shape ids from argument `from` on, at least one, all existing.
+    pub fn required_ids(&self, from: usize, project: &Project) -> Result<Vec<u32>, CommandError> {
+        let given = self.items.get(from..).unwrap_or_default();
+        if given.is_empty() {
+            return Err(self.usage_error());
+        }
+        self.parse_ids(given, project)
+    }
+
+    fn parse_ids(&self, given: &[String], project: &Project) -> Result<Vec<u32>, CommandError> {
+        let mut wanted = std::collections::HashSet::with_capacity(given.len());
+        for raw in given {
+            let id: u32 = raw
+                .parse()
+                .map_err(|_| self.invalid(format!("`{raw}` is not a shape id")))?;
+            if project.shape(id).is_none() {
+                return Err(self.invalid(format!("shape {id} does not exist")));
+            }
+            wanted.insert(id);
+        }
+        Ok(project
+            .order()
+            .into_iter()
+            .filter(|id| wanted.contains(id))
+            .collect())
+    }
+
+    /// Parses a point from arguments `i` and `i + 1`.
+    pub fn point(&self, i: usize) -> Result<Point, CommandError> {
+        Ok(Point::new(self.f64(i, "x")?, self.f64(i + 1, "y")?))
     }
 }

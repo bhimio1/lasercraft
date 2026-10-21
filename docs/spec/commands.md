@@ -29,8 +29,9 @@ Milestone: M0.
   command. Running a new undoable command clears the redo stack.
 - `edit.undo` with nothing to undo fails with "nothing to undo"; the same for redo.
 - If an inverse fails (it should not), the entry stays on its stack.
-- Redo restores the project's id allocator to where it was when the command
-  first ran, so recreated objects get the same ids.
+- Undo and redo both restore the project's id allocator to where it was
+  before the command first ran: after an undo the project is exactly as it
+  was, and a redo recreates objects with the same ids.
 - Commands that replace the whole document (`project.new`, `project.load`) clear
   both stacks. `project.save` is not an edit and is not recorded.
 
@@ -61,6 +62,9 @@ Milestone: M0.
 | `project.set_work_area <width_mm> <height_mm>` | yes | Resize the work area, 1–10 000 mm per side. |
 | `project.set_origin <front-left\|front-right\|rear-left\|rear-right>` | yes | Set the bed corner that is the machine origin. |
 | `edit.undo`, `edit.redo`, `edit.batch …` | — | As above. |
+
+M1 adds the `shape.*`, `select.*` and `edit.copy|cut|paste*` commands in
+`docs/spec/shapes.md`.
 
 ## Sources
 

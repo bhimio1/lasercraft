@@ -4,11 +4,26 @@
 //! clicks, menu picks, shortcuts and console lines into [`Action`]s. The app
 //! runs those through the command session (`docs/spec/ui-shell.md`).
 
+mod canvas;
+pub mod interaction;
 pub mod keymap;
 mod shell;
+pub mod view;
 
 pub use shell::{Action, Shell, ShellView};
 
-/// The `ui.*` names a keymap may bind besides registry commands. They need
-/// something only the front end has (a path prompt, the saved-file path).
-pub const UI_ACTIONS: [&str; 5] = ["ui.new", "ui.open", "ui.save", "ui.save_as", "ui.quit"];
+/// The `ui.*` and `view.*` names a keymap may bind besides registry
+/// commands. They need something only the front end has (a path prompt, the
+/// saved-file path, the pointer, the tool, the zoom).
+pub const UI_ACTIONS: [&str; 10] = [
+    "ui.new",
+    "ui.open",
+    "ui.save",
+    "ui.save_as",
+    "ui.quit",
+    "ui.tool",
+    "ui.paste",
+    "view.zoom_in",
+    "view.zoom_out",
+    "view.zoom_fit",
+];

@@ -1,7 +1,8 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
-/// A point or vector in document space, in millimetres.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// A point or vector in document space, in millimetres. Serialized as `[x, y]`.
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(from = "[f64; 2]", into = "[f64; 2]")]
 pub struct Point {
     /// Horizontal position, growing to the right.
     pub x: f64,
@@ -41,6 +42,18 @@ impl Point {
     #[must_use]
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite()
+    }
+}
+
+impl From<[f64; 2]> for Point {
+    fn from([x, y]: [f64; 2]) -> Self {
+        Self { x, y }
+    }
+}
+
+impl From<Point> for [f64; 2] {
+    fn from(p: Point) -> Self {
+        [p.x, p.y]
     }
 }
 
