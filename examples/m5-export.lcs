@@ -1,0 +1,21 @@
+# LaserCraft M5: GRBL G-code export, headless. Run in an empty folder:
+#   lasercraft-cli script /path/to/examples/m5-export.lcs
+project.rename Name tag
+project.set_work_area 300 200
+shape.add_rect 10 10 80 30 @1               # outline, cut last
+shape.add_ellipse 20 25 4 4 @1              # hole, cut before the outline
+shape.add_rect 30 15 50 20 @2               # engraved panel
+layer.set 1 name Cut
+layer.set 1 speed 8
+layer.set 1 max_power 90
+layer.set 1 air on
+layer.set 1 tabs 2
+layer.set 2 name Engrave
+layer.set 2 mode fill
+layer.set 2 speed 120
+layer.set 2 max_power 35
+layer.set 2 interval 2                      # coarse, to keep the file short
+layer.set 2 overscan on
+layer.move 1 bottom
+project.save m5-job.lcproj
+project.export_gcode m5-job.gcode s_max=1000 finish=on

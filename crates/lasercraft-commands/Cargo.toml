@@ -11,6 +11,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+lasercraft-gcode.workspace = true
+lasercraft-plan.workspace = true
 lasercraft-geom.workspace = true
 lasercraft-project.workspace = true
 lasercraft-import.workspace = true

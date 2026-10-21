@@ -97,7 +97,7 @@ and macOS.
 - [x] M4 Toolpath planning: cut ordering (inner first, shortest travel); fill
       scanlines with overscan; kerf offset; tabs/bridges; preview with travel
       moves and time estimate.
-- [ ] M5 GRBL G-code export (M3/M4 dynamic power, S-max).
+- [x] M5 GRBL G-code export (M3/M4 dynamic power, S-max).
 - [ ] M6 Device connection and GRBL streaming: character counting with
       ping-pong fallback, status polling; jog, home, set origin, job origin
       modes (absolute, current position, user origin); framing,

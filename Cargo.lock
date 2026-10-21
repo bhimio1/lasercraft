@@ -1161,8 +1161,10 @@ dependencies = [
 name = "lasercraft-commands"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-gcode",
  "lasercraft-geom",
  "lasercraft-import",
+ "lasercraft-plan",
  "lasercraft-project",
  "serde_json",
 ]
@@ -1174,6 +1176,11 @@ version = "0.1.0"
 [[package]]
 name = "lasercraft-gcode"
 version = "0.1.0"
+dependencies = [
+ "lasercraft-geom",
+ "lasercraft-plan",
+ "lasercraft-project",
+]
 
 [[package]]
 name = "lasercraft-geom"

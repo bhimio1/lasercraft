@@ -250,6 +250,11 @@ pub struct Layer {
         skip_serializing_if = "is_default_tab_width"
     )]
     pub tab_width: f64,
+    /// G-code: constant power (`M3`) instead of the default dynamic power
+    /// (`M4`), whose laser turns off whenever the head stops (M5). Pause is
+    /// then motion only (`docs/spec/safety.md`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub constant_power: bool,
 }
 
 // Planning settings (M4) are left out of files while at their defaults, so
@@ -262,6 +267,11 @@ fn is_zero(v: &f64) -> bool {
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_zero_u32(v: &u32) -> bool {
     *v == 0
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 fn default_tab_width() -> f64 {
@@ -297,6 +307,7 @@ impl Layer {
             kerf: 0.0,
             tabs: 0,
             tab_width: DEFAULT_TAB_WIDTH,
+            constant_power: false,
         }
     }
 
@@ -390,6 +401,7 @@ impl Layer {
             "kerf" => self.kerf.to_string(),
             "tabs" => self.tabs.to_string(),
             "tab_width" => self.tab_width.to_string(),
+            "constant_power" => on(self.constant_power),
             other => return Err(unknown_setting(other)),
         })
     }
@@ -424,6 +436,7 @@ impl Layer {
             "kerf" => next.kerf = number(key, value)?,
             "tabs" => next.tabs = whole(key, value)?,
             "tab_width" => next.tab_width = number(key, value)?,
+            "constant_power" => next.constant_power = switch(key, value)?,
             other => return Err(unknown_setting(other)),
         }
         next.validate()?;
@@ -433,7 +446,7 @@ impl Layer {
 }
 
 /// Every setting name `layer.set` accepts.
-pub const SETTINGS: [&str; 20] = [
+pub const SETTINGS: [&str; 21] = [
     "name",
     "mode",
     "speed",
@@ -454,6 +467,7 @@ pub const SETTINGS: [&str; 20] = [
     "kerf",
     "tabs",
     "tab_width",
+    "constant_power",
 ];
 
 fn unknown_setting(key: &str) -> ProjectError {
@@ -586,11 +600,12 @@ mod tests {
             ("kerf", "-0.08"),
             ("tabs", "4"),
             ("tab_width", "0.5"),
+            ("constant_power", "on"),
         ] {
             l.set(key, value).unwrap();
             assert_eq!(l.get(key).unwrap(), value, "{key}");
         }
-        assert_eq!(SETTINGS.len(), 20);
+        assert_eq!(SETTINGS.len(), 21);
         for key in SETTINGS {
             assert!(l.get(key).is_ok(), "{key}");
         }

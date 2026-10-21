@@ -577,6 +577,7 @@ mod tests {
             "project.load",
             "project.save",
             "edit.copy",
+            "project.export_gcode",
             "layer.select",
         ];
         for command in Registry::with_builtin().iter() {

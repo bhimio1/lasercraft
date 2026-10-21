@@ -8,6 +8,7 @@ use std::path::Path;
 use lasercraft_commands::{CommandError, Invocation, Registry, SESSION_COMMANDS, Session};
 use lasercraft_project::Project;
 
+mod export;
 mod preview;
 
 /// Usage text printed by `help` and on bad arguments.
@@ -19,6 +20,9 @@ usage:
   lasercraft-cli show <project.lcproj> [--json]
   lasercraft-cli preview <project.lcproj> [--svg <out.svg>] [--moves]
                  [--max-speed <mm/s>] [--accel <mm/s²>] [--max-power <%>]
+  lasercraft-cli export <project.lcproj> <out.gcode> [--s-max <n>]
+                 [--air m7|m8] [--finish] [--max-speed <mm/s>]
+                 [--accel <mm/s²>] [--max-power <%>]
   lasercraft-cli commands
   lasercraft-cli help";
 
@@ -79,6 +83,7 @@ pub fn run(args: &[String]) -> Result<String, CliError> {
         "script" => script(rest),
         "show" => show(rest),
         "preview" => preview::preview(rest),
+        "export" => export::export(rest),
         "commands" if rest.is_empty() => Ok(commands()),
         "help" | "--help" | "-h" => Ok(format!("{USAGE}\n")),
         other => Err(usage(&format!("unknown subcommand `{other}`"))),

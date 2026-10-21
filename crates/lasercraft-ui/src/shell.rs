@@ -158,6 +158,7 @@ enum PromptKind {
     Open,
     SaveAs,
     Import,
+    ExportGcode,
 }
 
 /// UI-only state of the main window.
@@ -391,6 +392,10 @@ impl Shell {
                 self.prompt = Some((PromptKind::Import, String::new()));
                 return None;
             }
+            "ui.export_gcode" => {
+                self.prompt = Some((PromptKind::ExportGcode, String::new()));
+                return None;
+            }
             "ui.offset" | "ui.grid_array" | "ui.circular_array" => {
                 self.dialogs.open(&invocation.name);
                 return None;
@@ -430,6 +435,7 @@ impl Shell {
                     ("Save", "ui.save"),
                     ("Save As…", "ui.save_as"),
                     ("Import…", "ui.import"),
+                    ("Save G-code…", "ui.export_gcode"),
                     ("Project Notes…", "ui.notes"),
                     ("Quit", "ui.quit"),
                 ] {
@@ -580,6 +586,7 @@ impl Shell {
             PromptKind::Open => ("Open project", "Path to a .lcproj file:"),
             PromptKind::SaveAs => ("Save project as", "Path to a .lcproj file:"),
             PromptKind::Import => ("Import vector art", "Path to an .svg or .dxf file:"),
+            PromptKind::ExportGcode => ("Save G-code", "Path to the .gcode file to write:"),
         };
         let mut open = true;
         let mut done = None;
@@ -600,6 +607,10 @@ impl Shell {
                 PromptKind::SaveAs => Action::SaveAs(path),
                 PromptKind::Import => Action::Run(Invocation::new(
                     "project.import",
+                    [path.display().to_string()],
+                )),
+                PromptKind::ExportGcode => Action::Run(Invocation::new(
+                    "project.export_gcode",
                     [path.display().to_string()],
                 )),
             });

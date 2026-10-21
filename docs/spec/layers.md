@@ -45,6 +45,7 @@ settings later.
 | `kerf` | Line mode: offset closed shapes by this much, mm; positive moves the cut outward from the part, holes the other way (M4) | 0 | −5–5 |
 | `tabs` | Line mode: uncut tabs per closed outer shape; 0 is off (M4) | 0 | 0–100 |
 | `tab_width` | Line mode: length of each tab, mm (M4) | 1 | 0.01–50 |
+| `constant_power` | G-code: constant power (`M3`) instead of dynamic power (`M4`); with `M3` the laser stays on while the head stops, so Pause is motion only (M5, `docs/spec/gcode.md`) | off | |
 
 - `interval` and `image.interval` also accept `<n>lpi` or `<n>dpi`, meaning
   25.4 / n mm, rounded to the nearest nanometre (so `254lpi` is exactly

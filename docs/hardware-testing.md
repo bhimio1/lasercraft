@@ -15,7 +15,7 @@ each milestone that touches the machine.
 - Record: date, LaserCraft commit, OS, controller and GRBL version (`$I`),
   laser module, and `$30`/`$32` settings.
 
-## Checklist (from M6)
+## Checklist (from M5 and M6)
 
 | # | Check | Expected |
 | --- | --- | --- |
@@ -28,5 +28,7 @@ each milestone that touches the machine.
 | H7 | Trigger a limit switch or alarm mid-job | Streaming stops; the alarm is shown |
 | H8 | Send a job larger than the bed | Refused before anything is sent |
 | H9 | Linux without serial group membership | Permission help naming the right group |
+| H10 | (from M5) `$$` shows `$32=1` and `$30` equal to the export's `--s-max`; stream an exported file with `$C` (check mode) on | GRBL reports no errors; nothing moves or fires |
+| H11 | (from M5) Run a small exported square at low power on scrap | Cut matches the design's position from the origin corner; laser off on travel |
 
 Record results in the PR that touched the behavior, with the details above.

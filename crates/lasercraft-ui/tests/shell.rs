@@ -345,3 +345,34 @@ fn text_tool_click_opens_the_text_window_without_running_anything() {
     assert!(h.log.is_empty());
     assert!(h.session.project().shapes().is_empty());
 }
+
+#[test]
+fn alt_shift_l_asks_where_to_save_gcode() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    h.key(Key::L, Modifiers::ALT | Modifiers::SHIFT);
+    assert!(
+        h.log.is_empty(),
+        "the prompt alone runs nothing: {:?}",
+        h.log
+    );
+    let input = RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+        ..RawInput::default()
+    };
+    let mut output = h.ctx.run_ui(input, |ui| {
+        let view = ShellView {
+            project: h.session.project(),
+            file: None,
+            modified: false,
+            undo: None,
+            can_redo: false,
+        };
+        let _ = h.shell.show(ui, &view);
+    });
+    output.textures_delta.clear();
+    let found = output.shapes.iter().any(|c| match &c.shape {
+        egui::Shape::Text(t) => t.galley.text() == "Path to the .gcode file to write:",
+        _ => false,
+    });
+    assert!(found, "G-code prompt not shown");
+}

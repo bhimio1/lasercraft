@@ -105,3 +105,6 @@ Alt+PageDown   = arrange.align center-y
 Alt+Home       = arrange.align center
 Alt+Shift+H    = arrange.move_together horizontal
 Alt+Shift+V    = arrange.move_together vertical
+
+# G-code (M5)
+Alt+Shift+L  = ui.export_gcode

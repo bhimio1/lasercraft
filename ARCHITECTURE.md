@@ -22,14 +22,14 @@ lasercraft-ui, lasercraft-commands ──► lasercraft-geom
 lasercraft-commands, lasercraft-ui ──► lasercraft-import (M3; the UI only lists font families)
 lasercraft-import ──► lasercraft-geom
 lasercraft-app ──► lasercraft-plan (M4)
-lasercraft-app ┄► lasercraft-device [M6], lasercraft-gcode [M5]
+lasercraft-commands ──► lasercraft-gcode ──► lasercraft-plan (M5: project.export_gcode)
+lasercraft-app ┄► lasercraft-device [M6]
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
-      └┄► lasercraft-gcode, lasercraft-device (simulator) [M5–M6]
+      └┄► lasercraft-device (simulator) [M6]
 
 lasercraft-plan ──► lasercraft-project, lasercraft-geom (M4)
 lasercraft-plan ┄► lasercraft-raster [M7]
-lasercraft-gcode ┄► lasercraft-plan [M5]
 lasercraft-raster, lasercraft-device, lasercraft-geom: no workspace dependencies
 ```
 
@@ -46,7 +46,7 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-import` | SVG and DXF to geometry; font lookup and text outlines. | M3: SVG (usvg), DXF (own reader), system fonts (fontdb), glyph outlines (ttf-parser) |
 | `lasercraft-raster` | Image modes and dithering. | Empty until M7 |
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
-| `lasercraft-gcode` | GRBL-dialect output, with work-area and power checks. | Empty until M5 |
+| `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5 |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M0: message types, GRBL real-time bytes, state names, Linux permission help |
 | `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags) |
 | `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields |

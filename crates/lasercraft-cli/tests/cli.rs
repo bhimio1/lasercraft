@@ -175,6 +175,52 @@ fn script_can_save_and_load() {
 }
 
 #[test]
+fn m5_export_writes_the_golden_program_and_cli_export_matches() {
+    let dir = temp_dir("export");
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/m5-export.lcs");
+    let out = Command::new(env!("CARGO_BIN_EXE_lasercraft-cli"))
+        .args(["script", script])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    let gcode = std::fs::read_to_string(dir.join("m5-job.gcode")).unwrap();
+    let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/m5-export.gcode");
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(golden_path, &gcode).unwrap();
+    }
+    assert_eq!(
+        gcode,
+        std::fs::read_to_string(golden_path).unwrap_or_default()
+    );
+    // The export subcommand gives the same program.
+    let again = dir.join("again.gcode");
+    let job = dir.join("m5-job.lcproj");
+    let out = cli(&[
+        "export",
+        path_str(&job),
+        path_str(&again),
+        "--s-max",
+        "1000",
+        "--finish",
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(stdout(&out).starts_with("exported "), "{}", stdout(&out));
+    assert_eq!(std::fs::read_to_string(&again).unwrap(), gcode);
+    // An off-bed job fails with exit code 1 and writes nothing.
+    let out = cli(&["run", path_str(&job), "shape.add_rect 290 190 20 20 @1"]);
+    assert!(out.status.success());
+    let refused = dir.join("refused.gcode");
+    let out = cli(&["export", path_str(&job), path_str(&refused)]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stderr(&out).contains("does not fit"), "{}", stderr(&out));
+    assert!(!refused.exists());
+    let out = cli(&["export", path_str(&job), path_str(&refused), "--bogus"]);
+    assert_eq!(out.status.code(), Some(2));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn bad_usage_exits_with_two() {
     let out = cli(&["export"]);
     assert_eq!(out.status.code(), Some(2));

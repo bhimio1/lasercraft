@@ -12,6 +12,8 @@ mod import;
 mod node;
 mod objects;
 mod path;
+// M5: G-code export.
+mod export;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -28,6 +30,8 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(node::commands());
     all.extend(path::commands());
     all.extend(arrange::commands());
+    // M5
+    all.extend(export::commands());
     all
 }
 
