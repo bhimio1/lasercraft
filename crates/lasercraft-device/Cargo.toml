@@ -11,4 +11,5 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+serialport.workspace = true
 

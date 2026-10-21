@@ -4,9 +4,13 @@
 //! and checks the result with the independent [`verify`] before returning
 //! it. Pure and deterministic: no I/O.
 
+mod frame;
+mod place;
 mod verify;
 mod write;
 
+pub use frame::{FrameShape, convex_hull, frame};
+pub use place::{Anchor, Placement, job_box, machine_delta, place, to_document, to_machine};
 pub use verify::{Limits, MAX_LINE, Report, Violation, verify};
 
 use std::fmt;
@@ -51,6 +55,8 @@ pub struct Options {
     pub air: Air,
     /// End with `G0 X0 Y0`.
     pub finish_at_origin: bool,
+    /// Where the job runs (`docs/spec/laser.md`).
+    pub placement: Placement,
 }
 
 impl Default for Options {
@@ -59,6 +65,7 @@ impl Default for Options {
             s_max: 1000.0,
             air: Air::M8,
             finish_at_origin: false,
+            placement: Placement::Absolute,
         }
     }
 }
@@ -140,7 +147,12 @@ pub fn export(
     options: &Options,
 ) -> Result<Exported, ExportError> {
     options.validate()?;
-    let plan = plan(project, machine)?;
+    let plan = place(
+        plan(project, machine)?,
+        project.work_area(),
+        options.placement,
+        machine.max_speed,
+    );
     plan.check_bounds(project.work_area())
         .map_err(ExportError::OutOfBounds)?;
     if !plan.moves.iter().any(|m| m.kind == MoveKind::Burn) {

@@ -3,14 +3,14 @@
 use std::fmt::Write as _;
 
 use lasercraft_geom::Point;
-use lasercraft_plan::{Move, MoveKind, Plan, duration, origin_point};
+use lasercraft_plan::{Move, MoveKind, Plan, duration};
 use lasercraft_project::{Color, Project, WorkArea};
 
 use crate::{Air, Options};
 
 /// A number with at most `decimals` decimals, trailing zeros dropped, never
 /// `-0`.
-fn num(value: f64, decimals: usize) -> String {
+pub(crate) fn num(value: f64, decimals: usize) -> String {
     let text = format!("{value:.decimals$}");
     let text = if text.contains('.') {
         text.trim_end_matches('0').trim_end_matches('.')
@@ -26,8 +26,7 @@ fn num(value: f64, decimals: usize) -> String {
 
 /// Document point to machine coordinates: distances from the origin corner.
 fn machine(area: &WorkArea, p: Point) -> Point {
-    let o = origin_point(area);
-    Point::new((p.x - o.x).abs(), (p.y - o.y).abs())
+    crate::place::to_machine(area, p)
 }
 
 /// A comment line, kept to safe characters and within the line limit.
@@ -58,7 +57,8 @@ struct Writer<'a> {
     area: &'a WorkArea,
     s_max: f64,
     air: Air,
-    pos: Point,
+    /// Unknown until the first move: the head may be anywhere.
+    pos: Option<Point>,
     s: Option<f64>,
     f: Option<f64>,
     mode: Mode,
@@ -110,7 +110,7 @@ impl Writer<'_> {
 
     fn motion(&mut self, m: &Move) {
         let to = machine(self.area, m.to);
-        if to == self.pos {
+        if Some(to) == self.pos {
             return;
         }
         let mut text = String::new();
@@ -136,7 +136,7 @@ impl Writer<'_> {
             }
         }
         self.line(&text);
-        self.pos = to;
+        self.pos = Some(to);
     }
 }
 
@@ -148,7 +148,7 @@ pub(crate) fn program(project: &Project, plan: &Plan, options: &Options) -> Stri
         area,
         s_max: options.s_max,
         air: options.air,
-        pos: machine(area, plan.start),
+        pos: None,
         s: None,
         f: None,
         mode: Mode::Off,
@@ -175,6 +175,14 @@ pub(crate) fn program(project: &Project, plan: &Plan, options: &Options) -> Stri
     w.line("G90 G21");
     w.line("M5 S0");
     w.s = Some(0.0);
+    if let Some(first) = plan.moves.first()
+        && first.kind != MoveKind::Travel
+    {
+        // The head may be anywhere: get to the first cut with the laser off.
+        let to = machine(area, first.from);
+        w.line(&format!("G0 X{} Y{}", num(to.x, 3), num(to.y, 3)));
+        w.pos = Some(to);
+    }
     for m in &plan.moves {
         w.enter_layer(project, m.layer);
         w.motion(m);

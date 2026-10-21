@@ -121,17 +121,16 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `i_overlay` | Pure-Rust polygon booleans and offsets (union, subtract, intersect, weld, offset, kerf); MIT. |
 | `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |
-
 | `usvg` (no default features) | SVG import: resolves CSS, `<use>`, transforms and units and turns every element into absolute lines and Béziers; text and font features are off, so no font stack is pulled in. Apache-2.0 OR MIT. |
 | `fontdb` (`std`, `fs`, `fontconfig`; no `memmap`) | Finds installed fonts by family name for text (M3). MIT. |
 | `ttf-parser` (`std` only) | Reads glyph outlines, advances, cap height and `kern` pairs from TrueType/OpenType fonts. MIT OR Apache-2.0. |
+| `serialport` (no default features) | Opens and lists serial ports on Linux, Windows and macOS (M6). Without its `libudev` feature it lists Linux ports from sysfs, so no C library is needed. MPL-2.0. |
 
 DXF is read by our own small parser (`lasercraft-import/src/dxf.rs`): the
 available crates pull in large dependency trees for a format whose ASCII
 form is simple group-code pairs.
 
-Planned, each to be justified here when added: `serialport` (M6, serial I/O),
-`image` (M7).
+Planned, to be justified here when added: `image` (M7).
 
 M3 notes: node editing, joining and splitting live in `lasercraft-geom`
 (`nodes`); groups are a chain of group ids on each shape

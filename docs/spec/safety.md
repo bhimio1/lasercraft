@@ -29,15 +29,19 @@ and must have tests there. This software drives a real laser.
 7. While connected, Stop and Pause are always visible and enabled, whatever
    panel or dialog is open. (M6)
 8. Pause sends GRBL's feed hold `!`; Resume sends `~`; Stop stops streaming
-   immediately and sends soft reset `0x18`. These are real-time bytes, so they
+   immediately, sends feed hold, then soft reset `0x18` (as soon as the hold
+   completes, at most 1 s later). These are real-time bytes, so they
    bypass the streaming queue and GRBL acts on them mid-line. The device
    thread handles them before any queued work. (M6)
 9. GRBL's documentation says a feed hold stops motion but not the spindle
    output, and that `M3` (constant power) keeps the laser at its set power
    while stopped, whereas `M4` (dynamic power) turns it off when not moving.
-   Therefore: G-code uses `M4` by default (M5); a job that uses `M3` labels
-   Pause as "motion only, the laser may stay on" and makes Stop the
-   highlighted action (M6). (Decided 2026-10-21, owner delegated the call.)
+   Therefore: G-code uses `M4` by default (M5); when a job that uses `M3` is
+   paused, the controller sends GRBL's spindle stop `0x9E` as soon as the
+   hold completes (GRBL restores the spindle on resume), and Pause is
+   labelled "Pause (motion)" for such jobs (M6). Stop is hold, then soft
+   reset (`docs/spec/device.md`). (Decided 2026-10-21, owner delegated the
+   call.)
 
 ## Faults
 
