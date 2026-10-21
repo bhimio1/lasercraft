@@ -1,0 +1,20 @@
+# LaserCraft default keymap.
+#
+# One binding per line:  <chord> = <invocation>
+# A chord is optional modifiers (Ctrl, Shift, Alt) and a key name, joined by `+`.
+# Ctrl means Cmd on macOS. Key names follow egui (Space, F5, A, Plus, Minus, ...).
+# Invocations are registry commands, or `ui.*` actions handled by the UI.
+#
+# Defaults follow LightBurn's published hotkey list where one exists
+# (docs/spec/keymap.md gives the source page and verification status).
+
+# File
+Ctrl+N       = ui.new
+Ctrl+O       = ui.open
+Ctrl+S       = ui.save
+Ctrl+Shift+S = ui.save_as
+Ctrl+Q       = ui.quit
+
+# Edit
+Ctrl+Z       = edit.undo
+Ctrl+Shift+Z = edit.redo
