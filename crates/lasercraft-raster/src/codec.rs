@@ -206,6 +206,21 @@ mod tests {
     }
 
     #[test]
+    fn fixture_files_decode_with_their_resolution() {
+        let jpg = decode(include_bytes!("../../../examples/fixtures/m7-tile.jpg")).unwrap();
+        assert_eq!((jpg.gray.width(), jpg.gray.height()), (16, 8));
+        assert!(
+            jpg.gray.get(2, 4) < 20 && jpg.gray.get(13, 4) > 235,
+            "dark left, white right"
+        );
+        let [x, _] = jpg.pixels_per_mm.unwrap();
+        assert!((x - 300.0 / 25.4).abs() < 1e-9);
+        let png = decode(include_bytes!("../../../examples/fixtures/m7-photo.png")).unwrap();
+        assert_eq!((png.gray.width(), png.gray.height()), (120, 80));
+        assert_eq!(png.pixels_per_mm, Some([10.0, 10.0]));
+    }
+
+    #[test]
     fn rejects_other_files() {
         assert!(decode(b"GIF89a").is_err());
         assert!(decode(b"\x89PNG\r\n\x1a\nbroken").is_err());

@@ -355,3 +355,42 @@ fn m6_simulate_runs_device_commands_on_the_simulated_grbl() {
     assert_eq!(out.status.code(), Some(2));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn m7_images_script_and_gcode_match_golden() {
+    let dir = temp_dir("images");
+    let fixtures = dir.join("examples/fixtures");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    for name in ["m7-photo.png", "m7-tile.jpg"] {
+        std::fs::copy(format!("{source}/fixtures/{name}"), fixtures.join(name)).unwrap();
+    }
+    let out = cli_in(&dir, &["script", &format!("{source}/m7-images.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let gcode = std::fs::read_to_string(dir.join("m7-images.gcode")).unwrap();
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let (out_path, gcode_path) = (
+        format!("{golden}/m7-images.out"),
+        format!("{golden}/m7-images.gcode"),
+    );
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(&out_path, stdout(&out)).unwrap();
+        std::fs::write(&gcode_path, &gcode).unwrap();
+    }
+    assert_eq!(
+        stdout(&out),
+        std::fs::read_to_string(&out_path).unwrap_or_default()
+    );
+    assert_eq!(
+        gcode,
+        std::fs::read_to_string(&gcode_path).unwrap_or_default()
+    );
+    // The saved project reloads with its images intact.
+    let shown = cli_in(&dir, &["show", "m7-images.lcproj"]);
+    assert!(
+        stdout(&shown).contains("image jarvis at 0.25 mm"),
+        "{}",
+        stdout(&shown)
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -114,7 +114,7 @@ impl Plan {
                 "layer {} \"{}\": {}, {} pass(es), {} mm/s, power {}%",
                 l.color,
                 l.name,
-                l.mode,
+                l.kind(),
                 l.passes,
                 num(l.speed),
                 num(l.power)

@@ -132,6 +132,7 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
         if outlines.is_empty() && images.is_empty() {
             continue;
         }
+        let has_vectors = !outlines.is_empty();
         if layer.speed > machine.max_speed {
             warn(
                 &mut warnings,
@@ -199,6 +200,8 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
             speed: layer.speed,
             power,
             overscan,
+            vectors: has_vectors,
+            images: !images.is_empty(),
         });
     }
     let mut moves = out.moves;

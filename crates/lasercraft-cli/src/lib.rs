@@ -188,17 +188,33 @@ fn mm(value: f64) -> String {
     }
 }
 
-/// A layer's settings in one line, listing fill settings only for fill layers.
-fn layer_settings(l: &lasercraft_project::Layer) -> String {
+/// A layer's settings in one line: fill settings only for fill layers,
+/// image settings only for layers with images.
+fn layer_settings(l: &lasercraft_project::Layer, vectors: bool, images: bool) -> String {
+    let kind = match (vectors, images) {
+        (true, true) => format!("{} + image", l.mode),
+        (false, true) => "image".to_owned(),
+        _ => l.mode.to_string(),
+    };
     let mut text = format!(
-        "{} {} mm/s, power {}–{}%, {} pass(es)",
-        l.mode,
+        "{kind} {} mm/s, power {}–{}%, {} pass(es)",
         mm(l.speed),
         mm(l.min_power),
         mm(l.max_power),
         l.passes
     );
-    if l.mode == lasercraft_project::Mode::Fill {
+    if images {
+        let _ = write!(
+            text,
+            ", image {} at {} mm{}",
+            l.image.dither,
+            mm(l.image.interval),
+            if l.image.negative { ", negative" } else { "" }
+        );
+    }
+    if !vectors {
+        // Only the image settings apply.
+    } else if l.mode == lasercraft_project::Mode::Fill {
         let _ = write!(
             text,
             ", interval {} mm at {}°{}{}{}",
@@ -213,7 +229,7 @@ fn layer_settings(l: &lasercraft_project::Layer) -> String {
             if l.crosshatch { ", crosshatch" } else { "" }
         );
     }
-    if l.mode == lasercraft_project::Mode::Line {
+    if vectors && l.mode == lasercraft_project::Mode::Line {
         if l.kerf != 0.0 {
             let _ = write!(text, ", kerf {} mm", mm(l.kerf));
         }
@@ -248,11 +264,14 @@ pub fn summary(project: &Project) -> String {
     );
     for color in project.used_layers() {
         if let Ok(l) = project.layer(color) {
+            let on_layer = || project.shapes().iter().filter(move |s| s.layer() == color);
+            let images = on_layer().any(|s| s.geometry().is_image());
+            let vectors = on_layer().any(|s| !s.geometry().is_image());
             let _ = write!(
                 out,
                 "\n  layer {color:>2} \"{}\": {}",
                 l.name,
-                layer_settings(l)
+                layer_settings(l, vectors, images)
             );
         }
     }
