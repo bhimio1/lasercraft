@@ -12,109 +12,17 @@ use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
 use crate::laser_panel::{self, LaserAction, LaserPanel, LaserView};
 use crate::layers_panel::{LayersPanel, palette_strip};
+use crate::menus;
 use crate::preview::{Preview, PreviewWindow};
 
-/// Tools in the tool palette: label, `ui.tool` argument.
+/// The drawing tools: label, `ui.tool` argument.
 const TOOLS: [(&str, &str, Tool); 6] = [
     ("Select", "select", Tool::Select),
     ("Line", "line", Tool::Line),
     ("Rectangle", "rect", Tool::Rect),
     ("Ellipse", "ellipse", Tool::Ellipse),
     ("Text", "text", Tool::Text),
-    ("Edit Nodes", "nodes", Tool::Nodes),
-];
-
-/// M3 Tools menu entries that act on the selection: label, invocation.
-const PATH_TOOLS: [(&str, &str); 9] = [
-    ("Weld", "path.weld"),
-    ("Union", "path.union"),
-    ("Subtract", "path.subtract"),
-    ("Intersect", "path.intersect"),
-    ("Offset…", "ui.offset"),
-    ("Convert to Path", "shape.to_path"),
-    ("Close Path", "path.close"),
-    ("Join Paths", "path.join"),
-    ("Break Apart", "path.break_apart"),
-];
-
-/// M3 Arrange menu entries: submenu (empty for top level), label, invocation.
-const ARRANGE_M3: [(&str, &str, &str); 22] = [
-    ("", "Group", "group.create"),
-    ("", "Ungroup", "group.ungroup"),
-    ("Align", "Left Edges", "arrange.align left"),
-    ("Align", "Right Edges", "arrange.align right"),
-    ("Align", "Top Edges", "arrange.align top"),
-    ("Align", "Bottom Edges", "arrange.align bottom"),
-    ("Align", "Vertical Centers", "arrange.align center-x"),
-    ("Align", "Horizontal Centers", "arrange.align center-y"),
-    ("Align", "Centers", "arrange.align center"),
-    (
-        "Distribute",
-        "Horizontal Spacing",
-        "arrange.distribute h-spaced",
-    ),
-    (
-        "Distribute",
-        "Horizontal Centers",
-        "arrange.distribute h-centered",
-    ),
-    (
-        "Distribute",
-        "Vertical Spacing",
-        "arrange.distribute v-spaced",
-    ),
-    (
-        "Distribute",
-        "Vertical Centers",
-        "arrange.distribute v-centered",
-    ),
-    (
-        "Distribute",
-        "Pack Horizontally",
-        "arrange.move_together horizontal",
-    ),
-    (
-        "Distribute",
-        "Pack Vertically",
-        "arrange.move_together vertical",
-    ),
-    ("Move on Bed", "Center", "arrange.move_to_bed center"),
-    ("Move on Bed", "Top Left", "arrange.move_to_bed top-left"),
-    ("Move on Bed", "Top Right", "arrange.move_to_bed top-right"),
-    (
-        "Move on Bed",
-        "Bottom Left",
-        "arrange.move_to_bed bottom-left",
-    ),
-    (
-        "Move on Bed",
-        "Bottom Right",
-        "arrange.move_to_bed bottom-right",
-    ),
-    ("", "Grid Array…", "ui.grid_array"),
-    ("", "Circular Array…", "ui.circular_array"),
-];
-
-/// Menu entries that act on the selection: label, invocation.
-const SELECTION_EDITS: [(&str, &str); 5] = [
-    ("Cut", "edit.cut"),
-    ("Copy", "edit.copy"),
-    ("Duplicate", "shape.duplicate"),
-    ("Delete", "shape.delete"),
-    ("Invert Selection", "select.invert"),
-];
-
-const ARRANGE: [(&str, &str); 10] = [
-    ("Rotate 90° Clockwise", "shape.rotate 90"),
-    ("Rotate 90° Counter-clockwise", "shape.rotate -90"),
-    ("Mirror Horizontally", "shape.flip horizontal"),
-    ("Mirror Vertically", "shape.flip vertical"),
-    ("Forward", "shape.raise"),
-    ("Backward", "shape.lower"),
-    ("To Front", "shape.to_front"),
-    ("To Back", "shape.to_back"),
-    ("Select Next", "select.next"),
-    ("Select Previous", "select.previous"),
+    ("Edit nodes", "nodes", Tool::Nodes),
 ];
 
 /// How many console lines are kept.
@@ -484,146 +392,239 @@ impl Shell {
         })
     }
 
-    fn menu_item(&mut self, ui: &mut egui::Ui, label: &str, bound: &str, enabled: bool) -> bool {
+    fn menu_item(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        bound: &str,
+        enabled: bool,
+        why: &str,
+    ) -> bool {
         let shortcut = self
             .keymap
             .chord_for(bound)
-            .map(ToString::to_string)
+            .map(Chord::label)
             .unwrap_or_default();
-        ui.add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut))
-            .clicked()
+        let mut response =
+            ui.add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut));
+        if !why.is_empty() {
+            response = response.on_disabled_hover_text(why);
+        }
+        response.clicked()
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, actions: &mut Vec<Action>) {
+        let cx = menus::Context::of(view.project);
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                for (label, bound) in [
-                    ("New", "ui.new"),
-                    ("Open…", "ui.open"),
-                    ("Save", "ui.save"),
-                    ("Save As…", "ui.save_as"),
-                    ("Import…", "ui.import"),
-                    ("Save G-code…", "ui.export_gcode"),
-                    ("Project Notes…", "ui.notes"),
-                    ("Quit", "ui.quit"),
-                ] {
-                    if self.menu_item(ui, label, bound, true) {
-                        actions.extend(self.resolve(Invocation::bare(bound)));
-                    }
-                }
-            });
+            ui.menu_button("File", |ui| self.menu_rows(ui, menus::FILE, &cx, actions));
             ui.menu_button("Edit", |ui| {
-                let undo = view
-                    .undo
-                    .map_or_else(|| "Undo".to_owned(), |inv| format!("Undo {}", inv.name));
-                if self.menu_item(ui, &undo, "edit.undo", view.undo.is_some()) {
+                let undo = view.undo.map_or_else(
+                    || "Undo".to_owned(),
+                    |inv| format!("Undo {}", lasercraft_commands::action_name(inv)),
+                );
+                if self.menu_item(ui, &undo, "edit.undo", view.undo.is_some(), "") {
                     actions.push(Action::Run(Invocation::bare("edit.undo")));
                 }
-                if self.menu_item(ui, "Redo", "edit.redo", view.can_redo) {
+                if self.menu_item(ui, "Redo", "edit.redo", view.can_redo, "") {
                     actions.push(Action::Run(Invocation::bare("edit.redo")));
                 }
-                ui.separator();
-                let selected = !view.project.selection().is_empty();
-                for (label, line) in SELECTION_EDITS {
-                    self.menu_line(ui, label, line, selected, actions);
-                }
-                let pastable = !view.project.clipboard().is_empty();
-                self.menu_line(ui, "Paste", "ui.paste", pastable, actions);
-                self.menu_line(
-                    ui,
-                    "Paste in Place",
-                    "edit.paste_in_place",
-                    pastable,
-                    actions,
-                );
-                self.menu_line(ui, "Select All", "select.all", true, actions);
+                self.menu_rows(ui, menus::EDIT, &cx, actions);
             });
-            ui.menu_button("Tools", |ui| {
-                for (label, name, _) in TOOLS {
-                    self.menu_line(ui, label, &format!("ui.tool {name}"), true, actions);
-                }
-                ui.separator();
-                let selected = !view.project.selection().is_empty();
-                for (label, line) in PATH_TOOLS {
-                    self.menu_line(ui, label, line, selected, actions);
-                }
-                ui.separator();
-                let image = view.project.selection().into_iter().any(|id| {
-                    view.project
-                        .shape(id)
-                        .is_some_and(|s| s.geometry().is_image())
-                });
-                self.menu_line(ui, "Adjust Image…", "ui.adjust_image", image, actions);
-            });
+            ui.menu_button("Tools", |ui| self.menu_rows(ui, menus::TOOLS, &cx, actions));
             ui.menu_button("Arrange", |ui| {
-                let selected = !view.project.selection().is_empty();
-                for (label, line) in ARRANGE {
-                    let enabled = selected || line.starts_with("select.");
-                    self.menu_line(ui, label, line, enabled, actions);
-                }
-                ui.separator();
-                self.arrange_m3(ui, selected, actions);
+                self.menu_rows(ui, menus::ARRANGE, &cx, actions);
             });
+            ui.menu_button("Machine", |ui| self.machine_menu(ui, view, actions));
             ui.menu_button("View", |ui| {
-                self.menu_line(ui, "Zoom In", "view.zoom_in", true, actions);
-                self.menu_line(ui, "Zoom Out", "view.zoom_out", true, actions);
-                self.menu_line(ui, "Fit Bed", "view.zoom_fit", true, actions);
+                self.menu_rows(ui, menus::VIEW, &cx, actions);
                 ui.separator();
-                self.menu_line(ui, "Side Panels", "ui.toggle_panels", true, actions);
-                self.menu_line(ui, "Job Preview…", "ui.preview", true, actions);
-            });
-            ui.menu_button("Laser", |ui| {
-                let ready = view.laser.ready;
-                let idle = ready && view.laser.busy.is_none();
-                self.menu_line(ui, "Laser Panel", "ui.laser", true, actions);
-                ui.separator();
-                self.menu_line(ui, "Start", "ui.device_start", idle, actions);
-                self.menu_line(ui, "Frame", "ui.device_frame", idle, actions);
-                self.menu_line(
-                    ui,
-                    "Frame Outline",
-                    "ui.device_frame_outline",
-                    idle,
-                    actions,
-                );
-                self.menu_line(ui, "Pause / Resume", "ui.device_pause", ready, actions);
-                self.menu_line(
-                    ui,
-                    "Stop",
-                    "device.stop",
-                    view.laser.port.is_some(),
-                    actions,
-                );
-                ui.separator();
-                self.menu_line(ui, "Home", "device.home", idle, actions);
-                self.menu_line(ui, "Unlock", "device.unlock", idle, actions);
-                self.menu_line(
-                    ui,
-                    "Disconnect",
-                    "device.disconnect",
-                    view.laser.port.is_some(),
-                    actions,
-                );
+                let shortcut = self
+                    .keymap
+                    .chord_for("ui.toggle_panels")
+                    .map(Chord::label)
+                    .unwrap_or_default();
+                let tick = egui::Button::new("Side panels")
+                    .selected(self.panels)
+                    .shortcut_text(shortcut);
+                if ui.add(tick).clicked() {
+                    actions.extend(self.resolve(Invocation::bare("ui.toggle_panels")));
+                }
             });
         });
     }
 
-    /// Grouping, alignment, distribution, bed placement and arrays, with
-    /// submenus in the order of [`ARRANGE_M3`].
-    fn arrange_m3(&mut self, ui: &mut egui::Ui, selected: bool, actions: &mut Vec<Action>) {
-        let mut done: Vec<&str> = Vec::new();
-        for (menu, label, line) in ARRANGE_M3 {
-            if menu.is_empty() {
-                self.menu_line(ui, label, line, selected, actions);
-            } else if !done.contains(&menu) {
-                done.push(menu);
-                ui.menu_button(menu, |ui| {
-                    for (_, label, line) in ARRANGE_M3.iter().filter(|e| e.0 == menu) {
-                        self.menu_line(ui, label, line, selected, actions);
+    /// Draws menu rows from a table in [`menus`].
+    fn menu_rows(
+        &mut self,
+        ui: &mut egui::Ui,
+        rows: &[menus::Row],
+        cx: &menus::Context,
+        actions: &mut Vec<Action>,
+    ) {
+        for row in rows {
+            match *row {
+                menus::Row::Item(label, line, need) => {
+                    self.menu_line(ui, label, line, need.met(cx), need.reason(), actions);
+                }
+                menus::Row::Tool(label, name) => {
+                    let line = format!("ui.tool {name}");
+                    let active = TOOLS
+                        .iter()
+                        .any(|t| t.1 == name && t.2 == self.canvas.tool());
+                    let shortcut = self
+                        .keymap
+                        .chord_for(&line)
+                        .map(Chord::label)
+                        .unwrap_or_default();
+                    let button = egui::Button::new(label)
+                        .selected(active)
+                        .shortcut_text(shortcut);
+                    if ui.add(button).clicked() {
+                        actions.extend(self.resolve(Invocation::new("ui.tool", [name])));
                     }
-                });
+                }
+                menus::Row::Sub(label, need, rows) => {
+                    ui.add_enabled_ui(need.met(cx), |ui| {
+                        ui.menu_button(label, |ui| self.menu_rows(ui, rows, cx, actions))
+                            .response
+                            .on_disabled_hover_text(need.reason());
+                    });
+                }
+                menus::Row::Sep => {
+                    ui.separator();
+                }
             }
         }
+    }
+
+    /// Machine: connection, job control, homing and the user origin. Pause
+    /// and Stop are enabled whenever a machine is connected.
+    fn machine_menu(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, actions: &mut Vec<Action>) {
+        const OFFLINE: &str = "Connect to a machine first.";
+        let laser = view.laser;
+        let connected = laser.port.is_some();
+        let alarm = laser.state.starts_with("Alarm");
+        let idle = laser.ready && laser.busy.is_none() && !alarm;
+        let output = has_output(view.project);
+        let why = |ok: bool| if ok { "" } else { OFFLINE };
+        if connected {
+            self.menu_line(
+                ui,
+                "Disconnect",
+                "device.disconnect",
+                laser.busy.is_none(),
+                "Stop the job first.",
+                actions,
+            );
+        } else if ui
+            .add_enabled(self.laser.can_connect(), egui::Button::new("Connect"))
+            .on_disabled_hover_text("Choose a port in the Machine panel first.")
+            .clicked()
+        {
+            actions.extend(self.laser.connect());
+        }
+        ui.separator();
+        let no_output = if idle {
+            "Nothing to cut: no output layer has shapes."
+        } else {
+            OFFLINE
+        };
+        self.menu_line(
+            ui,
+            "Start",
+            "ui.device_start",
+            idle && output,
+            no_output,
+            actions,
+        );
+        let (pause, hint) = match &laser.busy {
+            Some(busy) if busy.paused => ("Resume", ""),
+            Some(busy) if busy.constant_power => ("Pause (motion only)", PAUSE_M3),
+            _ => ("Pause", ""),
+        };
+        let shortcut = self
+            .keymap
+            .chord_for("ui.device_pause")
+            .map(Chord::label)
+            .unwrap_or_default();
+        let mut response = ui
+            .add_enabled(connected, egui::Button::new(pause).shortcut_text(shortcut))
+            .on_disabled_hover_text(OFFLINE);
+        if !hint.is_empty() {
+            response = response.on_hover_text(hint);
+        }
+        if response.clicked() {
+            actions.extend(self.resolve(Invocation::bare("ui.device_pause")));
+        }
+        self.menu_line(ui, "Stop", "device.stop", connected, OFFLINE, actions);
+        ui.separator();
+        self.menu_line(
+            ui,
+            "Frame",
+            "ui.device_frame",
+            idle && output,
+            no_output,
+            actions,
+        );
+        self.menu_line(
+            ui,
+            "Frame outline",
+            "ui.device_frame_outline",
+            idle && output,
+            no_output,
+            actions,
+        );
+        ui.separator();
+        self.menu_line(
+            ui,
+            "Home",
+            "device.home",
+            laser.ready && laser.busy.is_none(),
+            why(connected),
+            actions,
+        );
+        let go = idle && laser.user_origin.is_some();
+        if ui
+            .add_enabled(go, egui::Button::new("Go to user origin"))
+            .on_disabled_hover_text(if idle {
+                "Set a user origin first."
+            } else {
+                OFFLINE
+            })
+            .clicked()
+            && let Some(origin) = laser.user_origin
+        {
+            actions.extend(self.laser.go_to(origin));
+        }
+        if ui
+            .add_enabled(
+                idle && laser.position.is_some(),
+                egui::Button::new("Set user origin"),
+            )
+            .on_disabled_hover_text(OFFLINE)
+            .clicked()
+        {
+            actions.push(Action::Laser(LaserAction::SetOrigin));
+        }
+        if ui
+            .add_enabled(
+                laser.user_origin.is_some(),
+                egui::Button::new("Clear user origin"),
+            )
+            .on_disabled_hover_text("No user origin is set.")
+            .clicked()
+        {
+            actions.push(Action::Laser(LaserAction::ClearOrigin));
+        }
+        let clear = connected && alarm && laser.busy.is_none();
+        self.menu_line(
+            ui,
+            "Clear alarm",
+            "device.unlock",
+            clear,
+            "Only needed after an alarm.",
+            actions,
+        );
     }
 
     /// A menu item that runs `line` (shown with its bound chord).
@@ -633,9 +634,10 @@ impl Shell {
         label: &str,
         line: &str,
         enabled: bool,
+        why: &str,
         actions: &mut Vec<Action>,
     ) {
-        if self.menu_item(ui, label, line, enabled)
+        if self.menu_item(ui, label, line, enabled, why)
             && let Ok(invocation) = Invocation::parse(line)
         {
             actions.extend(self.resolve(invocation));
@@ -649,7 +651,7 @@ impl Shell {
             let hint = self
                 .keymap
                 .chord_for(&line)
-                .map_or_else(String::new, |c| format!(" ({c})"));
+                .map_or_else(String::new, |c| format!(" ({})", c.label()));
             let active = self.canvas.tool() == tool;
             if ui
                 .selectable_label(active, label)
@@ -768,4 +770,16 @@ fn status_bar(
             ));
         }
     });
+}
+
+/// What the Pause item says while a constant-power (`M3`) job runs.
+const PAUSE_M3: &str = "Stops motion at once. The laser may stay on until the head \
+    stops; LaserCraft then switches it off.";
+
+/// Whether an output layer has shapes: a job would cut something.
+fn has_output(project: &Project) -> bool {
+    project
+        .used_layers()
+        .into_iter()
+        .any(|c| project.layer(c).is_ok_and(|l| l.output))
 }

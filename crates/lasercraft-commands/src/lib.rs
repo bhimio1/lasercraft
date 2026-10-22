@@ -9,6 +9,7 @@
 //! - Names are `area.action`, such as `project.set_work_area`.
 //! - Lengths are millimetres, angles degrees.
 
+mod action;
 mod args;
 mod cmds;
 mod command;
@@ -17,6 +18,7 @@ mod invocation;
 mod registry;
 mod session;
 
+pub use action::action_name;
 pub use cmds::device::{DeviceContext, with_context};
 pub use command::{Command, Outcome};
 pub use error::CommandError;

@@ -586,6 +586,18 @@ mod tests {
     }
 
     #[test]
+    fn every_undoable_command_has_an_action_name() {
+        for line in round_trip_script() {
+            let inv = Invocation::parse(&line).unwrap();
+            let name = crate::action_name(&inv);
+            assert!(
+                name != "changes" && !name.contains('.') && !name.contains('_'),
+                "`{line}` reads \"{name}\""
+            );
+        }
+    }
+
+    #[test]
     fn every_builtin_undoable_command_is_in_the_round_trip() {
         // Keep `round_trip_script` complete: every command is either covered
         // there or listed as not undoable here.

@@ -19,7 +19,12 @@ Later chords are bound as their commands arrive; the table below says when.
   tools, paste at the pointer, notes, side panels, laser actions that use the
   Laser panel's settings) and `view.*` (zoom). Front-end actions do not
   change the project; the actions they lead to are commands.
-- Menu items show the chord bound to their action.
+- Menu items and tooltips show the chord bound to their action, in symbol
+  form (`docs/spec/style/naming.md`, "Chords"): "Ctrl+=", "Ctrl+-",
+  "Ctrl+`", ".", ",", "PgUp", "PgDn", "Del", "Esc", "Alt++", and the
+  arrow glyphs of the UI font (⏴ ⏵ ⏶ ⏷) for arrow keys; Cmd and Option
+  instead of Ctrl and Alt on macOS. The keymap file and error messages
+  keep the key names ("Ctrl+Equals", "PageUp"), which parse back.
 
 ## Default bindings
 

@@ -143,6 +143,31 @@ impl LaserPanel {
         )
     }
 
+    /// Whether a port is chosen to connect to.
+    #[must_use]
+    pub fn can_connect(&self) -> bool {
+        !self.port.trim().is_empty()
+    }
+
+    /// Connects to the chosen port at the chosen baud rate.
+    #[must_use]
+    pub fn connect(&self) -> Option<Action> {
+        let mut inv = Invocation::parse(&format!("device.connect \"{}\"", self.port)).ok()?;
+        inv.args.push(self.baud.trim().to_owned());
+        Some(Action::Run(inv))
+    }
+
+    /// Sends the head to `origin` (machine mm) at the jog speed.
+    #[must_use]
+    pub fn go_to(&self, [x, y]: [f64; 2]) -> Option<Action> {
+        run(format!(
+            "device.move_to {} {} speed={}",
+            fmt(x),
+            fmt(y),
+            fmt(self.speed)
+        ))
+    }
+
     /// The invocation for a `ui.*` laser binding, using the panel's
     /// settings; `None` for other names.
     #[must_use]
@@ -234,17 +259,10 @@ impl LaserPanel {
                     actions.extend(run("device.disconnect"));
                 }
             } else if ui
-                .add_enabled(!self.port.is_empty(), egui::Button::new("Connect"))
+                .add_enabled(self.can_connect(), egui::Button::new("Connect"))
                 .clicked()
             {
-                actions.extend(
-                    Invocation::parse(&format!("device.connect \"{}\"", self.port))
-                        .ok()
-                        .map(|mut inv| {
-                            inv.args.push(self.baud.trim().to_owned());
-                            Action::Run(inv)
-                        }),
-                );
+                actions.extend(self.connect());
             }
         });
         ui.label(status_text(view));
@@ -346,15 +364,10 @@ impl LaserPanel {
                 {
                     actions.push(Action::Laser(LaserAction::ClearOrigin));
                 }
-                if let Some([x, y]) = view.user_origin
+                if let Some(origin) = view.user_origin
                     && ui.button("Go to origin").clicked()
                 {
-                    actions.extend(run(format!(
-                        "device.move_to {} {} speed={}",
-                        fmt(x),
-                        fmt(y),
-                        fmt(self.speed)
-                    )));
+                    actions.extend(self.go_to(origin));
                 }
             });
         });

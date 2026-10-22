@@ -41,6 +41,17 @@ Milestone: M0.
 - Commands that replace the whole document (`project.new`, `project.load`) clear
   both stacks. `project.save` is not an edit and is not recorded.
 
+## Action names
+
+- `action_name(invocation)` gives the readable name of what an undoable
+  command did, lower case, for the Edit menu's "Undo ‹action›": "move",
+  "rotate 90° clockwise", "align left edges", "change layer max power",
+  "move layer down". It never shows a command id or a raw setting key.
+- A batch reads as its first line; anything without a name reads
+  "changes". A test checks every undoable command in the round-trip script
+  has a name of its own.
+- Redo stays plain "Redo".
+
 ## Batches
 
 - `edit.batch "<line>" "<line>" …` runs the lines in order, all or nothing.
@@ -80,3 +91,4 @@ and `arrange.*` (`docs/spec/arrange.md`).
 ## Sources
 
 - Own design, carried over from the owner's MusicCraft command registry.
+- Action names: `docs/spec/style/naming.md` ("Undo ‹action›", own design).

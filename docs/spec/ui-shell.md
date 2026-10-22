@@ -21,14 +21,38 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
 
 ## Layout
 
-- Menu bar: File (New, Open…, Save, Save As…, Quit); Edit (Undo, Redo, Cut,
-  Copy, Duplicate, Delete, Invert Selection, Paste, Paste in Place, Select
-  All); Tools; Arrange (rotate 90°, mirror, drawing order, select next and
-  previous); View (zoom in, zoom out, fit bed). Undo names the command it
-  would reverse. Items that need a selection or a clipboard are greyed out
-  without one. Each item shows its shortcut from the keymap.
-- Left: the tool palette (Select, Line, Rectangle, Ellipse, Text, Edit
-  Nodes); the active tool is highlighted.
+- Menu bar, in this order (`docs/spec/style/menus.md`; the tables live in
+  the UI crate's `menus.rs`):
+  - File: New; Open…, Import…, Project notes…; Save, Save as…, Save
+    G-code…; Quit.
+  - Edit: Undo ‹action›, Redo; Select all, Invert selection, Cut, Copy,
+    Duplicate, Paste, Paste in place, Delete; Convert to path, Close path,
+    Join paths.
+  - Tools: Select, Line, Shape tools ▸ (Rectangle, Ellipse), Edit nodes,
+    Text (the active tool is marked); Offset…, Weld, Union, Subtract,
+    Intersect; Image adjustments….
+  - Arrange: Group, Ungroup; Mirror horizontally / vertically, Rotate 90°
+    clockwise / counter-clockwise; Align ▸, Distribute ▸ (spacing and
+    centers, then Pack horizontally / vertically); Move on bed ▸; Grid
+    array…, Circular array…; Break apart; Bring forward, Send backward,
+    Bring to front, Send to back; Select next, Select previous.
+  - Machine: Connect or Disconnect; Start, Pause, Stop; Frame, Frame
+    outline; Home, Go to user origin, Set user origin, Clear user origin,
+    Clear alarm.
+  - View: Job preview…, Fit bed, Zoom in, Zoom out; Side panels (ticked
+    while shown).
+- Labels are sentence case. Undo reads "Undo ‹action›" with the readable
+  action name from `lasercraft-commands` (`docs/spec/commands.md`, "Action
+  names"), never a command id; plain "Undo", greyed, with nothing to undo.
+- Each row has its own rule for when it can run (something selected, two or
+  more objects, three or more for spacing, exactly two for the booleans, a
+  group, an open path, an image, a connected and ready machine). A row that
+  cannot run is greyed and its tooltip says what is missing ("Select two or
+  more objects.", "Connect to a machine first.").
+- Each item shows its chord from the keymap in symbol form (Ctrl+=, PgUp,
+  Del, Esc, Alt+⏴; Cmd and Option on macOS; `docs/spec/keymap.md`).
+- Left: the drawing tools (Select, Line, Rectangle, Ellipse, Text, Edit
+  nodes); the active tool is highlighted.
 - Right: the layers panel. It lists the layers that have shapes in output
   order (swatch, name, mode, speed and power, output and show switches);
   clicking a name opens it in the editor below, Shift+click selects its
@@ -39,9 +63,9 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
 - Bottom: the palette strip of 30 colors; the current color for new shapes is
   outlined. Clicking a color with shapes selected moves them to that layer,
   otherwise it becomes the current color.
-- F12 or View → Side Panels hides and shows the tool palette and the layers
-  panel. File → Project Notes… (Ctrl+Alt+N) edits the notes.
-- View → Job Preview… (Alt+P) opens the job preview window
+- F12 or View → Side panels hides and shows the tool palette and the layers
+  panel. File → Project notes… (Ctrl+Alt+N) edits the notes.
+- View → Job preview… (Alt+P) opens the job preview window
   (`docs/spec/preview.md`, M4). The shell emits `Action::Preview`; the app
   plans the job and hands the shell the moves and text to draw.
 - Center: the canvas (`docs/spec/canvas.md`).
@@ -58,7 +82,7 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   color (`docs/spec/images.md`, "Canvas and panels"). The layer list says
   `image` or `line + image`; the editor's image section holds the method
   and its settings.
-- Tools → Adjust Image… (Alt+I) opens the adjustments of the selected
+- Tools → Image adjustments… (Alt+I) opens the adjustments of the selected
   image; with none selected the console says so. The import prompt takes
   `.svg`, `.dxf`, `.png` and `.jpg`.
 
@@ -69,8 +93,10 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   builds from device events, and emits `device.*` invocations (run through
   the session like any command) or `Action::Laser` for what only the app
   remembers (user origin, port list, closing the alarm and notice windows).
-- Laser menu: Laser Panel, Start, Frame, Frame Outline, Pause / Resume, Stop,
-  Home, Unlock, Disconnect.
+- Machine menu (see Layout): Pause reads "Resume" while a job is held and
+  "Pause (motion only)" while a constant-power (M3) job runs; Pause and
+  Stop are enabled whenever a machine is connected. Clear alarm (`$X`) is
+  enabled only in an alarm. Disconnect waits for the job to end.
 - While a laser is connected the status bar starts with Pause (or Resume)
   and Stop and the machine state, so they stay reachable whatever panel or
   window is open (safety rule 7).
@@ -119,3 +145,4 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
 ## Sources
 
 - Own design. Menu entry names are generic terms, not copied labels.
+- `docs/spec/style/menus.md` and `docs/spec/style/naming.md` (own design).

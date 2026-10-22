@@ -11,6 +11,7 @@ pub mod interaction;
 pub mod keymap;
 mod laser_panel;
 mod layers_panel;
+mod menus;
 mod preview;
 mod shell;
 mod textures;
