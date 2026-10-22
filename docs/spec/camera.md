@@ -73,6 +73,12 @@ picture of another size is scaled to `width × height` first.
    fy, cx, cy`, then all intrinsics, distortion terms and each picture's
    pose refined together by Levenberg–Marquardt to minimise the
    reprojection error. The result's `rms` is that error in pixels.
+   Pictures of a sheet lying flat, all seen from straight above, cannot
+   separate the focal length from the camera's height; weak priors keep
+   the focal length near the first guess (or the picture's longer side),
+   the pixels square and the center near the picture's middle. The
+   correction of straight lines, which is what the overlay needs, does
+   not depend on that choice.
 5. All three models are fitted; the wizard shows each one's **fit** as
    `100 / (1 + rms)` percent ("Higher is better, but compare the pictures
    too") and the user picks one. Five pictures with too few dots, a fit
@@ -86,20 +92,26 @@ document millimetres on the bed, stored as `{"name": …, "height": <mm>,
 "matrix": [9 numbers], "lens": "<created of the lens correction used>",
 "width": w, "height_px": h, "created": …}`.
 
-1. LaserCraft burns the **alignment pattern** (own design): four
-   ring-and-cross marks (a ring of the mark size with a cross through its
-   center), centered on the corners of a rectangle, numbered clockwise
-   from the top left, plus a small cross at the rectangle's center. The
-   rectangle is centered on the bed and is 70 % of the bed by default
-   (Pattern width (mm), Pattern height (mm), Mark size (mm), default 10).
+1. LaserCraft burns the **alignment pattern** (own design): four marks,
+   each a filled ring (outer diameter the mark size, inner diameter 60 %
+   of it) with a filled dot (25 %) at its center, centered on the corners
+   of a rectangle and numbered clockwise from the top left, plus one dot
+   at the rectangle's center. The marks are filled (engraved), not
+   traced, so they are thick enough for the camera to see. The rectangle
+   is centered on the bed and is 70 % of the bed by default (Pattern width
+   (mm), Pattern height (mm), Mark size (mm), default 12; the pattern must
+   be at least three marks wide and high and fit the bed).
    The burn is a job like any other: Absolute coordinates, the bounds
    check, power clamped to the device maximum, line mode, default speed
    and power from a "Camera alignment" entry of the open material library
-   when there is one, else 20 mm/s at 20 % (safety rules 1, 5, 6).
+   when there is one, else 100 mm/s at 20 % in fill mode at 0.1 mm
+   (safety rules 1, 5, 6).
 2. **Find the marks**, either:
-   - automatically: dark regions with exactly one hole (a ring) whose hole
-     holds the cross, the four largest of similar size, ordered clockwise
-     from the one nearest the picture's top-left; or
+   - automatically: dark regions not touching the picture's edge with
+     exactly one hole (a ring) that holds a dark dot, the four largest of
+     similar size, ordered clockwise from the one nearest the picture's
+     top-left; their centers are the regions' darkness-weighted centers;
+     or
    - by clicking: the user clicks the four mark centers in order (top
      left, top right, bottom right, bottom left) on the zoomable,
      lens-corrected picture; Discard removes the last one.
@@ -109,8 +121,7 @@ document millimetres on the bed, stored as `{"name": …, "height": <mm>,
    order as on the bed are refused ("The marks are not in order. Click
    them clockwise from the top left.").
 4. The check page shows the corrected, aligned picture with a 10 mm grid.
-   The center cross must land on the grid's center line; the page shows
-   how far off it is in millimetres when the center cross was found.
+   The center dot must land on the bed point it was burned at.
 5. `height` is the material height the alignment was made at (default 0);
    a new alignment replaces one with the same height. The first alignment
    in the list is in use; others can be chosen.
@@ -241,6 +252,7 @@ As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 - K. Levenberg (1944) and D. Marquardt (1963), damped least squares.
 - Motion JPEG over HTTP: `multipart/x-mixed-replace` (RFC 2046 multipart
   syntax); JPEG: ITU-T T.81; USB Video Class 1.5 controls.
-- Own design: the calibration sheet, the ring-and-cross alignment marks
-  and their finding, the fit score, the data formats, the simulated
+- Own design: the calibration sheet and its dot finding, the ring-and-dot
+  alignment marks and their finding, the weak priors that settle the
+  focal length when every picture looks straight down at a flat sheet, the fit score, the data formats, the simulated
   camera, the command set.

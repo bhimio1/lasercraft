@@ -1,0 +1,18 @@
+[package]
+name = "lasercraft-camera"
+description = "Camera lens correction, bed alignment and overlays for LaserCraft: pure and deterministic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lasercraft-geom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+png.workspace = true
+zune-jpeg.workspace = true

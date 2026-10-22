@@ -27,6 +27,7 @@ lasercraft-commands ──► lasercraft-device (M6: device.* commands return a 
 lasercraft-app ──► lasercraft-device (M6: the device thread)
 lasercraft-commands ──► lasercraft-workshop ──► lasercraft-project (M8: device profiles, material libraries, test presets)
 lasercraft-app, lasercraft-cli ──► lasercraft-workshop (M8: the configuration folder)
+lasercraft-camera ──► lasercraft-geom (M9: lens model, calibration, alignment, overlay)
 lasercraft-ui ──► lasercraft-workshop (M8: the Materials panel and device windows read profiles, libraries and presets; changes go through commands)
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
@@ -54,6 +55,7 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
 | `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5; M6: job placement (Start From, nine-point job origin), laser-off framing (box, convex hull) |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M6: reply parser, I/O-free `Controller` (character counting with send-response fallback, polling, stalls, hold-then-reset stop, spindle stop on pausing `M3` jobs, laser-mode check), simulated GRBL with a laser-on log, `Bench`, device thread (serial and simulator) |
+| `lasercraft-camera` | Pictures, the lens model and its calibration from pictures of the calibration sheet, alignment marks and bed alignment, overlays, a synthetic camera for tests and the simulated camera (`docs/spec/camera.md`). Pure: capturing pictures is the app's. | M9 |
 | `lasercraft-workshop` | The user's data outside projects: device profiles, material libraries (`.lcmat`), test presets, the starter library, their JSON formats and the configuration folder (`docs/spec/devices.md`, `docs/spec/materials.md`, `docs/spec/test-patterns.md`). | M8 |
 | `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags); M5: `export`; M6: `simulate` |
 | `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window; M8: Materials panel, Device row and device profile windows, test pattern windows (settings edited as JSON; `serde_json` for that), follow band in the layer editor |
