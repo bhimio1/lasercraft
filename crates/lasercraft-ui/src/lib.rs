@@ -8,6 +8,7 @@ mod canvas;
 pub mod colors;
 mod dialogs;
 mod dock;
+mod icons;
 pub mod interaction;
 pub mod keymap;
 mod laser_panel;
@@ -17,6 +18,7 @@ mod preview;
 mod shell;
 mod textures;
 pub mod theme;
+mod tool_column;
 pub mod view;
 pub mod widgets;
 

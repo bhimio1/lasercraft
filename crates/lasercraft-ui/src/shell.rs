@@ -16,6 +16,7 @@ use crate::layers_panel::{LayersPanel, palette_strip};
 use crate::menus;
 use crate::preview::{Preview, PreviewWindow};
 use crate::theme::{Tokens, size};
+use crate::tool_column::ToolColumn;
 use crate::widgets::Band;
 
 /// The drawing tools: label, `ui.tool` argument.
@@ -99,6 +100,8 @@ pub struct Shell {
     laser: LaserPanel,
     /// The dock's shown panels and front tabs.
     dock: Dock,
+    /// The drawing tools column (Shape tools face, flyout).
+    tools: ToolColumn,
     /// The last pointer position over the canvas.
     pointer: Option<Point>,
     /// Whether the running stream is paused, for the pause/resume key.
@@ -126,6 +129,7 @@ impl Shell {
             dialogs: Dialogs::default(),
             laser: LaserPanel::default(),
             dock: Dock::default(),
+            tools: ToolColumn::default(),
             pointer: None,
             paused: false,
             adjust_requested: false,
@@ -236,8 +240,13 @@ impl Shell {
         }
         if self.panels {
             if self.dock.tools {
+                let frame = egui::Frame::NONE
+                    .fill(Tokens::of(ui.ctx()).panel)
+                    .inner_margin(egui::Margin::symmetric(size::GAP as i8, 0));
                 egui::Panel::left("tools")
                     .resizable(false)
+                    .exact_size(size::ICON + 2.0 * size::GAP_TIGHT + 2.0 * size::GAP)
+                    .frame(frame)
                     .show(ui, |ui| self.drawing_tools(ui, &mut actions));
             }
             if self.dock.any() {
@@ -780,21 +789,9 @@ impl Shell {
     }
 
     fn drawing_tools(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        ui.add_space(4.0);
-        for (label, name, tool) in TOOLS {
-            let line = format!("ui.tool {name}");
-            let hint = self
-                .keymap
-                .chord_for(&line)
-                .map_or_else(String::new, |c| format!(" ({})", c.label()));
-            let active = self.canvas.tool() == tool;
-            if ui
-                .selectable_label(active, label)
-                .on_hover_text(format!("{label} tool{hint}"))
-                .clicked()
-            {
-                actions.extend(self.resolve(Invocation::new("ui.tool", [name])));
-            }
+        let current = self.canvas.tool();
+        if let Some(name) = self.tools.show(ui, current, &self.keymap) {
+            actions.extend(self.resolve(Invocation::new("ui.tool", [name])));
         }
     }
 

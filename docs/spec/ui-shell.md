@@ -51,8 +51,28 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   more objects.", "Connect to a machine first.").
 - Each item shows its chord from the keymap in symbol form (Ctrl+=, PgUp,
   Del, Esc, Alt+Left; Cmd and Option on macOS; `docs/spec/keymap.md`).
-- Left: the drawing tools (Select, Line, Rectangle, Ellipse, Text, Edit
-  nodes); the active tool is highlighted.
+- Left: the drawing tools column, icon-only buttons one `icon` square each
+  (`docs/spec/style/toolbars.md`, "Drawing tools"): Select, Line, Shape
+  tools, Edit nodes, Text. Shape tools is a flyout: its face shows the last
+  chosen member (Rectangle by default; Ctrl+R and Ctrl+E pick a member and
+  update the face); a plain click picks the face member; a click in the
+  lower-right corner marker or a right-click opens the popup with
+  Rectangle and Ellipse (icon, label, chord). The active tool has an
+  `accent-soft` background with a thin `accent` outline; hover shows
+  `hover`. Tooltips read "‹Tool name› tool (‹chord›)" with a second line
+  where the guide gives one. Clicking a tool button does not keep keyboard
+  focus.
+- Icons (`docs/spec/style/icons.md`) are our own SVG drawings in
+  `crates/lasercraft-ui/icons/`, one per id, in a restricted subset (square
+  24-unit view box; `path`, `line`, `polyline`, `polygon`, `rect`,
+  `circle`, `ellipse`; stroke only, except small convex fills; at most one
+  element with the id `accent`; no text, images, gradients, filters or
+  masks). They are read once through our SVG importer and painted as
+  strokes with round caps and joins in theme colors: base parts in `text`
+  (`text-disabled` when disabled), the accent part in `accent`. Dashed
+  strokes follow `stroke-dasharray`. Tests check every file against the
+  subset and that every icon the UI names exists and stays inside the safe
+  margin. `PROVENANCE.md` there records who drew each file.
 - Right: the dock (see M6 additions). Its Layers panel lists the layers that
   have shapes in output order under a header row (Color, Name, Mode, Speed,
   power, Output, Show); a color with vectors and images has two rows, the

@@ -19,7 +19,7 @@ named in brackets.
 ```
 lasercraft-app ──► lasercraft-ui ──► lasercraft-commands ──► lasercraft-project ──► lasercraft-geom
 lasercraft-ui, lasercraft-commands ──► lasercraft-geom
-lasercraft-commands, lasercraft-ui ──► lasercraft-import (M3; the UI only lists font families)
+lasercraft-commands, lasercraft-ui ──► lasercraft-import (M3; the UI lists font families and reads its icon SVGs)
 lasercraft-import ──► lasercraft-geom
 lasercraft-app ──► lasercraft-plan (M4)
 lasercraft-commands ──► lasercraft-gcode ──► lasercraft-plan (M5: project.export_gcode)
@@ -147,6 +147,11 @@ M3 notes: node editing, joining and splitting live in `lasercraft-geom`
 
 ## Deferred decisions
 
+- Icons (decided with the drawing tools icons): own SVG files in a
+  restricted subset, embedded in `lasercraft-ui` and read with
+  `lasercraft_import::svg::parse_styled`, painted with egui's painter in
+  theme colors (`docs/spec/style/icons.md`, option 2). No new dependency;
+  `egui_extras`' SVG loader and icon fonts were not chosen.
 - File dialogs: M0 asks for a path in a text field. A native dialog crate
   (e.g. `rfd`) needs a portal on Flatpak; decide in M1.
 - Whether the MCP server is a separate crate (as in MusicCraft).

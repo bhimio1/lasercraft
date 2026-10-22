@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A smooth S-curve with three square nodes and one handle line; the
+       middle node is the accent. -->
+  <path d="M4.5 18.5 C9 18.5 8 12 12 12 C16 12 15 5.5 19.5 5.5"/>
+  <line x1="8.5" y1="12" x2="15.5" y2="12"/>
+  <rect x="3" y="17" width="3" height="3" rx="0.5"/>
+  <rect x="18" y="4" width="3" height="3" rx="0.5"/>
+  <rect id="accent" x="10.5" y="10.5" width="3" height="3" rx="0.5" fill="#000" stroke="none"/>
+</svg>
