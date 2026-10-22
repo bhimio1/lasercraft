@@ -27,6 +27,8 @@ jobs:
       - run: cargo test --workspace --locked
       - name: Parity checklist (docs/spec/parity.md)
         run: cargo xtask parity --check docs/parity.md
+      - name: Packaging files (docs/spec/release.md)
+        run: packaging/check.sh
 
   build:
     name: build (${{ matrix.os }})

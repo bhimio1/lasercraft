@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- LaserCraft application icon. Own design (docs/spec/release.md):
+       a nozzle above a sheet, its beam striking the sheet, and the cut
+       line it leaves. -->
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="#1f2a37"/>
+  <!-- The sheet, seen at an angle. -->
+  <path d="M28 176 L132 140 L228 176 L124 216 Z" fill="#d9b98a"/>
+  <path d="M28 176 L124 216 L124 226 L28 186 Z" fill="#b8925f"/>
+  <path d="M124 216 L228 176 L228 186 L124 226 Z" fill="#9c7a4c"/>
+  <!-- The cut line already burned. -->
+  <path d="M72 174 Q100 162 128 176" fill="none" stroke="#3b2414" stroke-width="5" stroke-linecap="round"/>
+  <!-- The nozzle. -->
+  <path d="M104 30 H152 V66 L136 92 H120 L104 66 Z" fill="#c9d3dd"/>
+  <rect x="104" y="30" width="48" height="10" fill="#9aa8b6"/>
+  <!-- The beam and where it strikes. -->
+  <path d="M124 92 L132 92 L130 172 L126 172 Z" fill="#ff5a3c"/>
+  <circle cx="128" cy="176" r="13" fill="#ff8a3c" opacity="0.55"/>
+  <circle cx="128" cy="176" r="6" fill="#fff3c4"/>
+</svg>

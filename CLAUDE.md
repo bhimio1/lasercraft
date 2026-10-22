@@ -69,7 +69,9 @@ cargo test --workspace
 ```
 
 CI (`.github/workflows/ci.yml`) runs these on Linux and `cargo check` on Windows
-and macOS.
+and macOS, plus `cargo xtask parity --check docs/parity.md` and
+`packaging/check.sh`. Release packages come from
+`.github/workflows/release.yml` (`docs/spec/release.md`).
 
 ## Working style
 
@@ -114,5 +116,5 @@ and macOS.
 - [x] M8 Material library (our format, our data), test grids (speed × power),
       per-device profiles.
 - [x] M9 Camera overlay and alignment, rotary, print-and-cut.
-- [ ] M10 Parity checklist (`cargo xtask parity`) against the public docs;
+- [x] M10 Parity checklist (`cargo xtask parity`) against the public docs;
       Flatpak, AppImage, .msi and .dmg release builds.

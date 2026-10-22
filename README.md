@@ -5,7 +5,7 @@ engravers, for Linux, Windows and macOS. Its workflow and default shortcuts aim
 to feel familiar to people coming from LightBurn. It is an independent project,
 not affiliated with or endorsed by LightBurn Software.
 
-**Status: milestones M0–M9.** Draw shapes or import SVG and DXF; add text
+**Status: milestones M0–M10.** Draw shapes or import SVG and DXF; add text
 from system fonts; edit nodes; combine shapes with booleans, weld and offset;
 group, align, distribute and array them; put them on color layers with line
 or fill settings, kerf and tabs; preview the planned job with travel moves
@@ -69,6 +69,18 @@ simulated laser burned.
 
 The screenshots show `examples/screenshot-demo.lcs`.
 
+## Install
+
+Releases carry four packages (`docs/spec/release.md`):
+
+- Linux: `LaserCraft-<version>-x86_64.AppImage` (make it executable and
+  run it) or `LaserCraft-<version>-x86_64.flatpak`
+  (`flatpak install --user LaserCraft-<version>-x86_64.flatpak`; it asks
+  for device access so it can reach the laser's serial port).
+- Windows: `LaserCraft-<version>-x86_64.msi`.
+- macOS: `LaserCraft-<version>-universal.dmg` (Apple silicon and Intel;
+  not notarized yet, so open it with right-click → Open the first time).
+
 ## Build and run
 
 ```sh
@@ -96,6 +108,9 @@ in `docs/linux-serial.md`.
 - `docs/clean-room.md`: provenance rules.
 - `docs/spec/`: behavior specs, each with its sources.
 - `docs/hardware-testing.md`: manual checks on real machines.
+- `docs/parity.md`: what LaserCraft covers of the reference's public
+  documentation, page by page (`cargo xtask parity`).
+- `packaging/`: release packaging (`docs/spec/release.md`).
 
 ## License
 

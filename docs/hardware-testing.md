@@ -73,4 +73,13 @@ The list grows with each milestone that touches the machine.
 | H37 | Camera on the head: align with the small pattern, jog the head over the marks, Finish | Alignment stored; after jogging elsewhere, Capture places the picture where the head is, within 1 mm |
 | H38 | Scan bed with the head camera, then Stop in the job bar halfway | The head moves with the laser off over the bed and the overlay fills in; Stop halts the machine and ends the scan |
 
+### Added with M10
+
+| # | Check | Expected |
+| --- | --- | --- |
+| H39 | Install the Flatpak bundle, connect the laser | The app lists the serial port and connects; a USB camera shows pictures |
+| H40 | Run the AppImage on a second distribution (for example Ubuntu 22.04 and Arch) | The window opens; the laser connects once the user is in `dialout` / `uucp` |
+| H41 | Install the MSI on Windows, start from the Start menu, connect; install a newer MSI over it | No console window; the laser connects; the newer version replaces the old one |
+| H42 | Open the DMG on Apple silicon and on an Intel Mac, drag to Applications, connect | Starts after right-click → Open; macOS asks for camera access when a camera is added; the laser connects |
+
 Record results in the PR that touched the behavior, with the details above.

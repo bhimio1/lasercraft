@@ -1,0 +1,38 @@
+# Flatpak manifest (docs/spec/release.md). Installs the `lasercraft`
+# binary the release workflow built (copied next to this file as
+# `lasercraft`), with its desktop entry, metadata and icon.
+id: io.github.bhimio1.LaserCraft
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: lasercraft
+finish-args:
+  # The window and OpenGL.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Serial ports (the laser) and USB cameras: Flatpak has no narrower
+  # permission for serial devices (CLAUDE.md requires serial access).
+  - --device=all
+  # Network cameras.
+  - --share=network
+  # Projects, imports and exports are opened by typed path.
+  - --filesystem=home
+modules:
+  - name: lasercraft
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lasercraft /app/bin/lasercraft
+      - install -Dm644 io.github.bhimio1.LaserCraft.desktop /app/share/applications/io.github.bhimio1.LaserCraft.desktop
+      - install -Dm644 io.github.bhimio1.LaserCraft.metainfo.xml /app/share/metainfo/io.github.bhimio1.LaserCraft.metainfo.xml
+      - install -Dm644 lasercraft.svg /app/share/icons/hicolor/scalable/apps/io.github.bhimio1.LaserCraft.svg
+    sources:
+      - type: file
+        path: lasercraft
+      - type: file
+        path: ../linux/io.github.bhimio1.LaserCraft.desktop
+      - type: file
+        path: ../linux/io.github.bhimio1.LaserCraft.metainfo.xml
+      - type: file
+        path: ../icons/lasercraft.svg

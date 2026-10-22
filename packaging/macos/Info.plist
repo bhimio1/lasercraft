@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaserCraft.app (docs/spec/release.md); dmg.sh fills in the version. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>LaserCraft</string>
+  <key>CFBundleDisplayName</key>
+  <string>LaserCraft</string>
+  <key>CFBundleIdentifier</key>
+  <string>io.github.bhimio1.LaserCraft</string>
+  <key>CFBundleExecutable</key>
+  <string>lasercraft</string>
+  <key>CFBundleIconFile</key>
+  <string>LaserCraft</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.graphics-design</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSCameraUsageDescription</key>
+  <string>LaserCraft shows camera pictures of the laser bed under your design.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>GPL-3.0-or-later</string>
+</dict>
+</plist>

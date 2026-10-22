@@ -2,6 +2,9 @@
 //!
 //! `lasercraft [project.lcproj] [--keymap <file>]`
 
+// Release builds on Windows open no console window (docs/spec/release.md).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 

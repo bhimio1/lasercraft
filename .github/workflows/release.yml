@@ -1,0 +1,134 @@
+# Release builds (docs/spec/release.md): AppImage and Flatpak bundle on
+# Linux, MSI on Windows, DMG on macOS. A pushed `v*` tag (the owner's) also
+# drafts a GitHub release with the packages; pull requests that change the
+# packaging build them as a check.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packaging/**"
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  linux:
+    name: AppImage (Linux)
+    # The oldest supported runner, so the AppImage runs on older systems.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: packaging/check.sh
+      - run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - run: cargo build --release --locked -p lasercraft-app
+      - name: AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          APPIMAGETOOL="$PWD/appimagetool" packaging/linux/appimage.sh target/release/lasercraft dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: target/release/lasercraft
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: dist/*.AppImage
+
+  flatpak:
+    name: Flatpak bundle (Linux)
+    needs: linux
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: packaging/flatpak
+      - id: version
+        run: |
+          chmod +x packaging/flatpak/lasercraft
+          echo "version=$(packaging/version.sh)" >> "$GITHUB_OUTPUT"
+      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: LaserCraft-${{ steps.version.outputs.version }}-x86_64.flatpak
+          manifest-path: packaging/flatpak/io.github.bhimio1.LaserCraft.yml
+          upload-artifact: true
+
+  windows:
+    name: MSI (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p lasercraft-app
+      - run: dotnet tool install --global wix --version 5.0.2
+      - name: MSI
+        shell: bash
+        run: |
+          version=$(packaging/version.sh)
+          mkdir -p dist
+          wix build -arch x64 -d Version="$version" -d Binary=target/release/lasercraft.exe \
+            -d License=LICENSE -o "dist/LaserCraft-$version-x86_64.msi" packaging/windows/lasercraft.wxs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi
+          path: dist/*.msi
+
+  macos:
+    name: DMG (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p lasercraft-app --target aarch64-apple-darwin
+      - run: cargo build --release --locked -p lasercraft-app --target x86_64-apple-darwin
+      - run: brew install librsvg
+      - run: |
+          packaging/macos/dmg.sh target/aarch64-apple-darwin/release/lasercraft \
+            target/x86_64-apple-darwin/release/lasercraft dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: dist/*.dmg
+
+  release:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, flatpak, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Packages and checksums
+        run: |
+          mkdir dist
+          find artifacts \( -name '*.AppImage' -o -name '*.flatpak' -o -name '*.msi' -o -name '*.dmg' \) -exec cp {} dist/ \;
+          cd dist && sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
