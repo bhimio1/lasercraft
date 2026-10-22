@@ -264,7 +264,7 @@ impl Shell {
             self.preview = None;
         }
         if std::mem::take(&mut self.adjust_requested) && !self.dialogs.open_adjust(view.project) {
-            self.log("select an image to adjust");
+            self.log("Cannot adjust image: no image is selected. Select an image first.");
         }
         if let Some(at) = self.canvas.take_text_click() {
             self.dialogs.open_text(at);
@@ -390,19 +390,30 @@ impl Shell {
         let text = slot.get_or_insert_with(|| project.notes().to_owned());
         let mut open = true;
         let mut save = false;
+        let mut cancel = false;
+        let changed = text != project.notes();
         egui::Window::new("Project notes")
+            .collapsible(false)
             .open(&mut open)
             .show(ui.ctx(), |ui| {
-                ui.add(egui::TextEdit::multiline(text).desired_rows(10));
-                save = ui.button("Save notes").clicked();
+                ui.add(
+                    egui::TextEdit::multiline(text)
+                        .desired_rows(10)
+                        .desired_width(f32::INFINITY),
+                );
+                let (ok, cancelled) = crate::dialogs::buttons(ui, "Save notes", true, "");
+                // Enter is a new line; Ctrl+Enter saves.
+                let commit = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
+                save = ok || commit;
+                cancel = cancelled || ui.input(|i| i.key_pressed(egui::Key::Escape));
             });
-        if save {
+        if save && changed {
             actions.push(Action::Run(Invocation::new(
                 "project.set_notes",
                 [text.clone()],
             )));
         }
-        if save || !open {
+        if save || cancel || !open {
             self.notes = None;
         }
     }
@@ -465,7 +476,7 @@ impl Shell {
             "ui.tool" => {
                 match invocation.args.first().and_then(|t| Tool::parse(t)) {
                     Some(tool) => self.canvas.set_tool(tool),
-                    None => self.log(format!("unknown tool in `{invocation}`")),
+                    None => self.log(format!("error: unknown tool in {invocation}")),
                 }
                 return None;
             }
@@ -928,15 +939,23 @@ impl Shell {
         };
         let mut open = true;
         let mut done = None;
+        let mut cancelled = false;
         egui::Window::new(title)
             .collapsible(false)
             .open(&mut open)
             .show(ui.ctx(), |ui| {
                 ui.label(what);
-                let field = ui.text_edit_singleline(text);
+                let field = ui.add(
+                    egui::TextEdit::singleline(text).desired_width(ui.available_width().max(360.0)),
+                );
                 let enter = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if (ui.button("OK").clicked() || enter) && !text.trim().is_empty() {
+                let blank = text.trim().is_empty();
+                let (ok, cancel) = crate::dialogs::buttons(ui, "OK", !blank, "Type a path first.");
+                if (ok || enter) && !blank {
                     done = Some(PathBuf::from(text.trim()));
+                }
+                if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    cancelled = true;
                 }
             });
         if let Some(path) = done {
@@ -953,7 +972,7 @@ impl Shell {
                 )),
             });
             self.prompt = None;
-        } else if !open {
+        } else if !open || cancelled {
             self.prompt = None;
         }
     }
