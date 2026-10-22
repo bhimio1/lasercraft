@@ -65,7 +65,7 @@ jobs:
         run: |
           chmod +x packaging/flatpak/lasercraft
           echo "version=$(packaging/version.sh)" >> "$GITHUB_OUTPUT"
-      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@v6
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: LaserCraft-${{ steps.version.outputs.version }}-x86_64.flatpak
           manifest-path: packaging/flatpak/io.github.bhimio1.LaserCraft.yml
