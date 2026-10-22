@@ -45,4 +45,15 @@ The list grows with each milestone that touches the machine.
 | H19 | A long fill job | Streams without stalls or buffer errors; progress bar reaches the end |
 | H20 | Console: `$$`, `$I`, `?` | Answers shown; status reports only with "Show all" (except the typed `?`) |
 
+### Added with M8
+
+| # | Check | Expected |
+| --- | --- | --- |
+| H21 | Choose a device profile with Max power (%) 50, Start a layer set to 100% | Burn at half power (`S` at most half of `$30`); the export notes the clamp |
+| H22 | Speed and power test: Frame | Head traces the whole pattern (labels and border included), laser off |
+| H23 | Speed and power test: Start on scrap | Labels and border burn first, then boxes from least to most energy; every box inside the frame |
+| H24 | Line interval test, Solid and Gradient, on scrap | Patches burn widest spacing first; labels readable; gradient goes light to dark |
+| H25 | Close a test window while its pattern runs, then Pause and Stop from the job bar | Pattern keeps running after closing; Pause and Stop work as for any job |
+| H26 | Follow a material entry, change the entry's speed, Start | The layer runs at the entry's new speed |
+
 Record results in the PR that touched the behavior, with the details above.

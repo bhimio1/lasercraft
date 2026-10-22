@@ -35,6 +35,12 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             preset_delete,
         ),
         ccmd(
+            "test.remember",
+            "test.remember <speed_power|interval> <json>",
+            "Remember test settings as the last used, without running anything.",
+            remember,
+        ),
+        ccmd(
             "test.preset_list",
             "test.preset_list",
             "List the built-in and saved test presets.",
@@ -132,6 +138,18 @@ fn preset_save(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, Command
         .save_preset(name, kind, value)
         .map_err(ws(args))?;
     Ok(saved(cx, format!("saved preset \"{}\"", name.trim())))
+}
+
+fn remember(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    args.expect(2, 2)?;
+    let kind = args.str(0)?;
+    let value = json(args, args.str(1)?)?;
+    let parsed = TestSettings::parse(kind, Some(&value)).map_err(|e| args.invalid(e.0))?;
+    cx.workshop.remember_settings(kind, parsed.to_value());
+    Ok(saved(
+        cx,
+        format!("remembered the {} settings", kind.replace('_', " and ")),
+    ))
 }
 
 fn preset_delete(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -312,6 +330,21 @@ mod tests {
                 .contains("Mine")
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn remember_checks_and_stores_complete_settings() {
+        let mut s = session();
+        s.run_line(r#"test.remember interval "{\"patches\": 4}""#)
+            .unwrap();
+        let last = s.workshop().last_settings("interval").unwrap();
+        assert_eq!(last["patches"], 4);
+        assert!(last.get("speed").is_some(), "the defaults are filled in");
+        assert!(
+            s.run_line(r#"test.remember interval "{\"patches\": 0}""#)
+                .is_err()
+        );
+        assert!(s.run_line("edit.undo").is_err(), "nothing recorded");
     }
 
     #[test]

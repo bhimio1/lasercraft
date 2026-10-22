@@ -27,6 +27,7 @@ lasercraft-commands ──► lasercraft-device (M6: device.* commands return a 
 lasercraft-app ──► lasercraft-device (M6: the device thread)
 lasercraft-commands ──► lasercraft-workshop ──► lasercraft-project (M8: device profiles, material libraries, test presets)
 lasercraft-app, lasercraft-cli ──► lasercraft-workshop (M8: the configuration folder)
+lasercraft-ui ──► lasercraft-workshop (M8: the Materials panel and device windows read profiles, libraries and presets; changes go through commands)
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
 lasercraft-cli ──► lasercraft-device (M6: simulate)
@@ -38,7 +39,9 @@ lasercraft-raster, lasercraft-device, lasercraft-geom: no workspace dependencies
 
 Rules: `lasercraft-ui` never depends on `lasercraft-device`, `-plan` or
 `-gcode` directly; it shows what the app hands it (the job preview gets plain
-`lasercraft_ui::Preview` data that the app builds from a `Plan`). `lasercraft-device` never
+`lasercraft_ui::Preview` data that the app builds from a `Plan`; the test
+pattern windows send `TestRequest`s that the app checks and plans into
+`TestInfo`). `lasercraft-device` never
 depends on `lasercraft-project`: it streams lines it is given.
 
 | Crate | Responsibility | Status |
@@ -53,8 +56,8 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M6: reply parser, I/O-free `Controller` (character counting with send-response fallback, polling, stalls, hold-then-reset stop, spindle stop on pausing `M3` jobs, laser-mode check), simulated GRBL with a laser-on log, `Bench`, device thread (serial and simulator) |
 | `lasercraft-workshop` | The user's data outside projects: device profiles, material libraries (`.lcmat`), test presets, the starter library, their JSON formats and the configuration folder (`docs/spec/devices.md`, `docs/spec/materials.md`, `docs/spec/test-patterns.md`). | M8 |
 | `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags); M5: `export`; M6: `simulate` |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window |
-| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window; M8: Materials panel, Device row and device profile windows, test pattern windows (settings edited as JSON; `serde_json` for that), follow band in the layer editor |
+| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin; M8: loads the workshop from the configuration folder, answers test windows with planned patterns |
 
 ## Command registry
 
@@ -131,7 +134,7 @@ depends on `lasercraft-project`: it streams lines it is given.
 
 | Dependency | Why |
 | --- | --- |
-| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses. `float_roundtrip` makes parsing bit-exact, so saving and undo never drift; `preserve_order` keeps field order for the compact file writer. |
+| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | The `.lcproj` JSON format (geom's `Point` and `Affine` derive it too) and JSON arguments in undo inverses, workshop files, and the test windows' settings (the UI edits them as JSON). `float_roundtrip` makes parsing bit-exact, so saving and undo never drift; `preserve_order` keeps field order for the compact file writer. |
 | `i_overlay` | Pure-Rust polygon booleans and offsets (union, subtract, intersect, weld, offset, kerf); MIT. |
 | `egui` | Immediate-mode UI used by `lasercraft-ui`; simple to keep free of business logic, and it runs headlessly, so UI tests drive the real shell with synthetic input. |
 | `eframe` (`glow`, `x11`, `wayland`, `default_fonts`) | egui's native window and OpenGL backend for Linux (X11 and Wayland), Windows and macOS. |

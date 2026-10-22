@@ -112,17 +112,27 @@ As `docs/spec/style/later-windows.md`, "Materials panel", with these
 choices:
 
 - The panel is the second tab of the dock's lower group, after Machine.
-- Library row: "Library" dropdown, "Rename library…", "Close library".
+- Library row: "Library" dropdown, an `accent` "i" mark whose tooltip is
+  the library's note (when it has one), and the "Library ▸" menu button.
+  Rename library… and Close library are the menu's last rows (own
+  decision: the dock is narrow, and these are rare actions).
 - Tree (material, thickness or group, entries with a line, fill or image
   mode mark, and a chain mark on entries a layer follows) and the button
   column: Apply to layer, Follow this entry; Save layer as material…,
   Edit settings…, Update from layer, Edit description…; Duplicate,
   Delete. Under them the target line: "Target layer" and the edited
   layer's chip and name (the Layers panel's edited layer).
+- Narrower than 420 px (the usual dock): the button row comes above the
+  tree and wraps; Apply to layer, Follow this entry and Save layer as
+  material… stay buttons and the entry changes go in an "Entry ▸" menu.
+- Right-click on an entry opens the entry menu (`docs/spec/style/
+  menus.md`, "Material entry menu"): the button column's actions.
+- The "▸" markers are painted, not text (the UI font has no arrows).
 - Edit settings… opens the entry's settings in a window with the layer
   editor's fields; OK runs one `material.set` per changed key.
 - "Library ▸" opens Open library…, Save library, Save library as…, New
-  library, Merge library… (file paths asked in the usual path window).
+  library, Merge library… (file paths asked in the usual path window),
+  then Rename library… and Close library.
 - Confirmations as the style guide: "Replace material settings?" before
   Update from layer, "Delete material entry?" before Delete, "Close
   library?" when closing with unsaved changes.

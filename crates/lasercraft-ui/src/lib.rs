@@ -6,6 +6,7 @@
 
 mod canvas;
 pub mod colors;
+mod device_dialogs;
 mod dialogs;
 mod dock;
 mod icons;
@@ -13,9 +14,11 @@ pub mod interaction;
 pub mod keymap;
 mod laser_panel;
 mod layers_panel;
+mod materials_panel;
 mod menus;
 mod preview;
 mod shell;
+mod test_windows;
 mod textures;
 pub mod theme;
 mod tool_column;
@@ -28,11 +31,12 @@ pub use laser_panel::{
 };
 pub use preview::{Preview, PreviewKind, PreviewMove};
 pub use shell::{Action, Shell, ShellView};
+pub use test_windows::{TestInfo, TestKind, TestRequest};
 
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 28] = [
+pub const UI_ACTIONS: [&str; 32] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -65,4 +69,9 @@ pub const UI_ACTIONS: [&str; 28] = [
     "ui.jog_right",
     // M7: the Adjust Image window.
     "ui.adjust_image",
+    // M8: device profile and test pattern windows.
+    "ui.device_profiles",
+    "ui.device_profile",
+    "ui.test_speed_power",
+    "ui.test_interval",
 ];

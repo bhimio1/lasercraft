@@ -1,19 +1,57 @@
 //! Plans the job and turns the plan into what the preview window draws
 //! (`docs/spec/preview.md`). The UI never depends on the planner.
 
-use lasercraft_plan::{Machine, MoveKind, Plan, num};
+use lasercraft_commands::job_settings;
+use lasercraft_plan::patterns::{self, TestSettings};
+use lasercraft_plan::{MoveKind, Plan, num};
 use lasercraft_project::Project;
-use lasercraft_ui::{Preview, PreviewKind, PreviewMove, clock as duration};
+use lasercraft_ui::{Preview, PreviewKind, PreviewMove, TestInfo, TestRequest, clock as duration};
+use lasercraft_workshop::Workshop;
 
-/// The preview of `project` on the default machine (device profiles: M8).
-pub fn build(project: &Project) -> Preview {
-    match lasercraft_plan::plan(project, &Machine::default()) {
+/// The preview of `project` with its device profile's limits.
+pub fn build(project: &Project, workshop: &Workshop) -> Preview {
+    let (machine, _, _) = job_settings(project, workshop);
+    match lasercraft_plan::plan(project, &machine) {
         Ok(plan) => from_plan(project, &plan),
         Err(e) => Preview {
             error: Some(e.to_string()),
             ..Preview::default()
         },
     }
+}
+
+/// Checks and plans a test window's settings on `project`'s bed
+/// (`docs/spec/test-patterns.md`, "Windows (app)").
+pub fn pattern(request: &TestRequest, project: &Project, workshop: &Workshop) -> TestInfo {
+    let mut info = TestInfo {
+        revision: request.revision,
+        ..TestInfo::default()
+    };
+    let parsed = match TestSettings::parse(request.kind.arg(), Some(&request.settings)) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            info.error = Some(e.0);
+            return info;
+        }
+    };
+    info.settings = Some(parsed.to_value());
+    let (machine, _, _) = job_settings(project, workshop);
+    match patterns::build(&parsed, project.work_area(), &machine) {
+        Ok(p) => {
+            info.size = Some(p.size);
+            info.error = p
+                .plan
+                .check_bounds(project.work_area())
+                .err()
+                .map(|e| e.to_string());
+            info.warnings = p.plan.warnings.iter().map(|w| w.message.clone()).collect();
+            if request.preview {
+                info.preview = Some(from_plan(&p.project, &p.plan));
+            }
+        }
+        Err(e) => info.error = Some(e.0),
+    }
+    info
 }
 
 fn from_plan(project: &Project, plan: &Plan) -> Preview {
@@ -91,6 +129,41 @@ mod tests {
             s.run_line(line).unwrap();
         }
         s.project().clone()
+    }
+
+    fn build(project: &Project) -> Preview {
+        super::build(project, &Workshop::in_memory())
+    }
+
+    #[test]
+    fn test_settings_are_checked_completed_and_planned() {
+        let request = |settings: serde_json::Value, preview: bool| TestRequest {
+            kind: lasercraft_ui::TestKind::Interval,
+            settings,
+            revision: 7,
+            settled: true,
+            preview,
+        };
+        let ws = Workshop::in_memory();
+        let ok = pattern(
+            &request(serde_json::json!({"patches": 3}), true),
+            &Project::default(),
+            &ws,
+        );
+        assert_eq!(ok.revision, 7);
+        assert!(ok.error.is_none(), "{:?}", ok.error);
+        assert_eq!(ok.settings.as_ref().unwrap()["patches"], 3);
+        assert!(ok.size.unwrap().0 > 0.0);
+        assert!(!ok.preview.unwrap().moves.is_empty());
+        let bad = pattern(
+            &request(serde_json::json!({"patches": 0}), false),
+            &Project::default(),
+            &ws,
+        );
+        assert!(bad.error.is_some() && bad.settings.is_none());
+        let small = project(&["project.set_work_area 20 20"]);
+        let outside = pattern(&request(serde_json::json!({}), false), &small, &ws);
+        assert!(outside.error.is_some() && outside.settings.is_some());
     }
 
     #[test]

@@ -10,6 +10,7 @@ use lasercraft_commands::{Invocation, Registry, Session, with_context};
 use lasercraft_project::Project;
 use lasercraft_ui::keymap::Keymap;
 use lasercraft_ui::{Action, Shell, ShellView};
+use lasercraft_workshop::Workshop;
 
 mod laser;
 mod preview;
@@ -66,8 +67,15 @@ struct App {
 
 impl App {
     fn new(keymap: Keymap, file: Option<PathBuf>, ctx: &egui::Context) -> Self {
+        let (workshop, messages) = match lasercraft_workshop::config_dir() {
+            Some(dir) => Workshop::load(&dir),
+            None => (
+                Workshop::in_memory(),
+                vec!["No configuration folder was found: device profiles and libraries are not kept.".to_owned()],
+            ),
+        };
         let mut app = Self {
-            session: Session::new(Project::default(), Registry::with_builtin()),
+            session: Session::with_workshop(Project::default(), Registry::with_builtin(), workshop),
             shell: Shell::new(keymap),
             file: None,
             clean: Project::default(),
@@ -76,6 +84,13 @@ impl App {
             previewed: None,
             laser: laser::Laser::new(ctx),
         };
+        for line in messages {
+            app.shell.log(line);
+        }
+        // The first project takes the default device profile's work area.
+        if app.run(&Invocation::bare("project.new")) {
+            app.clean = app.session.project().clone();
+        }
         if let Some(path) = file {
             app.open(path);
         }
@@ -95,6 +110,9 @@ impl App {
             Ok(outcome) => {
                 self.shell
                     .log(format!("> {invocation}\n{}", outcome.message));
+                if let Some(warning) = self.session.take_workshop_warning() {
+                    self.shell.log(format!("Warning: {warning}"));
+                }
                 if matches!(invocation.name.as_str(), "device.start" | "device.frame") {
                     self.laser.act(&lasercraft_ui::LaserAction::DismissRefused);
                 }
@@ -189,9 +207,30 @@ impl App {
         }
         let revision = self.session.revision();
         if force || self.previewed != Some(revision) {
-            let preview = preview::build(self.session.project());
+            let preview = preview::build(self.session.project(), self.session.workshop());
             self.shell.set_preview(preview);
             self.previewed = Some(revision);
+        }
+    }
+
+    /// Answers the test windows: checks and plans their settings, and
+    /// remembers settled valid ones.
+    fn check_tests(&mut self) {
+        for request in self.shell.test_requests() {
+            let info = preview::pattern(&request, self.session.project(), self.session.workshop());
+            if request.settled
+                && let Some(full) = &info.settings
+                && self.session.workshop().last_settings(request.kind.arg()) != Some(full)
+            {
+                let remember = Invocation::new(
+                    "test.remember",
+                    [request.kind.arg().to_owned(), full.to_string()],
+                );
+                if let Err(e) = self.session.run(&remember) {
+                    self.shell.log(format!("error: {e}"));
+                }
+            }
+            self.shell.set_test_info(request.kind, info);
         }
     }
 
@@ -232,7 +271,11 @@ impl App {
 
     fn title(&self) -> String {
         let marker = if self.modified() { "• " } else { "" };
-        format!("{marker}{} — LaserCraft", self.session.project().name())
+        let project = self.session.project();
+        match project.device() {
+            Some(device) => format!("{marker}{} — {device} — LaserCraft", project.name()),
+            None => format!("{marker}{} — LaserCraft", project.name()),
+        }
     }
 }
 
@@ -257,12 +300,14 @@ impl eframe::App for App {
             undo: undo.as_ref(),
             can_redo: self.session.redo_depth() > 0,
             laser: self.laser.view(),
+            workshop: self.session.workshop(),
         };
         let actions = self.shell.show(ui, &view);
         for action in actions {
             self.apply(action, &ctx);
         }
         self.refresh_preview(false);
+        self.check_tests();
         self.confirm_discard(&ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.title()));
     }

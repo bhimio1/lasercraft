@@ -84,6 +84,7 @@ A row of square patches, each filled at its own line interval.
 | `test.preset_save <name> <kind> <json>` | Store a user preset (replaces one of the same name and kind). |
 | `test.preset_delete <name> <kind>` | Remove a user preset; built-in presets cannot be removed. |
 | `test.preset_list` | Built-in and user presets. |
+| `test.remember <kind> <json>` | Check the settings and keep them as the last used for `kind` (the test windows run it as values settle). Runs nothing. |
 | `test.preset_import <path>` / `test.preset_export <path>` | Read or write the user presets as a `.lctests` file. |
 
 - `kind` is `speed_power` or `interval`; `json` is the settings object
@@ -120,8 +121,11 @@ job bar.
 - Job preview… shows the pattern in the job preview window. Frame, Start,
   Pause and Stop behave as in the Machine panel; Pause and Stop stay in
   the job bar too.
-- Values are remembered as they change (no OK/Cancel); out-of-range values
-  get a `danger` border and disable the job buttons.
+- Values are remembered as they change (no OK/Cancel): once no field is
+  being dragged, the app runs `test.remember`. The app checks and plans
+  the window's settings (the UI never plans); invalid settings or a
+  pattern outside the bed show "Cannot run: …" and disable the job
+  buttons.
 - The Focus height test needs Z moves, which LaserCraft does not write
   yet; its menu row is not shown until then.
 

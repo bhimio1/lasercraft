@@ -5,16 +5,20 @@ use std::path::{Path, PathBuf};
 use lasercraft_commands::Invocation;
 use lasercraft_geom::Point;
 use lasercraft_project::Project;
+use lasercraft_workshop::Workshop;
 
 use crate::canvas::Canvas;
+use crate::device_dialogs::DeviceWindows;
 use crate::dialogs::Dialogs;
 use crate::dock::{self, Dock, DockPanel};
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
 use crate::laser_panel::{self, LaserAction, LaserPanel, LaserView};
 use crate::layers_panel::{LayersPanel, palette_strip};
+use crate::materials_panel::MaterialsPanel;
 use crate::menus;
 use crate::preview::{Preview, PreviewWindow};
+use crate::test_windows::{TestInfo, TestKind, TestRequest, TestWindow};
 use crate::theme::{Tokens, size};
 use crate::tool_column::ToolColumn;
 use crate::widgets::Band;
@@ -49,6 +53,8 @@ pub struct ShellView<'a> {
     pub can_redo: bool,
     /// The laser connection (M6).
     pub laser: &'a LaserView,
+    /// Device profiles, material libraries and test presets (M8).
+    pub workshop: &'a Workshop,
 }
 
 /// Something the user asked for. The app carries it out.
@@ -73,12 +79,20 @@ pub enum Action {
     Laser(LaserAction),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PromptKind {
+/// What a path prompt is for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PromptKind {
     Open,
     SaveAs,
     Import,
     ExportGcode,
+    /// Runs `command` with the path inserted among its arguments at `at`.
+    Run {
+        title: &'static str,
+        what: &'static str,
+        command: Invocation,
+        at: usize,
+    },
 }
 
 /// UI-only state of the main window.
@@ -102,6 +116,20 @@ pub struct Shell {
     dock: Dock,
     /// The drawing tools column (Shape tools face, flyout).
     tools: ToolColumn,
+    /// The Materials panel (M8).
+    materials: MaterialsPanel,
+    /// The device profile windows (M8).
+    devices: DeviceWindows,
+    /// Open test pattern windows (M8).
+    tests: Vec<TestWindow>,
+    /// A test window to open (needs the workshop, which `show` has).
+    open_test: Option<TestKind>,
+    /// The preview window shows a test pattern, not the project.
+    pattern_preview: bool,
+    /// Machine → Edit device profile… was chosen.
+    edit_profile: bool,
+    /// A pointer button is down (test settings are not remembered yet).
+    dragging: bool,
     /// The last pointer position over the canvas.
     pointer: Option<Point>,
     /// Whether the running stream is paused, for the pause/resume key.
@@ -130,6 +158,13 @@ impl Shell {
             laser: LaserPanel::default(),
             dock: Dock::default(),
             tools: ToolColumn::default(),
+            materials: MaterialsPanel::default(),
+            devices: DeviceWindows::default(),
+            tests: Vec::new(),
+            open_test: None,
+            pattern_preview: false,
+            edit_profile: false,
+            dragging: false,
             pointer: None,
             paused: false,
             adjust_requested: false,
@@ -137,11 +172,33 @@ impl Shell {
         }
     }
 
-    /// Whether the job preview window is open (the app then keeps its
-    /// contents up to date with [`Shell::set_preview`]).
+    /// Whether the job preview window is open on the project (the app then
+    /// keeps its contents up to date with [`Shell::set_preview`]).
     #[must_use]
     pub fn preview_open(&self) -> bool {
-        self.preview.is_some()
+        self.preview.is_some() && !self.pattern_preview
+    }
+
+    /// The test windows' settings to check, one per changed window.
+    pub fn test_requests(&mut self) -> Vec<TestRequest> {
+        let settled = !self.dragging;
+        self.tests
+            .iter_mut()
+            .filter_map(|w| w.request(settled))
+            .collect()
+    }
+
+    /// The app's answer to a [`TestRequest`] of `kind`.
+    pub fn set_test_info(&mut self, kind: TestKind, info: TestInfo) {
+        let Some(window) = self.tests.iter_mut().find(|w| w.kind() == kind) else {
+            return;
+        };
+        if let Some(preview) = window.set_info(info) {
+            self.preview
+                .get_or_insert_with(PreviewWindow::new)
+                .set(preview);
+            self.pattern_preview = true;
+        }
     }
 
     /// Shows a planned job in the preview window, if it is open.
@@ -271,6 +328,7 @@ impl Shell {
             && !window.show(ui.ctx(), view.project)
         {
             self.preview = None;
+            self.pattern_preview = false;
         }
         if std::mem::take(&mut self.adjust_requested) && !self.dialogs.open_adjust(view.project) {
             self.log("Cannot adjust image: no image is selected. Select an image first.");
@@ -284,6 +342,20 @@ impl Shell {
                 .show(ui.ctx(), view.project, color)
                 .map(Action::Run),
         );
+        self.test_windows(ui.ctx(), view, &mut actions);
+        if std::mem::take(&mut self.edit_profile) {
+            self.devices.open_current(view.project, view.workshop);
+        }
+        let connected = view.laser.port.is_some();
+        actions.extend(
+            self.devices
+                .show(ui.ctx(), view.workshop, connected)
+                .into_iter()
+                .map(Action::Run),
+        );
+        if let Some(kind) = self.devices.prompt.take() {
+            self.prompt = Some((kind, String::new()));
+        }
         if let Some(rect) = job_bar {
             self.job_bar(ui.ctx(), rect, view.laser, &mut actions);
         }
@@ -294,6 +366,38 @@ impl Shell {
             self.show_panel(DockPanel::Console);
         }
         actions
+    }
+
+    /// Opens a requested test window and draws the open ones.
+    fn test_windows(
+        &mut self,
+        ctx: &egui::Context,
+        view: &ShellView<'_>,
+        actions: &mut Vec<Action>,
+    ) {
+        if let Some(kind) = self.open_test.take()
+            && !self.tests.iter().any(|w| w.kind() == kind)
+        {
+            self.tests.push(TestWindow::new(kind, view.workshop));
+        }
+        let mut tests = std::mem::take(&mut self.tests);
+        tests.retain_mut(|w| {
+            let open = w.show(
+                ctx,
+                view.project,
+                view.workshop,
+                &self.laser,
+                view.laser,
+                &self.keymap,
+                actions,
+            );
+            if let Some(kind) = w.prompt.take() {
+                self.prompt = Some((kind, String::new()));
+            }
+            open
+        });
+        self.tests = tests;
+        self.dragging = ctx.input(|i| i.pointer.any_down());
     }
 
     /// The job bar, drawn in a layer above every window and menu so it is
@@ -325,14 +429,10 @@ impl Shell {
     }
 
     /// The right dock: the upper group (Layers, Jog, Console) over the
-    /// lower group (Machine).
+    /// lower group (Machine, Materials).
     fn dock(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, actions: &mut Vec<Action>) {
-        let t = Tokens::of(ui.ctx());
-        let body = egui::Frame::new()
-            .fill(t.panel)
-            .inner_margin(egui::Margin::same(size::GAP as i8));
-        let upper = self.dock.front();
-        if self.dock.is_shown(DockPanel::Machine) {
+        let upper = self.dock.front_of(true);
+        if let Some(front) = self.dock.front_of(false) {
             let lower = egui::Panel::bottom("dock_lower")
                 .frame(egui::Frame::NONE)
                 .resizable(upper.is_some());
@@ -341,55 +441,99 @@ impl Shell {
             } else {
                 lower.exact_size(ui.available_height())
             };
-            lower.show(ui, |ui| {
-                if dock::title_strip(ui, "Machine") {
-                    self.dock.hide(DockPanel::Machine);
+            lower.show(ui, |ui| self.dock_group(ui, false, front, view, actions));
+        }
+        if let Some(front) = upper {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE)
+                .show(ui, |ui| self.dock_group(ui, true, front, view, actions));
+        }
+    }
+
+    /// One dock group: title strip, tab strip along the bottom, body.
+    fn dock_group(
+        &mut self,
+        ui: &mut egui::Ui,
+        upper: bool,
+        front: DockPanel,
+        view: &ShellView<'_>,
+        actions: &mut Vec<Action>,
+    ) {
+        let t = Tokens::of(ui.ctx());
+        if dock::title_strip(ui, front.name()) {
+            self.dock.hide(front);
+        }
+        let tabs = self.dock.tabs(upper);
+        if tabs.len() > 1 {
+            egui::Panel::bottom(if upper {
+                "dock_tabs"
+            } else {
+                "dock_lower_tabs"
+            })
+            .frame(egui::Frame::NONE.fill(t.window))
+            .show(ui, |ui| {
+                if let Some(tab) = dock::tab_strip(ui, &tabs, front) {
+                    self.dock.show(tab);
                 }
-                body.show(ui, |ui| {
-                    ui.set_min_size(ui.available_size());
-                    let output = has_output(view.project);
-                    self.laser
-                        .machine(ui, view.laser, &self.keymap, output, actions);
-                });
             });
         }
-        let Some(front) = upper else {
-            return;
-        };
-        egui::CentralPanel::default()
-            .frame(egui::Frame::NONE)
-            .show(ui, |ui| {
-                if dock::title_strip(ui, front.name()) {
-                    self.dock.hide(front);
-                }
-                let tabs = self.dock.upper();
-                if tabs.len() > 1 {
-                    egui::Panel::bottom("dock_tabs")
-                        .frame(egui::Frame::NONE.fill(t.window))
-                        .show(ui, |ui| {
-                            if let Some(tab) = dock::tab_strip(ui, &tabs, front) {
-                                self.dock.show(tab);
-                            }
-                        });
-                }
-                egui::CentralPanel::default()
-                    .frame(body)
-                    .show(ui, |ui| match front {
-                        DockPanel::Layers => {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                let invocations = self.layers.show(ui, view.project);
-                                actions.extend(invocations.into_iter().map(Action::Run));
-                            });
-                        }
-                        DockPanel::Jog => {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                self.laser.jog(ui, view.laser, &self.keymap, actions);
-                            });
-                        }
-                        DockPanel::Console => self.laser.console(ui, view.laser, actions),
-                        DockPanel::Machine => {}
+        let body = egui::Frame::new()
+            .fill(t.panel)
+            .inner_margin(egui::Margin::same(size::GAP as i8));
+        egui::CentralPanel::default().frame(body).show(ui, |ui| {
+            ui.set_min_size(ui.available_size());
+            self.dock_body(ui, front, view, actions);
+        });
+    }
+
+    fn dock_body(
+        &mut self,
+        ui: &mut egui::Ui,
+        panel: DockPanel,
+        view: &ShellView<'_>,
+        actions: &mut Vec<Action>,
+    ) {
+        match panel {
+            DockPanel::Layers => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let invocations = self.layers.show(ui, view.project, view.workshop);
+                    actions.extend(invocations.into_iter().map(Action::Run));
+                });
+            }
+            DockPanel::Jog => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    self.laser.jog(ui, view.laser, &self.keymap, actions);
+                });
+            }
+            DockPanel::Console => self.laser.console(ui, view.laser, actions),
+            DockPanel::Machine => {
+                let output = has_output(view.project);
+                let devices = &mut self.devices;
+                let mut run = Vec::new();
+                let connected = view.laser.port.is_some();
+                self.laser
+                    .machine(ui, view.laser, &self.keymap, output, actions, |ui| {
+                        let (invocations, chosen) =
+                            devices.device_row(ui, view.project, view.workshop, connected);
+                        run = invocations;
+                        chosen.map(|p| (p.port, p.baud))
                     });
-            });
+                actions.extend(run.into_iter().map(Action::Run));
+            }
+            DockPanel::Materials => {
+                egui::ScrollArea::vertical()
+                    .id_salt("materials-scroll")
+                    .show(ui, |ui| {
+                        let target = self.layers.editing();
+                        let invocations =
+                            self.materials.show(ui, view.project, view.workshop, target);
+                        actions.extend(invocations.into_iter().map(Action::Run));
+                    });
+                if let Some(kind) = self.materials.prompt.take() {
+                    self.prompt = Some((kind, String::new()));
+                }
+            }
+        }
     }
 
     fn notes_window(&mut self, ui: &mut egui::Ui, project: &Project, actions: &mut Vec<Action>) {
@@ -520,7 +664,24 @@ impl Shell {
             }
             "ui.preview" => {
                 self.preview.get_or_insert_with(PreviewWindow::new);
+                self.pattern_preview = false;
                 Action::Preview
+            }
+            "ui.device_profiles" => {
+                self.devices.open_list();
+                return None;
+            }
+            "ui.device_profile" => {
+                self.edit_profile = true;
+                return None;
+            }
+            "ui.test_speed_power" | "ui.test_interval" => {
+                self.open_test = Some(if invocation.name == "ui.test_interval" {
+                    TestKind::Interval
+                } else {
+                    TestKind::SpeedPower
+                });
+                return None;
             }
             "view.zoom_in" | "view.zoom_out" | "view.zoom_fit" => {
                 self.canvas.zoom(&invocation.name);
@@ -769,6 +930,20 @@ impl Shell {
             why,
             actions,
         );
+        ui.separator();
+        for (label, line) in [
+            ("Line interval test…", "ui.test_interval"),
+            ("Speed and power test…", "ui.test_speed_power"),
+            ("", ""),
+            ("Device profiles…", "ui.device_profiles"),
+            ("Edit device profile…", "ui.device_profile"),
+        ] {
+            if line.is_empty() {
+                ui.separator();
+            } else {
+                self.menu_line(ui, label, line, true, "", actions);
+            }
+        }
     }
 
     /// A menu item that runs `line` (shown with its bound chord).
@@ -933,6 +1108,7 @@ impl Shell {
             PromptKind::SaveAs => ("Save project as", "Path to a .lcproj file:"),
             PromptKind::Import => ("Import", "Path to an .svg, .dxf, .png or .jpg file:"),
             PromptKind::ExportGcode => ("Save G-code", "Path to the .gcode file to write:"),
+            PromptKind::Run { title, what, .. } => (*title, *what),
         };
         let mut open = true;
         let mut done = None;
@@ -967,6 +1143,12 @@ impl Shell {
                     "project.export_gcode",
                     [path.display().to_string()],
                 )),
+                PromptKind::Run { command, at, .. } => {
+                    let mut command = command.clone();
+                    let at = (*at).min(command.args.len());
+                    command.args.insert(at, path.display().to_string());
+                    Action::Run(command)
+                }
             });
             self.prompt = None;
         } else if !open || cancelled {

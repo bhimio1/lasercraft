@@ -5,6 +5,7 @@
 use egui::{DragValue, Sense, Stroke, StrokeKind, vec2};
 use lasercraft_commands::Invocation;
 use lasercraft_project::{Color, Dither, Layer, Mode, Project};
+use lasercraft_workshop::Workshop;
 
 use crate::colors::{self, layer_color};
 use crate::theme::{self, ROUNDED, Tokens, size, weight};
@@ -231,7 +232,17 @@ struct Row<'a> {
 
 impl LayersPanel {
     /// Draws the list and the editor; returns the commands they produce.
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui, project: &Project) -> Vec<Invocation> {
+    /// The layer the editor shows (the Materials panel's target).
+    pub(crate) fn editing(&self) -> Option<Color> {
+        self.editing
+    }
+
+    pub(crate) fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        project: &Project,
+        workshop: &Workshop,
+    ) -> Vec<Invocation> {
         let mut out = Vec::new();
         let used = project.used_layers();
         if used.is_empty() {
@@ -277,7 +288,8 @@ impl LayersPanel {
         {
             let has_images = rows.iter().any(|r| r.image && r.layer.color == color);
             let has_vectors = rows.iter().any(|r| !r.image && r.layer.color == color);
-            self.editor(ui, layer, has_images, has_vectors, &mut out);
+            let following = follow_band(ui, layer, workshop, &mut out);
+            self.editor(ui, layer, has_images, has_vectors, following, &mut out);
         }
         out
     }
@@ -506,6 +518,7 @@ impl LayersPanel {
         layer: &Layer,
         has_images: bool,
         has_vectors: bool,
+        locked: bool,
         out: &mut Vec<Invocation>,
     ) {
         // Keep the draft in step with the project unless the user is in the
@@ -522,7 +535,7 @@ impl LayersPanel {
         name_line(ui, draft, layer, &mut edits);
         let pairs = if ui.available_width() >= 380.0 { 2 } else { 1 };
         let mut form = Form::new("layer_editor", pairs);
-        form.show(ui, |f, ui| {
+        ui.add_enabled_ui(!locked, |ui| form.show(ui, |f, ui| {
             if has_vectors {
                 f.pair(ui, "Mode", "Line traces outlines; Fill scans inside closed shapes\nOpen shapes on a fill layer are skipped.", |ui| {
                     let before = draft.mode;
@@ -554,7 +567,7 @@ impl LayersPanel {
             if has_vectors && draft.mode == Mode::Fill {
                 fill_settings(f, ui, draft, &mut edits);
             }
-        });
+        }));
         if draft.constant_power {
             widgets::band(
                 ui,
@@ -562,15 +575,17 @@ impl LayersPanel {
                 "The laser may stay on while the job is paused. Stop turns it off.",
             );
         }
-        egui::CollapsingHeader::new("Images on this layer")
-            .default_open(has_images)
-            .open(has_images.then_some(true))
-            .show(ui, |ui| {
-                let mut form = Form::new("layer_image", pairs);
-                form.show(ui, |f, ui| {
-                    image_settings(f, ui, draft, has_vectors, &mut edits)
+        ui.add_enabled_ui(!locked, |ui| {
+            egui::CollapsingHeader::new("Images on this layer")
+                .default_open(has_images)
+                .open(has_images.then_some(true))
+                .show(ui, |ui| {
+                    let mut form = Form::new("layer_image", pairs);
+                    form.show(ui, |f, ui| {
+                        image_settings(f, ui, draft, has_vectors, &mut edits)
+                    });
                 });
-            });
+        });
         // Passes and tabs are whole numbers.
         for edit in &mut edits {
             if matches!(edit.0, "passes" | "tabs")
@@ -581,6 +596,45 @@ impl LayersPanel {
         }
         out.extend(edits.into_iter().map(|(key, value)| set(c, key, value)));
     }
+}
+
+/// The band over the editor of a layer that follows a material
+/// (`docs/spec/materials.md`, "Following an entry"). Returns whether the
+/// layer follows one (its settings are then read-only).
+fn follow_band(
+    ui: &mut egui::Ui,
+    layer: &Layer,
+    workshop: &Workshop,
+    out: &mut Vec<Invocation>,
+) -> bool {
+    let Some(f) = &layer.follows else {
+        return false;
+    };
+    let (kind, text) = if workshop.library(&f.library).is_some() {
+        (
+            Band::Hint,
+            format!("Follows material {} ({})", f.description, f.library),
+        )
+    } else {
+        (
+            Band::Warning,
+            format!("Follows a material from {}, which is not open", f.library),
+        )
+    };
+    ui.horizontal_wrapped(|ui| {
+        widgets::band(ui, kind, &text);
+        if ui
+            .button("Stop following")
+            .on_hover_text("Keep the current settings and make them editable again")
+            .clicked()
+        {
+            out.push(Invocation::new(
+                "material.unfollow",
+                [layer.color.to_string()],
+            ));
+        }
+    });
+    true
 }
 
 fn header(ui: &mut egui::Ui) {

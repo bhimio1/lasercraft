@@ -169,8 +169,34 @@ pub fn band(ui: &mut Ui, kind: Band, text: &str) -> Response {
         .response
 }
 
+/// A button that opens a menu, with a painted right-pointing marker after
+/// its label (the "‹label› ▸" buttons of the style guide; the font has no
+/// arrow glyphs).
+pub fn menu_button(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) -> Response {
+    let t = Tokens::of(ui.ctx());
+    let button = egui::Button::new(format!("{label}    "));
+    let (response, _) = egui::containers::menu::MenuButton::from_button(button).ui(ui, add);
+    let c = egui::pos2(response.rect.right() - 10.0, response.rect.center().y);
+    let color = if ui.is_enabled() {
+        t.text
+    } else {
+        t.text_disabled
+    };
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![
+            c + egui::vec2(-2.0, -4.0),
+            c + egui::vec2(2.5, 0.0),
+            c + egui::vec2(-2.0, 4.0),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+    response
+}
+
 /// A band's mark, painted so it never depends on the font: a tick in a
-/// `success` disc, "!" in a `warning` triangle, "×" in a `danger` disc.
+/// `success` disc, "!" in a `warning` triangle, "×" in a `danger` disc,
+/// "i" in an `accent` disc for a hint.
 pub fn mark(ui: &mut Ui, kind: Band) -> Response {
     let t = Tokens::of(ui.ctx());
     let side = size::ICON_SMALL + 2.0;
@@ -180,7 +206,11 @@ pub fn mark(ui: &mut Ui, kind: Band) -> Response {
     let r = side / 2.0;
     let white = Stroke::new(weight::NORMAL, t.text_on_strong);
     match kind {
-        Band::Hint => {}
+        Band::Hint => {
+            painter.circle_filled(c, r, t.accent);
+            painter.circle_filled(c + egui::vec2(0.0, -3.0), 1.0, t.text_on_strong);
+            painter.line_segment([c + egui::vec2(0.0, -0.5), c + egui::vec2(0.0, 3.8)], white);
+        }
         Band::Success => {
             painter.circle_filled(c, r, t.success);
             painter.line_segment(

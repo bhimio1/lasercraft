@@ -1165,6 +1165,7 @@ dependencies = [
  "lasercraft-plan",
  "lasercraft-project",
  "lasercraft-ui",
+ "lasercraft-workshop",
  "serde_json",
 ]
 
@@ -1269,6 +1270,7 @@ dependencies = [
  "lasercraft-geom",
  "lasercraft-import",
  "lasercraft-project",
+ "lasercraft-workshop",
  "serde_json",
 ]
 

@@ -105,7 +105,7 @@ and macOS.
       start/pause/stop, console. All simulator-tested.
 - [x] M7 Images: grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki,
       ordered/Bayer, halftone; brightness/contrast/gamma, negative; DPI/line interval.
-- [ ] M8 Material library (our format, our data), test grids (speed × power),
+- [x] M8 Material library (our format, our data), test grids (speed × power),
       per-device profiles.
 - [ ] M9 Camera overlay and alignment, rotary, print-and-cut (later, optional).
 - [ ] M10 Parity checklist (`cargo xtask parity`) against the public docs;

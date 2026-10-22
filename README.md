@@ -5,7 +5,7 @@ engravers, for Linux, Windows and macOS. Its workflow and default shortcuts aim
 to feel familiar to people coming from LightBurn. It is an independent project,
 not affiliated with or endorsed by LightBurn Software.
 
-**Status: milestones M0–M7.** Draw shapes or import SVG and DXF; add text
+**Status: milestones M0–M8.** Draw shapes or import SVG and DXF; add text
 from system fonts; edit nodes; combine shapes with booleans, weld and offset;
 group, align, distribute and array them; put them on color layers with line
 or fill settings, kerf and tabs; preview the planned job with travel moves
@@ -14,6 +14,10 @@ threshold, error-diffusion, ordered or halftone dithering; export verified
 GRBL G-code; and run jobs on GRBL lasers
 over USB serial: connect, home, jog, frame with the laser off, start, pause
 and stop, place the job at the head or a user origin, and use the console.
+Keep device profiles for each machine (work area, port, power and speed
+limits), store layer settings in material libraries (a starter library of
+our own conservative values is built in), and run speed and power or line
+interval test patterns to find settings for a new material.
 Every device feature is tested against a simulated GRBL controller, which
 the app also offers as a port. Everything works headlessly from the CLI.
 See the milestone list in `CLAUDE.md`.
@@ -39,6 +43,17 @@ Pause and Stop; this job uses constant power (M3), so Pause reads "Pause
 
 ![A job running on the simulator, with the job bar and the Machine panel](docs/screenshots/machine.png)
 
+The Materials panel (lower dock group, second tab): material libraries
+as a tree by material and thickness; apply an entry to the edited layer or
+make the layer follow it.
+
+![Materials panel with the starter library](docs/screenshots/materials.png)
+
+The Speed and power test (Machine menu) with its job preview: a grid of
+boxes from least to most energy, with labels and a border.
+
+![Speed and power test window and its job preview](docs/screenshots/test-pattern.png)
+
 The screenshots show `examples/screenshot-demo.lcs`.
 
 ## Build and run
@@ -49,6 +64,8 @@ target/release/lasercraft [project.lcproj]
 target/release/lasercraft-cli help
 target/release/lasercraft-cli script examples/m3-design.lcs
 target/release/lasercraft-cli script examples/m7-images.lcs
+target/release/lasercraft-cli --config /tmp/lc script examples/m8-materials.lcs
+target/release/lasercraft-cli pattern speed_power --svg grid.svg --gcode grid.gcode
 target/release/lasercraft-cli preview job.lcproj --svg toolpath.svg
 target/release/lasercraft-cli export job.lcproj job.gcode --s-max 1000
 target/release/lasercraft-cli simulate job.lcproj device.home "device.frame" \

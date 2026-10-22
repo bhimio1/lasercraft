@@ -360,6 +360,27 @@ impl LaserPanel {
         )
     }
 
+    /// Whether Place job at is Absolute coordinates.
+    pub(crate) fn absolute(&self) -> bool {
+        START_FROM[self.from].0 == "absolute"
+    }
+
+    /// Starts (or frames) a test pattern with the panel's placement.
+    pub(crate) fn test_job(&self, kind: &str, settings: &str, frame: bool) -> Action {
+        let name = if frame {
+            "device.test_frame"
+        } else {
+            "device.test"
+        };
+        let mut inv = Invocation::new(name, [kind, settings]);
+        inv.args
+            .extend(self.placement().split(' ').map(str::to_owned));
+        if frame {
+            inv.args.push(format!("speed={}", fmt(self.speed)));
+        }
+        Action::Run(inv)
+    }
+
     /// Whether a port is chosen to connect to.
     #[must_use]
     pub fn can_connect(&self) -> bool {
@@ -411,7 +432,8 @@ impl LaserPanel {
         })
     }
 
-    /// The Machine panel.
+    /// The Machine panel. `device` draws the Device row and returns the
+    /// port and baud rate of a profile chosen there.
     pub fn machine(
         &mut self,
         ui: &mut egui::Ui,
@@ -419,6 +441,7 @@ impl LaserPanel {
         keymap: &Keymap,
         has_output: bool,
         actions: &mut Vec<Action>,
+        device: impl FnOnce(&mut egui::Ui) -> Option<(String, u32)>,
     ) {
         let on = Enabled::of(view, has_output);
         state_line(ui, view);
@@ -434,6 +457,12 @@ impl LaserPanel {
                 self.positioning(ui, view, keymap, on, actions);
                 ui.separator();
                 self.connection(ui, view, on, actions);
+                if let Some((port, baud)) = device(ui) {
+                    if !port.is_empty() {
+                        self.port = port;
+                    }
+                    self.baud = baud.to_string();
+                }
             });
     }
 
@@ -951,7 +980,7 @@ fn needs_output(on: Enabled, view: &LaserView) -> bool {
 }
 
 /// The second tooltip line of a disabled machine control.
-fn why_not(view: &LaserView, no_output: bool) -> &'static str {
+pub(crate) fn why_not(view: &LaserView, no_output: bool) -> &'static str {
     if view.port.is_none() {
         "Needs a connected machine."
     } else if no_output {
@@ -1038,7 +1067,7 @@ fn progress(ui: &mut egui::Ui, view: &LaserView) {
     }
 }
 
-fn pause_button(
+pub(crate) fn pause_button(
     ui: &mut egui::Ui,
     view: &LaserView,
     keymap: &Keymap,
@@ -1056,7 +1085,7 @@ fn pause_button(
     }
 }
 
-fn stop_button(
+pub(crate) fn stop_button(
     ui: &mut egui::Ui,
     view: &LaserView,
     keymap: &Keymap,

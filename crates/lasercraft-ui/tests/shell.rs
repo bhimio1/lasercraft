@@ -16,10 +16,16 @@ struct Harness {
     time: f64,
     log: Vec<String>,
     laser: LaserView,
+    /// Window height, px.
+    height: f32,
 }
 
 impl Harness {
     fn new(lines: &[&str]) -> Self {
+        Self::with_height(lines, 800.0)
+    }
+
+    fn with_height(lines: &[&str], height: f32) -> Self {
         let mut session = Session::new(Project::default(), Registry::with_builtin());
         for line in lines {
             session.run_line(line).unwrap();
@@ -31,6 +37,7 @@ impl Harness {
             time: 0.0,
             log: Vec::new(),
             laser: LaserView::default(),
+            height,
         };
         // Panels settle to their content's size on the second frame.
         h.frame(Vec::new(), Modifiers::NONE);
@@ -42,7 +49,7 @@ impl Harness {
     fn frame(&mut self, mut events: Vec<Event>, modifiers: Modifiers) {
         events.insert(0, Event::ModifiersChanged(modifiers));
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, self.height))),
             time: Some(self.time),
             events,
             ..RawInput::default()
@@ -59,6 +66,7 @@ impl Harness {
                 undo: undo.as_ref(),
                 can_redo: session.redo_depth() > 0,
                 laser,
+                workshop: session.workshop(),
             };
             actions = shell.show(ui, &view);
         });
@@ -238,6 +246,7 @@ fn layers_panel_lists_used_layers() {
             undo,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -283,6 +292,7 @@ fn alt_p_opens_the_preview_and_draws_what_it_is_given() {
             undo: None,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -374,6 +384,7 @@ fn alt_shift_l_asks_where_to_save_gcode() {
             undo: None,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -417,7 +428,7 @@ impl Harness {
 
     fn drawn_texts(&mut self) -> Vec<(String, Rect)> {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, self.height))),
             time: Some(self.time),
             ..RawInput::default()
         };
@@ -430,6 +441,7 @@ impl Harness {
                 undo: None,
                 can_redo: false,
                 laser,
+                workshop: session.workshop(),
             };
             let _ = shell.show(ui, &view);
         });
@@ -669,4 +681,130 @@ fn images_are_drawn_as_textures_and_alt_i_opens_their_adjustments() {
     h.session.run_line("shape.delete 7").unwrap();
     h.frame(Vec::new(), Modifiers::NONE);
     assert_eq!(h.shell.image_textures(), 0);
+}
+
+#[test]
+fn the_materials_tab_applies_an_entry_to_the_edited_layer() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20 @4"]);
+    let tab = h.text_at("Materials").expect("Materials tab");
+    h.click(tab);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "LaserCraft starter"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "Library    "), "{texts:?}");
+    let entry = h.text_at("Engrave").expect("an entry");
+    h.click(entry);
+    let apply = h.text_at("Apply to layer").expect("Apply to layer");
+    h.click(apply);
+    assert_eq!(h.log.len(), 1, "{:?}", h.log);
+    assert!(
+        h.log[0].starts_with("material.apply ") && h.log[0].ends_with(" 4"),
+        "{:?}",
+        h.log
+    );
+    // Following a material makes the editor read-only and shows the band.
+    let entry = h.text_at("Engrave").expect("an entry");
+    h.click(entry);
+    let follow = h.text_at("Follow this entry").expect("Follow this entry");
+    h.click(follow);
+    assert!(h.session.project().layer(4).unwrap().follows.is_some());
+    let layers = h.text_at("Layers").expect("Layers tab");
+    h.click(layers);
+    let texts = h.texts();
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.starts_with("Follows material Engrave")),
+        "{texts:?}"
+    );
+    let stop = h.text_at("Stop following").expect("Stop following");
+    h.click(stop);
+    assert!(h.session.project().layer(4).unwrap().follows.is_none());
+}
+
+fn menu(h: &mut Harness, menu: &str, row: &str) {
+    // The menu bar's copy is the highest one.
+    let at = h
+        .drawn_texts()
+        .into_iter()
+        .filter(|(t, _)| t == menu)
+        .map(|(_, r)| r.center())
+        .min_by(|a, b| a.y.total_cmp(&b.y))
+        .unwrap_or_else(|| panic!("{menu} menu"));
+    h.click(at);
+    let at = h.text_at(row).unwrap_or_else(|| panic!("{row}"));
+    h.click(at);
+}
+
+#[test]
+fn device_profiles_are_added_from_the_dialog_and_chosen_in_the_machine_panel() {
+    // A tall window shows the whole Machine panel.
+    let mut h = Harness::with_height(&[], 1400.0);
+    menu(&mut h, "Machine", "Device profiles…");
+    let new = h.text_at("New profile…").expect("Device profiles dialog");
+    h.click(new);
+    assert!(h.texts().iter().any(|t| t == "New device profile"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log[0].starts_with("profile.add \"Laser 1\" width=400"),
+        "{:?}",
+        h.log
+    );
+    assert_eq!(h.session.workshop().profiles().len(), 1);
+    let close = h.text_at("Close").expect("Close");
+    h.click(close);
+    // The Device dropdown lists it; choosing it names it in the project.
+    let device = h.text_at("(none)").expect("Device dropdown");
+    h.click(device);
+    let row = h
+        .drawn_texts()
+        .into_iter()
+        .rev()
+        .find(|(t, _)| t.starts_with("Laser 1 "))
+        .map(|(_, r)| r.center())
+        .unwrap_or_else(|| panic!("profile row: {:?}", h.texts()));
+    h.click(row);
+    assert_eq!(h.session.project().device(), Some("Laser 1"));
+}
+
+#[test]
+fn the_speed_and_power_window_starts_the_pattern_it_was_told_is_valid() {
+    let mut h = Harness::new(&[]);
+    menu(&mut h, "Machine", "Speed and power test…");
+    let requests = h.shell.test_requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].kind, lasercraft_ui::TestKind::SpeedPower);
+    assert!(h.shell.test_requests().is_empty(), "nothing changed");
+    // Until the app answers, the job buttons stay off.
+    connected(&mut h);
+    let start = h.text_at("Start").expect("Start");
+    h.click(start);
+    assert!(
+        h.log.iter().all(|l| !l.starts_with("device.test")),
+        "{:?}",
+        h.log
+    );
+    let full = serde_json::json!({"rows": {"count": 3}});
+    h.shell.set_test_info(
+        lasercraft_ui::TestKind::SpeedPower,
+        lasercraft_ui::TestInfo {
+            revision: requests[0].revision,
+            settings: Some(full.clone()),
+            size: Some((40.0, 30.0)),
+            ..lasercraft_ui::TestInfo::default()
+        },
+    );
+    assert!(h.texts().iter().any(|t| t == "Pattern size 40.0 × 30.0 mm"));
+    // The window's Start is the topmost copy.
+    let start = h.text_at("Start").expect("Start");
+    h.click(start);
+    assert_eq!(
+        h.log.last().unwrap(),
+        &format!(
+            "device.test speed_power {} from=absolute anchor=bottom-left",
+            lasercraft_commands::Invocation::new("x", [full.to_string()])
+                .to_string()
+                .trim_start_matches("x ")
+        )
+    );
 }

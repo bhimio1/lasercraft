@@ -1,7 +1,8 @@
 //! The right dock (`docs/spec/style/layout.md`, docking stage a): an upper
-//! group with Layers, Jog and Console tabs along its bottom and a lower
-//! group with Machine; which panels are shown and which tab is in front.
-//! UI state only, never saved in the project.
+//! group with Layers, Jog and Console tabs and a lower group with Machine
+//! and Materials tabs, each with its tabs along its bottom; which panels
+//! are shown and which tab of each group is in front. UI state only, never
+//! saved in the project.
 
 use crate::theme::{Tokens, size, weight};
 
@@ -16,13 +17,23 @@ pub enum DockPanel {
     Console,
     /// Connection and job control.
     Machine,
+    /// Material libraries (M8).
+    Materials,
 }
 
 impl DockPanel {
     /// Every panel, in Window → Panels order (alphabetical).
-    pub const ALL: [Self; 4] = [Self::Console, Self::Jog, Self::Layers, Self::Machine];
+    pub const ALL: [Self; 5] = [
+        Self::Console,
+        Self::Jog,
+        Self::Layers,
+        Self::Machine,
+        Self::Materials,
+    ];
     /// The upper group's tabs, left to right.
     pub const UPPER: [Self; 3] = [Self::Layers, Self::Jog, Self::Console];
+    /// The lower group's tabs, left to right.
+    pub const LOWER: [Self; 2] = [Self::Machine, Self::Materials];
 
     /// The panel's name.
     #[must_use]
@@ -32,6 +43,7 @@ impl DockPanel {
             Self::Jog => "Jog",
             Self::Console => "Console",
             Self::Machine => "Machine",
+            Self::Materials => "Materials",
         }
     }
 
@@ -43,20 +55,25 @@ impl DockPanel {
             Self::Jog => "Move the laser head by hand and store origins",
             Self::Console => "Messages from GRBL and a line for raw commands",
             Self::Machine => "Laser connection and job control",
+            Self::Materials => "Material libraries: stored layer settings",
         }
     }
 
     fn index(self) -> usize {
         self as usize
     }
+
+    fn upper(self) -> bool {
+        Self::UPPER.contains(&self)
+    }
 }
 
-/// Which panels are shown, which upper tab is in front, and the other
-/// show/hide state of the main window.
+/// Which panels are shown, which tab of each group is in front, and the
+/// other show/hide state of the main window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dock {
-    shown: [bool; 4],
-    front: DockPanel,
+    shown: [bool; 5],
+    front: [DockPanel; 2],
     /// The command line's log is open.
     pub log_open: bool,
     /// The palette strip is shown.
@@ -68,8 +85,8 @@ pub struct Dock {
 impl Default for Dock {
     fn default() -> Self {
         Self {
-            shown: [true; 4],
-            front: DockPanel::Layers,
+            shown: [true; 5],
+            front: [DockPanel::Layers, DockPanel::Machine],
             log_open: false,
             palette: true,
             tools: true,
@@ -84,41 +101,47 @@ impl Dock {
         self.shown[panel.index()]
     }
 
+    fn group(panel: DockPanel) -> usize {
+        usize::from(!panel.upper())
+    }
+
     /// Shows `panel` and brings it to the front of its group.
     pub fn show(&mut self, panel: DockPanel) {
         self.shown[panel.index()] = true;
-        if panel != DockPanel::Machine {
-            self.front = panel;
-        }
+        self.front[Self::group(panel)] = panel;
     }
 
     /// Hides `panel`; the next shown tab of its group comes to the front.
     pub fn hide(&mut self, panel: DockPanel) {
         self.shown[panel.index()] = false;
-        if self.front == panel
-            && let Some(next) = self.upper().first()
+        let g = Self::group(panel);
+        if self.front[g] == panel
+            && let Some(next) = self.tabs(g == 0).first()
         {
-            self.front = *next;
+            self.front[g] = *next;
         }
     }
 
-    /// The upper group's shown tabs.
+    /// The shown tabs of the upper (or lower) group.
     #[must_use]
-    pub fn upper(&self) -> Vec<DockPanel> {
-        DockPanel::UPPER
-            .into_iter()
-            .filter(|p| self.is_shown(*p))
-            .collect()
+    pub fn tabs(&self, upper: bool) -> Vec<DockPanel> {
+        let all: &[DockPanel] = if upper {
+            &DockPanel::UPPER
+        } else {
+            &DockPanel::LOWER
+        };
+        all.iter().copied().filter(|p| self.is_shown(*p)).collect()
     }
 
-    /// The upper group's front tab, if any tab is shown.
+    /// The front tab of the upper (or lower) group, if any tab is shown.
     #[must_use]
-    pub fn front(&self) -> Option<DockPanel> {
-        let upper = self.upper();
-        if upper.contains(&self.front) {
-            Some(self.front)
+    pub fn front_of(&self, upper: bool) -> Option<DockPanel> {
+        let tabs = self.tabs(upper);
+        let front = self.front[usize::from(!upper)];
+        if tabs.contains(&front) {
+            Some(front)
         } else {
-            upper.first().copied()
+            tabs.first().copied()
         }
     }
 
@@ -203,17 +226,26 @@ mod tests {
     #[test]
     fn hiding_the_front_tab_brings_the_next_forward() {
         let mut dock = Dock::default();
-        assert_eq!(dock.front(), Some(DockPanel::Layers));
+        assert_eq!(dock.front_of(true), Some(DockPanel::Layers));
         dock.show(DockPanel::Console);
-        assert_eq!(dock.front(), Some(DockPanel::Console));
+        assert_eq!(dock.front_of(true), Some(DockPanel::Console));
         dock.hide(DockPanel::Console);
-        assert_eq!(dock.front(), Some(DockPanel::Layers));
+        assert_eq!(dock.front_of(true), Some(DockPanel::Layers));
         for p in DockPanel::UPPER {
             dock.hide(p);
         }
-        assert_eq!(dock.front(), None);
+        assert_eq!(dock.front_of(true), None);
         assert!(dock.any(), "Machine is still shown");
+        assert_eq!(dock.front_of(false), Some(DockPanel::Machine));
+        dock.show(DockPanel::Materials);
+        assert_eq!(dock.front_of(false), Some(DockPanel::Materials));
+        dock.hide(DockPanel::Materials);
+        assert_eq!(dock.front_of(false), Some(DockPanel::Machine));
+        dock.show(DockPanel::Materials);
+        dock.show(DockPanel::Machine);
         dock.hide(DockPanel::Machine);
+        assert_eq!(dock.front_of(false), Some(DockPanel::Materials));
+        dock.hide(DockPanel::Materials);
         assert!(!dock.any());
         dock.reset();
         assert_eq!(dock, Dock::default());
