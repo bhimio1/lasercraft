@@ -834,6 +834,11 @@ impl Cameras {
         }
     }
 
+    /// The overlay, once a camera picture was captured.
+    pub fn overlay(&self) -> Option<Arc<Overlay>> {
+        self.overlay.clone()
+    }
+
     /// The latest picture of a camera.
     pub fn picture(&self, name: &str) -> Option<Arc<Picture>> {
         self.workers.get(name).and_then(|w| w.latest.clone())

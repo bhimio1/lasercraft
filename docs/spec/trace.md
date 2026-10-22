@@ -66,10 +66,13 @@ The outcome names the number of paths and nodes.
 
 ## In the app
 
-- Tools → Trace to vectors…, the image's canvas menu, and Trace camera
-  image… (Camera panel) open the window. The preview is computed by the
-  app (as for test windows) whenever the settings change, and drawn by
-  the window: the picture with the traced loops (flattened) over it.
+- Tools → Trace to vectors… (an image selected; the action is
+  `ui.trace_image`) and Trace camera image… (Camera panel, once a camera
+  picture was captured) open the window. The preview is computed by the
+  app (as for test windows) whenever a setting is settled (a field or
+  slider released), and drawn by the window: the picture (at most 1600
+  pixels across) fitted into the preview with the traced loops over it.
+  Pan and zoom in the preview, and the image's canvas menu, come later.
 - Dragging in the preview draws the trace area; Clear trace area removes
   it. Dim image fades the picture; Show nodes draws the nodes.
 - OK runs `image.trace` (or, for the camera, `image.trace_picture` on the

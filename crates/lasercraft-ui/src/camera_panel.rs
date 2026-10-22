@@ -125,6 +125,13 @@ pub enum CameraAction {
         /// Lens-corrected and aligned on the bed, or as captured.
         corrected: bool,
     },
+    /// Trace the overlay into paths (Trace to vectors on the camera).
+    Trace {
+        /// The trace settings, JSON.
+        settings: String,
+        /// The layer to put them on.
+        color: u8,
+    },
 }
 
 /// Picture textures by camera, rebuilt when a picture changes.
@@ -294,6 +301,7 @@ pub(crate) enum PanelWish {
     Setup(String),
     Lens(String),
     Align(String),
+    Trace,
 }
 
 fn badge(ui: &mut egui::Ui, kind: Band, tip: &str) -> egui::Response {
@@ -356,8 +364,17 @@ impl CameraPanel {
             {
                 actions.push(Action::Camera(CameraAction::Capture(region)));
             }
-            ui.add_enabled(false, egui::Button::new("Trace camera image…").min_size(tall))
-                .on_disabled_hover_text("Tracing comes later.");
+            if ui
+                .add_enabled(
+                    view.overlay.is_some(),
+                    egui::Button::new("Trace camera image…").min_size(tall),
+                )
+                .on_hover_text("Trace the camera picture into shapes")
+                .on_disabled_hover_text("Capture a camera picture first.")
+                .clicked()
+            {
+                self.wants = Some(PanelWish::Trace);
+            }
         });
         let first = &cameras[0];
         let mut opacity = first.opacity;

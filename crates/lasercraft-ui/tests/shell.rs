@@ -909,3 +909,59 @@ fn a_camera_brings_up_the_camera_panel_and_add_camera_starts_with_its_kind() {
     assert_eq!(h.session.workshop().cameras("Shop").unwrap().len(), 2);
     assert!(h.texts().iter().any(|t| t == "Choose the picture source"));
 }
+
+#[test]
+fn trace_to_vectors_traces_the_selected_image_once_the_app_answers() {
+    use lasercraft_commands::Invocation;
+    use lasercraft_project::raster::Gray;
+    use lasercraft_project::{Geometry, Image};
+    use lasercraft_ui::{TraceInfo, TraceSource};
+    let mut h = Harness::new(&[]);
+    let img = Geometry::Image(Image::new(
+        40.0,
+        20.0,
+        Gray::new(4, 2, vec![0, 80, 160, 255, 255, 160, 80, 0]).unwrap(),
+    ));
+    let shape = format!(
+        r#"{{"id":7,"layer":2,"geometry":{},"transform":[1.0,0.0,0.0,1.0,50.0,50.0]}}"#,
+        serde_json::to_string(&img).unwrap()
+    );
+    h.session
+        .run(&Invocation::new("shape.insert", ["0".to_owned(), shape]))
+        .unwrap();
+    h.session.run_line("select.set 7").unwrap();
+    menu(&mut h, "Tools", "Trace to vectors…");
+    let request = h.shell.trace_request().expect("a request");
+    assert_eq!(request.source, TraceSource::Image(7));
+    assert!(h.shell.trace_request().is_none(), "nothing changed");
+    // OK stays off until the app has traced.
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log.iter().all(|l| !l.starts_with("image.trace")),
+        "{:?}",
+        h.log
+    );
+    h.shell.set_trace_info(TraceInfo {
+        revision: request.revision,
+        picture: Some(std::sync::Arc::new(lasercraft_camera::Picture::filled(
+            4, 2, [200; 3],
+        ))),
+        size: (4, 2),
+        loops: vec![vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+        ]],
+        counts: (1, 3),
+        ..TraceInfo::default()
+    });
+    assert!(h.texts().iter().any(|t| t == "1 path(s), 3 nodes"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    let last = h.log.last().unwrap();
+    assert!(
+        last.starts_with("image.trace 7 ") && last.ends_with(" @0"),
+        "{last}"
+    );
+}

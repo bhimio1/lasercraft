@@ -24,6 +24,7 @@ use crate::setup_windows::SetupWindows;
 use crate::test_windows::{TestInfo, TestKind, TestRequest, TestWindow};
 use crate::theme::{Tokens, size};
 use crate::tool_column::ToolColumn;
+use crate::trace_window::{TraceInfo, TraceRequest, TraceSource, TraceWindow};
 use crate::widgets::Bounded;
 use crate::widgets::{self, Band};
 
@@ -154,6 +155,10 @@ pub struct Shell {
     paused: bool,
     /// Alt+I was pressed: open the selected image's adjustments.
     adjust_requested: bool,
+    /// Trace to vectors was chosen: open it on the selected image.
+    trace_requested: bool,
+    /// The Trace to vectors window.
+    trace: Option<TraceWindow>,
     /// The theme has been installed on the context.
     themed: bool,
 }
@@ -191,6 +196,8 @@ impl Shell {
             pointer: None,
             paused: false,
             adjust_requested: false,
+            trace_requested: false,
+            trace: None,
             themed: false,
         }
     }
@@ -221,6 +228,19 @@ impl Shell {
             .iter_mut()
             .filter_map(|w| w.request(settled))
             .collect()
+    }
+
+    /// What the Trace to vectors window wants traced, when its settings
+    /// changed.
+    pub fn trace_request(&mut self) -> Option<TraceRequest> {
+        self.trace.as_mut().and_then(TraceWindow::request)
+    }
+
+    /// The app's answer to a [`TraceRequest`].
+    pub fn set_trace_info(&mut self, info: TraceInfo) {
+        if let Some(window) = &mut self.trace {
+            window.set_info(info);
+        }
     }
 
     /// The app's answer to a [`TestRequest`] of `kind`.
@@ -376,10 +396,26 @@ impl Shell {
         if std::mem::take(&mut self.adjust_requested) && !self.dialogs.open_adjust(view.project) {
             self.log("Cannot adjust image: no image is selected. Select an image first.");
         }
+        if std::mem::take(&mut self.trace_requested) {
+            let image = view.project.selection().into_iter().find(|id| {
+                view.project
+                    .shape(*id)
+                    .is_some_and(|s| s.geometry().image().is_some())
+            });
+            match image {
+                Some(id) => self.trace = Some(TraceWindow::new(TraceSource::Image(id))),
+                None => self.log("Cannot trace: no image is selected. Select an image first."),
+            }
+        }
         if let Some(at) = self.canvas.take_text_click() {
             self.dialogs.open_text(at);
         }
         let color = self.canvas.color();
+        if let Some(window) = &mut self.trace
+            && !window.show(ui.ctx(), color, &mut actions)
+        {
+            self.trace = None;
+        }
         actions.extend(
             self.dialogs
                 .show(ui.ctx(), view.project, color)
@@ -447,6 +483,7 @@ impl Shell {
             Some(PanelWish::Setup(c)) => self.camera_windows.open_setup(&c),
             Some(PanelWish::Lens(c)) => self.camera_windows.open_lens(&c),
             Some(PanelWish::Align(c)) => self.camera_windows.open_align(view.project, &c),
+            Some(PanelWish::Trace) => self.trace = Some(TraceWindow::new(TraceSource::Camera)),
             None => {}
         }
         self.camera_windows.show(
@@ -761,6 +798,10 @@ impl Shell {
             "ui.adjust_image" => {
                 // Opened in `show`, which has the project.
                 self.adjust_requested = true;
+                return None;
+            }
+            "ui.trace_image" => {
+                self.trace_requested = true;
                 return None;
             }
             "ui.offset" | "ui.grid_array" | "ui.circular_array" => {

@@ -15,6 +15,7 @@ use lasercraft_workshop::Workshop;
 mod camera;
 mod laser;
 mod preview;
+mod trace;
 
 struct Options {
     file: Option<PathBuf>,
@@ -267,7 +268,42 @@ impl App {
             A::InsertPicture { camera, corrected } => {
                 self.insert_picture(&cams, &area, &camera, corrected)
             }
+            A::Trace { settings, color } => self.trace_camera(&settings, color),
         }
+    }
+
+    /// Traces the overlay picture onto the bed through
+    /// `image.trace_picture`.
+    fn trace_camera(&mut self, settings: &str, color: u8) {
+        let Some(gray) = self
+            .cameras
+            .overlay()
+            .as_deref()
+            .and_then(|o| trace::overlay_gray(o).map(|g| (g, o.mm_per_px)))
+        else {
+            self.shell.log("Capture a camera picture first.");
+            return;
+        };
+        let (gray, mm) = gray;
+        let path = scratch("trace.png");
+        if let Err(e) = std::fs::write(&path, lasercraft_project::raster::encode_png(&gray)) {
+            self.shell
+                .log(format!("error: cannot write the picture: {e}"));
+            return;
+        }
+        let n = |v: f64| lasercraft_plan::num(v);
+        self.run(&Invocation::new(
+            "image.trace_picture",
+            [
+                path.display().to_string(),
+                "0".into(),
+                "0".into(),
+                n(f64::from(gray.width()) * mm),
+                n(f64::from(gray.height()) * mm),
+                settings.to_owned(),
+                format!("@{color}"),
+            ],
+        ));
     }
 
     /// Saves a camera's latest picture for the lens correction and looks
@@ -518,6 +554,11 @@ impl eframe::App for App {
         }
         self.refresh_preview(false);
         self.check_tests();
+        if let Some(request) = self.shell.trace_request() {
+            let overlay = self.cameras.overlay();
+            let info = trace::answer(&request, self.session.project(), overlay.as_deref());
+            self.shell.set_trace_info(info);
+        }
         self.confirm_discard(&ctx);
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.title()));
     }

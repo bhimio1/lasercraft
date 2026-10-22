@@ -178,6 +178,7 @@ pub(crate) const TOOLS: &[Row] = &[
     Item("Intersect", "path.intersect", Pair),
     Sep,
     Item("Image adjustments…", "ui.adjust_image", Image),
+    Item("Trace to vectors…", "ui.trace_image", Image),
 ];
 
 const SHAPE_TOOLS: &[Row] = &[Tool("Rectangle", "rect"), Tool("Ellipse", "ellipse")];

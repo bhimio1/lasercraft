@@ -25,6 +25,7 @@ mod test_windows;
 mod textures;
 pub mod theme;
 mod tool_column;
+mod trace_window;
 pub mod view;
 pub mod widgets;
 
@@ -36,11 +37,12 @@ pub use laser_panel::{
 pub use preview::{Preview, PreviewKind, PreviewMove};
 pub use shell::{Action, Shell, ShellView};
 pub use test_windows::{TestInfo, TestKind, TestRequest};
+pub use trace_window::{TraceInfo, TraceRequest, TraceSource};
 
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 37] = [
+pub const UI_ACTIONS: [&str; 38] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -84,4 +86,6 @@ pub const UI_ACTIONS: [&str; 37] = [
     "ui.registration",
     "ui.camera_list",
     "ui.camera_capture",
+    // Trace to vectors.
+    "ui.trace_image",
 ];
