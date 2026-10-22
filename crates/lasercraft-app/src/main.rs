@@ -95,6 +95,9 @@ impl App {
             Ok(outcome) => {
                 self.shell
                     .log(format!("> {invocation}\n{}", outcome.message));
+                if matches!(invocation.name.as_str(), "device.start" | "device.frame") {
+                    self.laser.act(&lasercraft_ui::LaserAction::DismissRefused);
+                }
                 if let Some(request) = outcome.device {
                     self.laser.send(request);
                 }
@@ -102,6 +105,9 @@ impl App {
             }
             Err(err) => {
                 self.shell.log(format!("> {invocation}\nerror: {err}"));
+                if matches!(invocation.name.as_str(), "device.start" | "device.frame") {
+                    self.laser.refuse(format!("Cannot run: {err}"));
+                }
                 false
             }
         }

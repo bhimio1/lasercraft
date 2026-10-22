@@ -27,7 +27,11 @@ and must have tests there. This software drives a real laser.
 ## Stop and pause
 
 7. While connected, Stop and Pause are always visible and enabled, whatever
-   panel or dialog is open. (M6)
+   panel or dialog is open, in every machine state including Connecting… and
+   No response. The job bar at the right end of toolbar row 1 holds them; it
+   is drawn in a layer above every window, menu and modal, so nothing covers
+   it, and F12 does not hide it. The chords bound to Pause and Stop act even
+   while a text field has focus. UI tests click Stop with windows open. (M6)
 8. Pause sends GRBL's feed hold `!`; Resume sends `~`; Stop stops streaming
    immediately, sends feed hold, then soft reset `0x18` (as soon as the hold
    completes, at most 1 s later). These are real-time bytes, so they
@@ -39,7 +43,10 @@ and must have tests there. This software drives a real laser.
    Therefore: G-code uses `M4` by default (M5); when a job that uses `M3` is
    paused, the controller sends GRBL's spindle stop `0x9E` as soon as the
    hold completes (GRBL restores the spindle on resume), and Pause is
-   labelled "Pause (motion)" for such jobs (M6). Stop is hold, then soft
+   labelled "Pause (motion only)" for such jobs, with the note "The laser
+   may stay on" beside it in the job bar and Stop ringed: the spindle stop
+   only follows once the head has stopped (M6; wording from
+   `docs/spec/style/naming.md`). Stop is hold, then soft
    reset (`docs/spec/device.md`). (Decided 2026-10-21, owner delegated the
    call.)
 

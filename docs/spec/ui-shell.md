@@ -69,11 +69,17 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   (`docs/spec/preview.md`, M4). The shell emits `Action::Preview`; the app
   plans the job and hands the shell the moves and text to draw.
 - Center: the canvas (`docs/spec/canvas.md`).
-- Console (bottom, resizable): a line where any command can be typed and run,
-  and a log of each command with its message or error.
-- Status bar: project name, a dot when there are unsaved changes, the file
-  path, the work area size and origin, the pointer position in mm, and the
-  selection's count and size.
+- Command line (bottom): a line where any command can be typed and run.
+  Its log of each command with its message or error is collapsed by
+  default and opens above the line with the "Log" toggle (or by clicking
+  the status bar's message).
+- Status bar, left to right: pointer position in mm (kept, muted, after the
+  pointer leaves the canvas), the selection's count and size, Messages (an
+  alarm, else the last log line; errors on `danger-soft`), the work area
+  size and origin ("origin front left"), and the project name with a dot
+  when modified and the file path.
+- The canvas re-fits the bed when its size changes until the user zooms or
+  pans.
 - Window title: project name, prefixed with a dot when modified.
 
 ## M7 additions
@@ -88,20 +94,25 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
 
 ## M6 additions
 
-- The right dock has two tabs: Cuts / Layers and Laser. The Laser panel
-  (`docs/spec/laser.md`, "Panel layout") draws `LaserView` data the app
-  builds from device events, and emits `device.*` invocations (run through
+- The right dock has two groups: the upper one with Layers, Jog and
+  Console tabs along its bottom, the lower one with Machine; each group has
+  a title strip with the front panel's name and a close cross. Window →
+  Reset layout, Toolbars (Drawing tools, Palette) and Panels (Console, Jog,
+  Layers, Machine) show and hide them. The machine panels
+  (`docs/spec/laser.md`, "Panel layout") draw `LaserView` data the app
+  builds from device events, and emit `device.*` invocations (run through
   the session like any command) or `Action::Laser` for what only the app
-  remembers (user origin, port list, closing the alarm and notice windows).
+  remembers (user origin, port list, hiding bands).
 - Machine menu (see Layout): Pause reads "Resume" while a job is held and
   "Pause (motion only)" while a constant-power (M3) job runs; Pause and
   Stop are enabled whenever a machine is connected. Clear alarm (`$X`) is
   enabled only in an alarm. Disconnect waits for the job to end.
-- While a laser is connected the status bar starts with Pause (or Resume)
-  and Stop and the machine state, so they stay reachable whatever panel or
-  window is open (safety rule 7).
-- A "Laser alarm" window shows an alarm until closed, with Unlock and Home;
-  a "Laser" window shows permission help and failed jobs.
+- While a laser is connected, toolbar row 1 holds the job bar at its right
+  end: state dot and word (a click shows the Machine panel), "‹n›% sent",
+  "The laser may stay on" during an M3 job, Pause and Stop. It is drawn
+  above every window (safety rule 7).
+- Alarms, faults, refused jobs and permission help are bands in the Machine
+  panel, not windows.
 
 ## M3 additions
 

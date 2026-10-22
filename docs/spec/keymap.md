@@ -13,7 +13,9 @@ Later chords are bound as their commands arrive; the table below says when.
 - A user keymap can replace the default: `lasercraft --keymap <file>`.
 - `Ctrl` means `Cmd` and `Alt` means `Option` on macOS, which is exactly how the
   published macOS list differs from the Windows/Linux one.
-- Shortcuts are ignored while a text field has keyboard focus.
+- Shortcuts are ignored while a text field has keyboard focus, except the
+  chords bound to `ui.device_pause` and `device.stop`, which always act
+  (`docs/spec/safety.md`, rule 7).
 - A chord bound twice in one file is an error naming the line.
 - Invocations are registry commands, or front-end actions: `ui.*` (files,
   tools, paste at the pointer, notes, side panels, laser actions that use the

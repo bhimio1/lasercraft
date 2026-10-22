@@ -45,6 +45,9 @@ fn rect_of(r: egui::Rect) -> Rect {
 pub struct Canvas {
     view: Option<View>,
     fit_requested: bool,
+    /// The screen and bed the view was last fitted to, while the user has
+    /// not zoomed or panned since; the view then follows size changes.
+    fitted: Option<(Rect, Rect)>,
     interaction: Interaction,
     /// The primary button went down on the canvas (so its release is ours).
     pressed_here: bool,
@@ -116,8 +119,14 @@ impl Canvas {
             return;
         };
         match (action, &mut self.view) {
-            ("view.zoom_in", Some(v)) => v.zoom_about(screen.center(), ZOOM_STEP),
-            ("view.zoom_out", Some(v)) => v.zoom_about(screen.center(), 1.0 / ZOOM_STEP),
+            ("view.zoom_in", Some(v)) => {
+                v.zoom_about(screen.center(), ZOOM_STEP);
+                self.fitted = None;
+            }
+            ("view.zoom_out", Some(v)) => {
+                v.zoom_about(screen.center(), 1.0 / ZOOM_STEP);
+                self.fitted = None;
+            }
             _ => self.fit_requested = true,
         }
     }
@@ -130,9 +139,11 @@ impl Canvas {
         self.screen = Some(screen);
         let area = project.work_area();
         let bed = Rect::from_corners(Point::ZERO, Point::new(area.width_mm, area.height_mm));
-        if self.view.is_none() || self.fit_requested {
+        let moved = self.fitted.is_some_and(|fitted| fitted != (screen, bed));
+        if self.view.is_none() || self.fit_requested || moved {
             self.view = Some(View::fit(&screen, &bed, FIT_MARGIN_PX));
             self.fit_requested = false;
+            self.fitted = Some((screen, bed));
         }
         let mut view = self
             .view
@@ -190,11 +201,15 @@ impl Canvas {
             let factor = (f64::from(scroll) / SCROLL_PER_E).exp() * f64::from(pinch);
             if factor != 1.0 {
                 view.zoom_about(point(p), factor);
+                self.fitted = None;
             }
         }
         let panning = middle || (space && down);
         if panning && (hovered || self.pressed_here) {
-            view.pan(point(Pos2::ZERO + delta));
+            if delta != egui::Vec2::ZERO {
+                view.pan(point(Pos2::ZERO + delta));
+                self.fitted = None;
+            }
             return Vec::new();
         }
 

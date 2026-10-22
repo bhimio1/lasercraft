@@ -200,6 +200,8 @@ pub mod size {
     pub const GAP_WIDE: f32 = 12.0;
     /// Height of a button, field or list row.
     pub const ROW: f32 = 20.0;
+    /// Height of the big job buttons (Start, Pause, Stop, Frame).
+    pub const ROW_BIG: f32 = 28.0;
     /// Small icons, check marks, band marks.
     pub const ICON_SMALL: f32 = 12.0;
 }

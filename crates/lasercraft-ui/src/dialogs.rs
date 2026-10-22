@@ -125,7 +125,7 @@ impl Dialogs {
             Dialog::Grid { .. } => "Grid array",
             Dialog::Circular { .. } => "Circular array",
             Dialog::Text { .. } => "Add text",
-            Dialog::Adjust { .. } => "Adjust image",
+            Dialog::Adjust { .. } => "Image adjustments",
         };
         if let Dialog::Circular { center, .. } = dialog
             && center.is_none()

@@ -7,6 +7,7 @@
 mod canvas;
 pub mod colors;
 mod dialogs;
+mod dock;
 pub mod interaction;
 pub mod keymap;
 mod laser_panel;
@@ -19,7 +20,10 @@ pub mod theme;
 pub mod view;
 pub mod widgets;
 
-pub use laser_panel::{ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, LaserAction, LaserView};
+pub use dock::DockPanel;
+pub use laser_panel::{
+    ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, Enabled, LaserAction, LaserView, MachineWord, clock,
+};
 pub use preview::{Preview, PreviewKind, PreviewMove};
 pub use shell::{Action, Shell, ShellView};
 

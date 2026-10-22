@@ -95,8 +95,9 @@ pub enum Fill {
     Danger,
 }
 
-/// A button filled with `accent` or `danger` and a white label.
-pub fn filled(ui: &mut Ui, label: &str, fill: Fill) -> Response {
+/// A button filled with `accent` or `danger` and a white label, at least
+/// `min` in size.
+pub fn filled(ui: &mut Ui, label: &str, fill: Fill, min: Vec2) -> Response {
     let t = Tokens::of(ui.ctx());
     let color = match fill {
         Fill::Primary => t.accent,
@@ -115,7 +116,7 @@ pub fn filled(ui: &mut Ui, label: &str, fill: Fill) -> Response {
             state.bg_stroke = Stroke::NONE;
             state.fg_stroke = Stroke::new(weight::THIN, t.text_on_strong);
         }
-        ui.add(egui::Button::new(text).corner_radius(ROUNDED))
+        ui.add(egui::Button::new(text).corner_radius(ROUNDED).min_size(min))
     })
     .inner
 }

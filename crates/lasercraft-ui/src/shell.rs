@@ -8,12 +8,15 @@ use lasercraft_project::Project;
 
 use crate::canvas::Canvas;
 use crate::dialogs::Dialogs;
+use crate::dock::{self, Dock, DockPanel};
 use crate::interaction::Tool;
 use crate::keymap::{Chord, Keymap};
 use crate::laser_panel::{self, LaserAction, LaserPanel, LaserView};
 use crate::layers_panel::{LayersPanel, palette_strip};
 use crate::menus;
 use crate::preview::{Preview, PreviewWindow};
+use crate::theme::{Tokens, size};
+use crate::widgets::Band;
 
 /// The drawing tools: label, `ui.tool` argument.
 const TOOLS: [(&str, &str, Tool); 6] = [
@@ -25,8 +28,11 @@ const TOOLS: [(&str, &str, Tool); 6] = [
     ("Edit nodes", "nodes", Tool::Nodes),
 ];
 
-/// How many console lines are kept.
+/// How many command line log lines are kept.
 const LOG_LINES: usize = 200;
+
+/// Bound actions that work even while a text field has focus.
+const SAFETY_ACTIONS: [&str; 2] = ["ui.device_pause", "device.stop"];
 
 /// What the shell needs to draw a frame. Read-only.
 pub struct ShellView<'a> {
@@ -91,8 +97,10 @@ pub struct Shell {
     dialogs: Dialogs,
     /// The Laser panel's settings (M6).
     laser: LaserPanel,
-    /// The right dock shows the Laser panel instead of Cuts / Layers.
-    laser_tab: bool,
+    /// The dock's shown panels and front tabs.
+    dock: Dock,
+    /// The last pointer position over the canvas.
+    pointer: Option<Point>,
     /// Whether the running stream is paused, for the pause/resume key.
     paused: bool,
     /// Alt+I was pressed: open the selected image's adjustments.
@@ -117,7 +125,8 @@ impl Shell {
             preview: None,
             dialogs: Dialogs::default(),
             laser: LaserPanel::default(),
-            laser_tab: false,
+            dock: Dock::default(),
+            pointer: None,
             paused: false,
             adjust_requested: false,
             themed: false,
@@ -165,9 +174,15 @@ impl Shell {
         self.canvas.tool()
     }
 
-    /// Shows the Laser panel in the right dock.
-    pub fn show_laser_tab(&mut self) {
-        self.laser_tab = true;
+    /// Shows the Machine panel (and the side panels, if F12 hid them).
+    pub fn show_machine_panel(&mut self) {
+        self.dock.show(DockPanel::Machine);
+        self.panels = true;
+    }
+
+    /// Brings a dock panel to the front of its group.
+    pub fn show_panel(&mut self, panel: DockPanel) {
+        self.dock.show(panel);
         self.panels = true;
     }
 
@@ -185,49 +200,55 @@ impl Shell {
         }
         self.paused = view.laser.busy.as_ref().is_some_and(|b| b.paused);
         let mut actions = self.shortcuts(ui);
+        let connected = view.laser.port.is_some();
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, view, &mut actions));
-        let pointer = self.canvas.pointer();
-        egui::Panel::bottom("status").show(ui, |ui| status_bar(ui, view, pointer, &mut actions));
-        egui::Panel::bottom("console")
-            .resizable(true)
-            .default_size(120.0)
-            .show(ui, |ui| self.console(ui, &mut actions));
-        egui::Panel::bottom("palette").show(ui, |ui| {
-            let (invocations, picked) = palette_strip(ui, view.project, self.canvas.color());
-            actions.extend(invocations.into_iter().map(Action::Run));
-            if let Some(color) = picked {
-                self.canvas.set_color(color);
-            }
+        // Reserved here, drawn last above every window (safety rule 7).
+        let job_bar = connected.then(|| {
+            egui::Panel::top("job_bar")
+                .exact_size(size::ROW + 2.0 * size::GAP_TIGHT)
+                .show(ui, |_| {})
+                .response
+                .rect
         });
-        if self.panels {
-            egui::Panel::left("tools")
-                .resizable(false)
-                .show(ui, |ui| self.tool_palette(ui, &mut actions));
-            egui::Panel::right("layers")
+        if let Some(p) = self.canvas.pointer() {
+            self.pointer = Some(p);
+        }
+        let live = self.canvas.pointer().is_some();
+        egui::Panel::bottom("status")
+            .exact_size(size::ROW + 2.0 * size::GAP_TIGHT)
+            .show(ui, |ui| self.status_bar(ui, view, live));
+        let command_line = if self.dock.log_open {
+            egui::Panel::bottom("command_log")
                 .resizable(true)
-                .default_size(290.0)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .selectable_label(!self.laser_tab, "Cuts / Layers")
-                            .clicked()
-                        {
-                            self.laser_tab = false;
-                        }
-                        if ui.selectable_label(self.laser_tab, "Laser").clicked() {
-                            self.laser_tab = true;
-                        }
-                    });
-                    ui.separator();
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        if self.laser_tab {
-                            self.laser.show(ui, view.laser, &mut actions);
-                        } else {
-                            let invocations = self.layers.show(ui, view.project);
-                            actions.extend(invocations.into_iter().map(Action::Run));
-                        }
-                    });
-                });
+                .default_size(140.0)
+        } else {
+            egui::Panel::bottom("command_line").exact_size(size::ROW + 2.0 * size::GAP_TIGHT)
+        };
+        command_line.show(ui, |ui| self.command_line(ui, &mut actions));
+        if self.dock.palette {
+            egui::Panel::bottom("palette").show(ui, |ui| {
+                let (invocations, picked) = palette_strip(ui, view.project, self.canvas.color());
+                actions.extend(invocations.into_iter().map(Action::Run));
+                if let Some(color) = picked {
+                    self.canvas.set_color(color);
+                }
+            });
+        }
+        if self.panels {
+            if self.dock.tools {
+                egui::Panel::left("tools")
+                    .resizable(false)
+                    .show(ui, |ui| self.drawing_tools(ui, &mut actions));
+            }
+            if self.dock.any() {
+                let width = ui.ctx().content_rect().width() * 0.25;
+                egui::Panel::right("dock")
+                    .resizable(true)
+                    .default_size(width.max(290.0))
+                    .min_size(260.0)
+                    .frame(egui::Frame::NONE)
+                    .show(ui, |ui| self.dock(ui, view, &mut actions));
+            }
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
@@ -242,7 +263,6 @@ impl Shell {
         {
             self.preview = None;
         }
-        laser_panel::windows(ui.ctx(), view.laser, &mut actions);
         if std::mem::take(&mut self.adjust_requested) && !self.dialogs.open_adjust(view.project) {
             self.log("select an image to adjust");
         }
@@ -255,7 +275,112 @@ impl Shell {
                 .show(ui.ctx(), view.project, color)
                 .map(Action::Run),
         );
+        if let Some(rect) = job_bar {
+            self.job_bar(ui.ctx(), rect, view.laser, &mut actions);
+        }
+        if self.laser.take_export() {
+            actions.extend(self.resolve(Invocation::bare("ui.export_gcode")));
+        }
+        if std::mem::take(&mut self.laser.show_console) {
+            self.show_panel(DockPanel::Console);
+        }
         actions
+    }
+
+    /// The job bar, drawn in a layer above every window and menu so it is
+    /// never covered.
+    fn job_bar(
+        &mut self,
+        ctx: &egui::Context,
+        rect: egui::Rect,
+        laser: &LaserView,
+        actions: &mut Vec<Action>,
+    ) {
+        let keymap = &self.keymap;
+        let clicked = egui::Area::new(egui::Id::unique("job_bar"))
+            .order(egui::Order::Tooltip)
+            .fixed_pos(rect.min)
+            .show(ctx, |ui| {
+                ui.set_clip_rect(rect);
+                let inner = rect.shrink2(egui::vec2(size::GAP, size::GAP_TIGHT));
+                ui.painter().rect_filled(rect, 0.0, Tokens::of(ctx).window);
+                ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                    laser_panel::job_bar(ui, laser, keymap, actions)
+                })
+                .inner
+            })
+            .inner;
+        if clicked {
+            self.show_machine_panel();
+        }
+    }
+
+    /// The right dock: the upper group (Layers, Jog, Console) over the
+    /// lower group (Machine).
+    fn dock(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, actions: &mut Vec<Action>) {
+        let t = Tokens::of(ui.ctx());
+        let body = egui::Frame::new()
+            .fill(t.panel)
+            .inner_margin(egui::Margin::same(size::GAP as i8));
+        let upper = self.dock.front();
+        if self.dock.is_shown(DockPanel::Machine) {
+            let lower = egui::Panel::bottom("dock_lower")
+                .frame(egui::Frame::NONE)
+                .resizable(upper.is_some());
+            let lower = if upper.is_some() {
+                lower.default_size(ui.available_height() * 0.45)
+            } else {
+                lower.exact_size(ui.available_height())
+            };
+            lower.show(ui, |ui| {
+                if dock::title_strip(ui, "Machine") {
+                    self.dock.hide(DockPanel::Machine);
+                }
+                body.show(ui, |ui| {
+                    ui.set_min_size(ui.available_size());
+                    let output = has_output(view.project);
+                    self.laser
+                        .machine(ui, view.laser, &self.keymap, output, actions);
+                });
+            });
+        }
+        let Some(front) = upper else {
+            return;
+        };
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ui, |ui| {
+                if dock::title_strip(ui, front.name()) {
+                    self.dock.hide(front);
+                }
+                let tabs = self.dock.upper();
+                if tabs.len() > 1 {
+                    egui::Panel::bottom("dock_tabs")
+                        .frame(egui::Frame::NONE.fill(t.window))
+                        .show(ui, |ui| {
+                            if let Some(tab) = dock::tab_strip(ui, &tabs, front) {
+                                self.dock.show(tab);
+                            }
+                        });
+                }
+                egui::CentralPanel::default()
+                    .frame(body)
+                    .show(ui, |ui| match front {
+                        DockPanel::Layers => {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                let invocations = self.layers.show(ui, view.project);
+                                actions.extend(invocations.into_iter().map(Action::Run));
+                            });
+                        }
+                        DockPanel::Jog => {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                self.laser.jog(ui, view.laser, &self.keymap, actions);
+                            });
+                        }
+                        DockPanel::Console => self.laser.console(ui, view.laser, actions),
+                        DockPanel::Machine => {}
+                    });
+            });
     }
 
     fn notes_window(&mut self, ui: &mut egui::Ui, project: &Project, actions: &mut Vec<Action>) {
@@ -283,9 +408,8 @@ impl Shell {
     }
 
     fn shortcuts(&mut self, ui: &egui::Ui) -> Vec<Action> {
-        if ui.ctx().text_edit_focused() {
-            return Vec::new();
-        }
+        // Pause and Stop act even while a text field has focus (safety rule 7).
+        let typing = ui.ctx().text_edit_focused();
         let chords: Vec<Chord> = ui.input(|input| {
             input
                 .events
@@ -316,6 +440,7 @@ impl Shell {
         let bound: Vec<Invocation> = chords
             .iter()
             .filter_map(|chord| self.keymap.lookup(chord).cloned())
+            .filter(|inv| !typing || SAFETY_ACTIONS.contains(&inv.name.as_str()))
             .collect();
         bound
             .into_iter()
@@ -382,7 +507,7 @@ impl Shell {
                 return None;
             }
             "ui.laser" => {
-                self.show_laser_tab();
+                self.show_machine_panel();
                 return None;
             }
             name => match self.laser.resolve(name, self.paused) {
@@ -450,7 +575,47 @@ impl Shell {
                     actions.extend(self.resolve(Invocation::bare("ui.toggle_panels")));
                 }
             });
+            ui.menu_button("Window", |ui| self.window_menu(ui));
         });
+    }
+
+    /// Window: Reset layout, then the toolbars and panels that can be
+    /// shown or hidden (`docs/spec/style/menus.md`, "Window").
+    fn window_menu(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Reset layout").clicked() {
+            self.dock.reset();
+            self.panels = true;
+        }
+        ui.separator();
+        let t = Tokens::of(ui.ctx());
+        ui.label(egui::RichText::new("Toolbars").small().color(t.text_muted));
+        if ui
+            .add(egui::Button::new("Drawing tools").selected(self.dock.tools))
+            .clicked()
+        {
+            self.dock.tools = !self.dock.tools;
+        }
+        if ui
+            .add(egui::Button::new("Palette").selected(self.dock.palette))
+            .clicked()
+        {
+            self.dock.palette = !self.dock.palette;
+        }
+        ui.separator();
+        ui.label(egui::RichText::new("Panels").small().color(t.text_muted));
+        for panel in DockPanel::ALL {
+            let shown = self.dock.is_shown(panel);
+            let row = ui
+                .add(egui::Button::new(panel.name()).selected(shown))
+                .on_hover_text(panel.about());
+            if row.clicked() {
+                if shown {
+                    self.dock.hide(panel);
+                } else {
+                    self.show_panel(panel);
+                }
+            }
+        }
     }
 
     /// Draws menu rows from a table in [`menus`].
@@ -502,127 +667,86 @@ impl Shell {
     fn machine_menu(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, actions: &mut Vec<Action>) {
         const OFFLINE: &str = "Connect to a machine first.";
         let laser = view.laser;
-        let connected = laser.port.is_some();
-        let alarm = laser.state.starts_with("Alarm");
-        let idle = laser.ready && laser.busy.is_none() && !alarm;
         let output = has_output(view.project);
-        let why = |ok: bool| if ok { "" } else { OFFLINE };
-        if connected {
+        let on = laser_panel::Enabled::of(laser, output);
+        let not_ready = if laser.port.is_none() {
+            OFFLINE
+        } else if laser.busy.is_none() && !output {
+            "Nothing to cut: no output layer has shapes."
+        } else {
+            "Wait until the machine is ready."
+        };
+        if laser.port.is_some() {
+            let why = "Stop the job first.";
             self.menu_line(
                 ui,
                 "Disconnect",
                 "device.disconnect",
-                laser.busy.is_none(),
-                "Stop the job first.",
+                on.disconnect,
+                why,
                 actions,
             );
         } else if ui
             .add_enabled(self.laser.can_connect(), egui::Button::new("Connect"))
-            .on_disabled_hover_text("Choose a port in the Machine panel first.")
+            .on_disabled_hover_text("No serial port is chosen; see the Machine panel.")
             .clicked()
         {
             actions.extend(self.laser.connect());
         }
         ui.separator();
-        let no_output = if idle {
-            "Nothing to cut: no output layer has shapes."
-        } else {
-            OFFLINE
-        };
-        self.menu_line(
-            ui,
-            "Start",
-            "ui.device_start",
-            idle && output,
-            no_output,
-            actions,
-        );
-        let (pause, hint) = match &laser.busy {
-            Some(busy) if busy.paused => ("Resume", ""),
-            Some(busy) if busy.constant_power => ("Pause (motion only)", PAUSE_M3),
-            _ => ("Pause", ""),
-        };
+        self.menu_line(ui, "Start", "ui.device_start", on.start, not_ready, actions);
+        let (pause, _, hint) = laser_panel::pause_label(laser);
         let shortcut = self
             .keymap
             .chord_for("ui.device_pause")
             .map(Chord::label)
             .unwrap_or_default();
-        let mut response = ui
-            .add_enabled(connected, egui::Button::new(pause).shortcut_text(shortcut))
+        let response = ui
+            .add_enabled(
+                on.pause_stop,
+                egui::Button::new(pause).shortcut_text(shortcut),
+            )
+            .on_hover_text(hint)
             .on_disabled_hover_text(OFFLINE);
-        if !hint.is_empty() {
-            response = response.on_hover_text(hint);
-        }
         if response.clicked() {
             actions.extend(self.resolve(Invocation::bare("ui.device_pause")));
         }
-        self.menu_line(ui, "Stop", "device.stop", connected, OFFLINE, actions);
+        self.menu_line(ui, "Stop", "device.stop", on.pause_stop, OFFLINE, actions);
         ui.separator();
-        self.menu_line(
-            ui,
-            "Frame",
-            "ui.device_frame",
-            idle && output,
-            no_output,
-            actions,
-        );
-        self.menu_line(
-            ui,
-            "Frame outline",
-            "ui.device_frame_outline",
-            idle && output,
-            no_output,
-            actions,
-        );
+        self.menu_line(ui, "Frame", "ui.device_frame", on.start, not_ready, actions);
+        let outline = "ui.device_frame_outline";
+        self.menu_line(ui, "Frame outline", outline, on.start, not_ready, actions);
         ui.separator();
-        self.menu_line(
-            ui,
-            "Home",
-            "device.home",
-            laser.ready && laser.busy.is_none(),
-            why(connected),
-            actions,
-        );
-        let go = idle && laser.user_origin.is_some();
+        self.menu_line(ui, "Home", "device.home", on.home, OFFLINE, actions);
         if ui
-            .add_enabled(go, egui::Button::new("Go to user origin"))
-            .on_disabled_hover_text(if idle {
-                "Set a user origin first."
-            } else {
-                OFFLINE
-            })
+            .add_enabled(on.go_origin, egui::Button::new("Go to user origin"))
+            .on_disabled_hover_text("Needs a ready machine and a user origin.")
             .clicked()
             && let Some(origin) = laser.user_origin
         {
             actions.extend(self.laser.go_to(origin));
         }
         if ui
-            .add_enabled(
-                idle && laser.position.is_some(),
-                egui::Button::new("Set user origin"),
-            )
+            .add_enabled(on.set_origin, egui::Button::new("Set user origin"))
             .on_disabled_hover_text(OFFLINE)
             .clicked()
         {
             actions.push(Action::Laser(LaserAction::SetOrigin));
         }
         if ui
-            .add_enabled(
-                laser.user_origin.is_some(),
-                egui::Button::new("Clear user origin"),
-            )
+            .add_enabled(on.clear_origin, egui::Button::new("Clear user origin"))
             .on_disabled_hover_text("No user origin is set.")
             .clicked()
         {
             actions.push(Action::Laser(LaserAction::ClearOrigin));
         }
-        let clear = connected && alarm && laser.busy.is_none();
+        let why = "Only needed after an alarm.";
         self.menu_line(
             ui,
             "Clear alarm",
             "device.unlock",
-            clear,
-            "Only needed after an alarm.",
+            on.clear_alarm,
+            why,
             actions,
         );
     }
@@ -644,7 +768,7 @@ impl Shell {
         }
     }
 
-    fn tool_palette(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+    fn drawing_tools(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.add_space(4.0);
         for (label, name, tool) in TOOLS {
             let line = format!("ui.tool {name}");
@@ -663,29 +787,133 @@ impl Shell {
         }
     }
 
-    fn console(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        let input = ui.add(
-            egui::TextEdit::singleline(&mut self.console)
-                .hint_text("Type a command, e.g. project.set_work_area 400 300")
-                .desired_width(f32::INFINITY),
-        );
-        if input.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            let line = std::mem::take(&mut self.console);
-            match Invocation::parse(&line) {
-                Ok(invocation) => actions.extend(self.resolve(invocation)),
-                Err(lasercraft_commands::CommandError::EmptyLine) => {}
-                Err(err) => self.log(format!("error: {err}")),
-            }
-            input.request_focus();
+    /// The command line: an input line, and above it the log while open.
+    fn command_line(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let t = Tokens::of(ui.ctx());
+        if self.dock.log_open {
+            egui::Panel::bottom("command_input")
+                .frame(egui::Frame::NONE)
+                .show(ui, |ui| self.command_input(ui, actions));
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for line in &self.log {
+                        ui.label(egui::RichText::new(line).monospace().color(t.text));
+                    }
+                });
+        } else {
+            self.command_input(ui, actions);
         }
-        egui::ScrollArea::vertical()
-            .stick_to_bottom(true)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                for line in &self.log {
-                    ui.monospace(line);
+    }
+
+    fn command_input(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.horizontal(|ui| {
+            let toggle = if self.dock.log_open {
+                "Log ▾"
+            } else {
+                "Log ▴"
+            };
+            let width = (ui.available_width() - 60.0).max(80.0);
+            let input = ui.add(
+                egui::TextEdit::singleline(&mut self.console)
+                    .hint_text("Type a command, for example project.set_work_area 400 300")
+                    .desired_width(width),
+            );
+            if input.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let line = std::mem::take(&mut self.console);
+                match Invocation::parse(&line) {
+                    Ok(invocation) => actions.extend(self.resolve(invocation)),
+                    Err(lasercraft_commands::CommandError::EmptyLine) => {}
+                    Err(err) => self.log(format!("error: {err}")),
                 }
+                input.request_focus();
+            }
+            if ui
+                .button(toggle)
+                .on_hover_text("Show or hide the command log")
+                .clicked()
+            {
+                self.dock.log_open = !self.dock.log_open;
+            }
+        });
+    }
+
+    /// Pointer, selection, messages, work area and project, left to right.
+    fn status_bar(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>, live: bool) {
+        let t = Tokens::of(ui.ctx());
+        ui.horizontal(|ui| {
+            if let Some(p) = self.pointer {
+                let color = if live { t.text } else { t.text_muted };
+                ui.label(
+                    egui::RichText::new(format!("x {:.2}  y {:.2} mm", p.x, p.y))
+                        .monospace()
+                        .color(color),
+                )
+                .on_hover_text("Pointer position on the bed");
+                ui.separator();
+            }
+            let selection = view.project.selection();
+            if let Ok(Some(b)) = view.project.bounds_of(&selection) {
+                ui.label(format!(
+                    "{} selected, {:.2} × {:.2} mm",
+                    selection.len(),
+                    b.width(),
+                    b.height()
+                ))
+                .on_hover_text("Size of the selection");
+                ui.separator();
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let file = view
+                    .file
+                    .map_or_else(|| "not saved".to_owned(), |p| p.display().to_string());
+                let marker = if view.modified { " •" } else { "" };
+                ui.label(format!("{}{marker} — {file}", view.project.name()));
+                ui.separator();
+                let area = view.project.work_area();
+                let origin = area.origin.as_str().replace('-', " ");
+                ui.label(
+                    egui::RichText::new(format!(
+                        "Work area {} × {} mm, origin {origin}",
+                        area.width_mm, area.height_mm
+                    ))
+                    .color(t.text_muted),
+                );
+                ui.separator();
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    self.message(ui, view.laser);
+                });
             });
+        });
+    }
+
+    /// The status bar's Messages field: an alarm, else the last log entry.
+    fn message(&mut self, ui: &mut egui::Ui, laser: &LaserView) {
+        let (kind, text) = if let Some(alarm) = &laser.alarm {
+            (Band::Error, alarm.clone())
+        } else if let Some(last) = self.log.last() {
+            let text = last.lines().last().unwrap_or_default().to_owned();
+            let error = text.starts_with("error:") || text.starts_with("Cannot ");
+            (if error { Band::Error } else { Band::Hint }, text)
+        } else {
+            return;
+        };
+        let t = Tokens::of(ui.ctx());
+        let fill = match kind {
+            Band::Error => t.danger_soft,
+            _ => t.info_soft,
+        };
+        let shown = egui::Label::new(
+            egui::RichText::new(&text)
+                .color(t.text)
+                .background_color(fill),
+        )
+        .truncate()
+        .sense(egui::Sense::click());
+        if ui.add(shown).on_hover_text(&text).clicked() {
+            self.dock.log_open = true;
+        }
     }
 
     fn path_prompt(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -730,51 +958,6 @@ impl Shell {
         }
     }
 }
-
-fn status_bar(
-    ui: &mut egui::Ui,
-    view: &ShellView<'_>,
-    pointer: Option<Point>,
-    actions: &mut Vec<Action>,
-) {
-    ui.horizontal(|ui| {
-        // Stop and Pause stay reachable whatever else is open (safety rule 7).
-        if let Some(port) = &view.laser.port {
-            laser_panel::stop_and_pause(ui, view.laser, actions);
-            ui.label(format!("Laser {} on {port}", view.laser.state));
-            ui.separator();
-        }
-        let file = view
-            .file
-            .map_or_else(|| "not saved".to_owned(), |p| p.display().to_string());
-        let marker = if view.modified { " •" } else { "" };
-        ui.label(format!("{}{marker} — {file}", view.project.name()));
-        ui.separator();
-        let area = view.project.work_area();
-        ui.label(format!(
-            "Work area {} × {} mm, origin {}",
-            area.width_mm, area.height_mm, area.origin
-        ));
-        if let Some(p) = pointer {
-            ui.separator();
-            ui.monospace(format!("x {:.2}  y {:.2} mm", p.x, p.y));
-        }
-        let selection = view.project.selection();
-        if let Ok(Some(b)) = view.project.bounds_of(&selection) {
-            ui.separator();
-            ui.label(format!(
-                "{} selected, {:.2} × {:.2} mm",
-                selection.len(),
-                b.width(),
-                b.height()
-            ));
-        }
-    });
-}
-
-/// What the Pause item says while a constant-power (`M3`) job runs.
-const PAUSE_M3: &str = "Stops motion at once. The laser may stay on until the head \
-    stops; LaserCraft then switches it off.";
 
 /// Whether an output layer has shapes: a job would cut something.
 fn has_output(project: &Project) -> bool {
