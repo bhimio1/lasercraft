@@ -11,6 +11,7 @@ v1.7); Windows and macOS are supported too. Developed primarily on CachyOS.
 - `ARCHITECTURE.md`: crate graph, threading model, command registry, dependencies.
 - `docs/spec/`: behavior specs. **Write or update the spec before the code.**
 - `docs/spec/safety.md`: binding laser safety requirements.
+- `docs/spec/style/`: UI style guide (layout, names, toolbars, colors as tokens, icons).
 
 ## Clean-room rules (summary; full text in `docs/clean-room.md`)
 
