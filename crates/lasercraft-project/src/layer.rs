@@ -302,6 +302,58 @@ pub struct Layer {
     /// then motion only (`docs/spec/safety.md`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub constant_power: bool,
+    /// The material library entry this layer follows (M8,
+    /// `docs/spec/materials.md`); its settings are then the entry's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follows: Option<Follows>,
+}
+
+/// A material library entry, named the way a layer that follows it stores
+/// it: by library and entry key, not by id (`docs/spec/materials.md`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Follows {
+    /// The library's name.
+    pub library: String,
+    /// The entry's material.
+    pub material: String,
+    /// The entry's thickness, mm, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thickness: Option<f64>,
+    /// The entry's group name, used when it has no thickness.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// The entry's description.
+    pub description: String,
+}
+
+impl Follows {
+    /// The entry's thickness as shown ("3.00 mm") or its group name.
+    #[must_use]
+    pub fn level(&self) -> String {
+        match (self.thickness, &self.group) {
+            (Some(t), _) => format!("{t:.2} mm"),
+            (None, Some(g)) => g.clone(),
+            (None, None) => String::new(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ProjectError> {
+        let filled = |s: &str| !s.trim().is_empty();
+        let level = match (self.thickness, &self.group) {
+            (Some(t), None) => t.is_finite() && t > 0.0,
+            (None, Some(g)) => filled(g),
+            _ => false,
+        };
+        if filled(&self.library) && filled(&self.material) && filled(&self.description) && level {
+            Ok(())
+        } else {
+            Err(ProjectError::invalid(
+                "follows",
+                "needs a library, material, thickness or group, and description",
+            ))
+        }
+    }
 }
 
 // Planning settings (M4) are left out of files while at their defaults, so
@@ -355,6 +407,7 @@ impl Layer {
             tabs: 0,
             tab_width: DEFAULT_TAB_WIDTH,
             constant_power: false,
+            follows: None,
         }
     }
 
@@ -436,7 +489,8 @@ impl Layer {
             self.tab_width,
             TAB_WIDTH_RANGE.0,
             TAB_WIDTH_RANGE.1,
-        )
+        )?;
+        self.follows.as_ref().map_or(Ok(()), Follows::validate)
     }
 
     /// The value of a setting, formatted as `layer.set` takes it.

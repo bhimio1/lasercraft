@@ -26,7 +26,7 @@ An entry holds:
 
 ## Libraries
 
-- A library has a `name`, an optional `device` (a device profile's name,
+- A library has a `name`, an optional `note`, an optional `device` (a device profile's name,
   `docs/spec/devices.md`) and its entries.
 - File format `.lcmat`: `{"format": "lasercraft-materials", "version": 1,
   "name": …, "device": … or null, "next_id": …, "entries": [ … ]}`,
@@ -40,11 +40,13 @@ An entry holds:
   is always open (it cannot be closed, renamed or edited; "Save library
   as…" makes an editable copy). Its entries are our own conservative
   starting points for a typical 5–10 W diode laser (own data, from general
-  physics of absorbed energy, not from any other product's library); every
-  description says to run a Speed and power test first. It lists: plywood
+  physics of absorbed energy, not from any other product's library). Its
+  note, shown in the Materials panel, says "Starting points only: run a
+  Speed and power test on your machine first." It lists: plywood
   3 mm (engrave, score, cut), basswood 3 mm (engrave, cut), MDF 3 mm
-  (engrave, cut), cardboard 2 mm (cut), leather 2 mm (engrave), black
-  anodized aluminum (engrave), slate (engrave) and paper 0.2 mm (cut).
+  (engrave, cut), cardboard 2 mm (cut), leather 2 mm (engrave, score),
+  black anodized aluminum (engrave), slate tile (engrave) and paper 0.2 mm
+  (cut, engrave).
 - The app remembers which library files were open and which was active in
   `workshop.json` in the configuration folder (`docs/spec/devices.md`) and
   reopens them at start. Files that no longer open are dropped from the

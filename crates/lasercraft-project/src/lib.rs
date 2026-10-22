@@ -18,7 +18,7 @@ pub use error::ProjectError;
 pub use file::{FORMAT, FORMAT_VERSION};
 pub use image::Image;
 pub use lasercraft_raster as raster;
-pub use layer::{Color, Dither, ImageSettings, LAYER_COUNT, Layer, Mode};
+pub use layer::{Color, Dither, Follows, ImageSettings, LAYER_COUNT, Layer, Mode};
 pub use shape::{
     Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_groups, validate_transform,
 };
@@ -29,6 +29,8 @@ use serde::{Deserialize, Serialize};
 
 /// Longest allowed project name, in characters.
 pub const MAX_NAME_CHARS: usize = 200;
+/// Longest device profile name (`docs/spec/devices.md`).
+pub const MAX_DEVICE_CHARS: usize = 60;
 
 /// Longest allowed notes text, in characters.
 pub const MAX_NOTES_CHARS: usize = 20_000;
@@ -43,6 +45,9 @@ pub struct Project {
     #[serde(default)]
     notes: String,
     work_area: WorkArea,
+    /// The device profile the project is for (M8, `docs/spec/devices.md`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    device: Option<String>,
     next_id: u32,
     /// Settings for all 30 layers, in output order.
     #[serde(default)]
@@ -63,6 +68,7 @@ impl Default for Project {
             name: "Untitled".to_owned(),
             notes: String::new(),
             work_area: WorkArea::default(),
+            device: None,
             next_id: 1,
             layers: layer::LayerTable::default(),
             shapes: Vec::new(),
@@ -156,6 +162,31 @@ impl Project {
         self.work_area.origin = origin;
     }
 
+    /// The device profile the project is for, by name.
+    #[must_use]
+    pub fn device(&self) -> Option<&str> {
+        self.device.as_deref()
+    }
+
+    /// Names the project's device profile, or none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectError::InvalidValue`] for an empty or overlong name.
+    pub fn set_device(&mut self, name: Option<&str>) -> Result<(), ProjectError> {
+        if let Some(name) = name {
+            let name = name.trim();
+            if name.is_empty() || name.chars().count() > MAX_DEVICE_CHARS {
+                return Err(ProjectError::invalid(
+                    "device",
+                    format!("must be 1–{MAX_DEVICE_CHARS} characters"),
+                ));
+            }
+        }
+        self.device = name.map(|n| n.trim().to_owned());
+        Ok(())
+    }
+
     /// The identifier the next created object will get.
     #[must_use]
     pub fn next_id(&self) -> u32 {
@@ -180,6 +211,7 @@ impl Project {
         let mut copy = Self::default();
         copy.set_name(&self.name)?;
         copy.set_notes(&self.notes)?;
+        copy.set_device(self.device.as_deref())?;
         WorkArea::new(
             self.work_area.width_mm,
             self.work_area.height_mm,
@@ -205,6 +237,19 @@ mod tests {
         assert!(p.set_name("   ").is_err());
         assert!(p.set_name(&"x".repeat(MAX_NAME_CHARS + 1)).is_err());
         assert_eq!(p.name(), "Coasters");
+    }
+
+    #[test]
+    fn the_device_name_round_trips_and_is_left_out_when_none() {
+        let mut p = Project::default();
+        assert!(!p.to_json().contains("device"));
+        p.set_device(Some(" Shop diode ")).unwrap();
+        assert_eq!(p.device(), Some("Shop diode"));
+        let back = Project::from_json(&p.to_json()).unwrap();
+        assert_eq!(back.device(), Some("Shop diode"));
+        assert!(p.set_device(Some("  ")).is_err());
+        p.set_device(None).unwrap();
+        assert_eq!(p.device(), None);
     }
 
     #[test]
