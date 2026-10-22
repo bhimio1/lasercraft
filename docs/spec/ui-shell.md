@@ -7,6 +7,18 @@ labelled there and land here before code.
 Milestones: M0 (shell), M1 (canvas, tools, editing menus), M2 (layers panel,
 palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Image).
 
+## Look
+
+- The app installs LaserCraft's light theme at start instead of following
+  the operating system's light or dark preference. Every color, type size
+  and spacing comes from the tokens of `docs/spec/style/visual-language.md`,
+  whose values live only in the UI crate's theme module (`theme.rs`), with
+  tests for its contrast targets. A dark theme and a Theme preference are
+  later.
+- Settings are pill switches (accent and knob right when on, grey and knob
+  left when off), never check boxes. Stop and other destructive buttons are
+  filled `danger` with white labels.
+
 ## Layout
 
 - Menu bar: File (New, Open…, Save, Save As…, Quit); Edit (Undo, Redo, Cut,

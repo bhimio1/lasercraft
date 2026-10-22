@@ -189,6 +189,8 @@ pub struct Shell {
     paused: bool,
     /// Alt+I was pressed: open the selected image's adjustments.
     adjust_requested: bool,
+    /// The theme has been installed on the context.
+    themed: bool,
 }
 
 impl Shell {
@@ -210,6 +212,7 @@ impl Shell {
             laser_tab: false,
             paused: false,
             adjust_requested: false,
+            themed: false,
         }
     }
 
@@ -269,6 +272,9 @@ impl Shell {
     pub fn show(&mut self, ui: &mut egui::Ui, view: &ShellView<'_>) -> Vec<Action> {
         // Ctrl+= / Ctrl+- / Ctrl+0 zoom the canvas, not the whole UI.
         ui.ctx().options_mut(|o| o.zoom_with_keyboard = false);
+        if !std::mem::replace(&mut self.themed, true) {
+            crate::theme::install(ui.ctx());
+        }
         self.paused = view.laser.busy.as_ref().is_some_and(|b| b.paused);
         let mut actions = self.shortcuts(ui);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, view, &mut actions));

@@ -14,7 +14,9 @@ mod layers_panel;
 mod preview;
 mod shell;
 mod textures;
+pub mod theme;
 pub mod view;
+pub mod widgets;
 
 pub use laser_panel::{ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, LaserAction, LaserView};
 pub use preview::{Preview, PreviewKind, PreviewMove};
