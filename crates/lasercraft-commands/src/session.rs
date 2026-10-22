@@ -535,6 +535,20 @@ mod tests {
             "registration.clear".to_owned(),
             "registration.restore 1 501 10,10 11,390".to_owned(),
             "shape.taper top 80 100 60 501 502".to_owned(),
+            Invocation::new(
+                "image.insert_picture",
+                [
+                    concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../examples/fixtures/m7-tile.jpg"
+                    ),
+                    "20",
+                    "30",
+                    "60",
+                    "40",
+                ],
+            )
+            .to_string(),
         ]);
         script
     }
@@ -679,6 +693,8 @@ mod tests {
                     || name.starts_with("profile.")
                     || name.starts_with("library.")
                     || name.starts_with("test.")
+                    // Cameras are user data too (M9).
+                    || name.starts_with("camera.")
                     // Library edits; their project part is tested in
                     // `cmds::material`.
                     || matches!(

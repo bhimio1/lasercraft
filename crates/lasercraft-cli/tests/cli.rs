@@ -528,3 +528,20 @@ fn m9_setups_script_and_gcode_match_golden() {
     assert!(text.contains("rotary: Y turns 108°"), "{text}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn camera_pattern_writes_the_sheet_and_calibrate_refuses_too_few_pictures() {
+    let dir = temp_dir("camera");
+    let out = cli_in(&dir, &["camera", "pattern", "sheet.svg"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let svg = std::fs::read_to_string(dir.join("sheet.svg")).unwrap();
+    assert_eq!(svg.matches("<circle").count(), 63);
+    let photo = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/fixtures/m7-photo.png"
+    );
+    let out = cli_in(&dir, &["camera", "calibrate", "standard", photo]);
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("left out"), "{}", stderr(&out));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

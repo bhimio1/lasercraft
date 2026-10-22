@@ -18,12 +18,51 @@ pub const DEFAULT_MM_PER_PIXEL: f64 = 0.1;
 pub const EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
 
 pub(super) fn commands() -> Vec<Box<dyn Command>> {
-    vec![cmd(
-        "image.adjust",
-        "image.adjust <id> [brightness=<-100..100>] [contrast=<-99..99>] [gamma=<0.1..10>]",
-        "Change an image's brightness, contrast or gamma.",
-        adjust,
-    )]
+    vec![
+        cmd(
+            "image.adjust",
+            "image.adjust <id> [brightness=<-100..100>] [contrast=<-99..99>] [gamma=<0.1..10>]",
+            "Change an image's brightness, contrast or gamma.",
+            adjust,
+        ),
+        cmd(
+            "image.insert_picture",
+            "image.insert_picture <path> <x> <y> <w> <h> [@layer]",
+            "Add a picture file as an image covering a bed rectangle (camera Insert picture).",
+            insert_picture,
+        ),
+    ]
+}
+
+/// Adds a picture covering the rectangle `x, y, w, h` (document mm).
+fn insert_picture(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    args.expect(5, 6)?;
+    let file = args.str(0)?;
+    let at = args.point(1)?;
+    let (w, h) = (args.f64(3, "width")?, args.f64(4, "height")?);
+    if !(w > 0.0 && h > 0.0) {
+        return Err(args.invalid("the picture needs a positive size"));
+    }
+    let bytes =
+        std::fs::read(file).map_err(|e| args.invalid(format!("cannot read {file}: {e}")))?;
+    let gray = decode(&bytes)
+        .map_err(|e| args.invalid(format!("{file}: {e}")))?
+        .gray;
+    let color = args.color()?.unwrap_or(0);
+    let id = project.add_shape_on(
+        Geometry::Image(Image::new(w, h, gray)),
+        Affine::translate(at.x, at.y),
+        color,
+    )?;
+    project.replace_selection([id])?;
+    Ok(Outcome::undoable(
+        format!(
+            "inserted the picture as image {id}: {} × {} mm",
+            lasercraft_plan::num(w),
+            lasercraft_plan::num(h)
+        ),
+        Invocation::new("shape.delete", [id.to_string()]),
+    ))
 }
 
 /// Whether `path` names a PNG or JPEG file.

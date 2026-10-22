@@ -34,6 +34,7 @@ pub fn action_name(invocation: &Invocation) -> String {
         "shape.set_order" => "change drawing order",
         "shape.to_path" => "convert to path",
         "shape.taper" => "taper correction",
+        "image.insert_picture" => "insert picture",
         "rotary.set" => "change rotary settings",
         "rotary.clear" => "clear rotary settings",
         "registration.set_target" if arg(0) == "2" => "set target 2",

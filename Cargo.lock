@@ -1184,6 +1184,7 @@ dependencies = [
 name = "lasercraft-cli"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-camera",
  "lasercraft-commands",
  "lasercraft-device",
  "lasercraft-gcode",
@@ -1198,6 +1199,7 @@ dependencies = [
 name = "lasercraft-commands"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-camera",
  "lasercraft-device",
  "lasercraft-gcode",
  "lasercraft-geom",
@@ -1205,6 +1207,7 @@ dependencies = [
  "lasercraft-plan",
  "lasercraft-project",
  "lasercraft-workshop",
+ "serde",
  "serde_json",
 ]
 
@@ -1289,6 +1292,7 @@ dependencies = [
 name = "lasercraft-workshop"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-camera",
  "lasercraft-project",
  "serde",
  "serde_json",

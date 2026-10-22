@@ -20,6 +20,7 @@ lasercraft-gcode = { path = "crates/lasercraft-gcode" }
 lasercraft-device = { path = "crates/lasercraft-device" }
 lasercraft-ui = { path = "crates/lasercraft-ui" }
 lasercraft-workshop = { path = "crates/lasercraft-workshop" }
+lasercraft-camera = { path = "crates/lasercraft-camera" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 i_overlay = "9.1"

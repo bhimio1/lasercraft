@@ -44,6 +44,9 @@ pub struct DeviceProfile {
     pub s_max: f64,
     /// Air assist code, `m7` or `m8`.
     pub air: String,
+    /// The machine's cameras (M9, `docs/spec/camera.md`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cameras: Vec<crate::camera::Camera>,
 }
 
 /// The keys `profile.set` accepts, in display order.
@@ -112,6 +115,7 @@ impl DeviceProfile {
             max_power: 100.0,
             s_max: 1000.0,
             air: "m8".to_owned(),
+            cameras: Vec::new(),
         })
     }
 
@@ -149,6 +153,18 @@ impl DeviceProfile {
                 "air must be m7 or m8, not `{}`",
                 self.air
             )));
+        }
+        for (i, c) in self.cameras.iter().enumerate() {
+            c.validate()?;
+            if self.cameras[..i]
+                .iter()
+                .any(|o| o.name.eq_ignore_ascii_case(&c.name))
+            {
+                return Err(WorkshopError::new(format!(
+                    "two cameras are named \"{}\"",
+                    c.name
+                )));
+            }
         }
         Ok(())
     }

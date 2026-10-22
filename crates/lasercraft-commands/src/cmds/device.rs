@@ -159,15 +159,21 @@ pub fn with_context(invocation: &Invocation, ctx: &DeviceContext) -> Invocation 
             out.args.push(point_arg("at", at));
         }
     }
-    if matches!(name, "device.start" | "device.test")
-        && !has_key(invocation, "s_max")
+    if matches!(
+        name,
+        "device.start" | "device.test" | "device.camera_pattern"
+    ) && !has_key(invocation, "s_max")
         && let Some(s_max) = ctx.s_max
     {
         out.args.push(format!("s_max={}", fmt(s_max)));
     }
     if matches!(
         name,
-        "device.frame" | "device.test_frame" | "device.jog" | "registration.set_target"
+        "device.frame"
+            | "device.test_frame"
+            | "device.jog"
+            | "device.camera_pattern_frame"
+            | "registration.set_target"
     ) && !has_key(invocation, "head")
         && let Some(head) = ctx.head
     {

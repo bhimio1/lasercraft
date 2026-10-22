@@ -10,11 +10,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub mod camera;
 pub mod library;
 pub mod presets;
 pub mod profile;
 pub mod starter;
 
+pub use camera::{Camera, Source};
 pub use library::{Key, Library, Material};
 pub use presets::Preset;
 pub use profile::DeviceProfile;
@@ -440,6 +442,169 @@ impl Workshop {
                 format: PROFILE_FORMAT.to_owned(),
                 version: 1,
                 profile,
+            }),
+        )
+    }
+
+    // ---- Cameras (M9) ----
+
+    /// The cameras of a profile.
+    ///
+    /// # Errors
+    ///
+    /// No such profile.
+    pub fn cameras(&self, profile: &str) -> Result<&[Camera], WorkshopError> {
+        Ok(&self.profiles[self.profile_index(profile)?].cameras)
+    }
+
+    /// One camera of a profile.
+    ///
+    /// # Errors
+    ///
+    /// No such profile or camera.
+    pub fn camera(&self, profile: &str, name: &str) -> Result<&Camera, WorkshopError> {
+        self.cameras(profile)?
+            .iter()
+            .find(|c| same(&c.name, name))
+            .ok_or_else(|| WorkshopError::new(format!("no camera named \"{}\"", name.trim())))
+    }
+
+    /// Changes one camera of a profile and saves; the camera is unchanged
+    /// when `change` fails.
+    ///
+    /// # Errors
+    ///
+    /// No such profile or camera, or what `change` returns.
+    pub fn edit_camera<T>(
+        &mut self,
+        profile: &str,
+        name: &str,
+        change: impl FnOnce(&mut Camera) -> Result<T, WorkshopError>,
+    ) -> Result<T, WorkshopError> {
+        let p = self.profile_index(profile)?;
+        let c = self.profiles[p]
+            .cameras
+            .iter()
+            .position(|c| same(&c.name, name))
+            .ok_or_else(|| WorkshopError::new(format!("no camera named \"{}\"", name.trim())))?;
+        let mut copy = self.profiles[p].cameras[c].clone();
+        let out = change(&mut copy)?;
+        copy.validate()?;
+        self.profiles[p].cameras[c] = copy;
+        self.save_profiles();
+        Ok(out)
+    }
+
+    /// Adds a camera to a profile.
+    ///
+    /// # Errors
+    ///
+    /// No such profile, the name is taken, or the camera is invalid.
+    pub fn add_camera(&mut self, profile: &str, camera: Camera) -> Result<(), WorkshopError> {
+        camera.validate()?;
+        let p = self.profile_index(profile)?;
+        if self.profiles[p]
+            .cameras
+            .iter()
+            .any(|c| same(&c.name, &camera.name))
+        {
+            return Err(WorkshopError::new(format!(
+                "a camera named \"{}\" already exists",
+                camera.name
+            )));
+        }
+        self.profiles[p].cameras.push(camera);
+        self.save_profiles();
+        Ok(())
+    }
+
+    /// Removes a camera with its correction and alignments.
+    ///
+    /// # Errors
+    ///
+    /// No such profile or camera.
+    pub fn remove_camera(&mut self, profile: &str, name: &str) -> Result<Camera, WorkshopError> {
+        let p = self.profile_index(profile)?;
+        let c = self.profiles[p]
+            .cameras
+            .iter()
+            .position(|c| same(&c.name, name))
+            .ok_or_else(|| WorkshopError::new(format!("no camera named \"{}\"", name.trim())))?;
+        let removed = self.profiles[p].cameras.remove(c);
+        self.save_profiles();
+        Ok(removed)
+    }
+
+    /// Renames a camera.
+    ///
+    /// # Errors
+    ///
+    /// No such camera, or the new name is invalid or taken.
+    pub fn rename_camera(
+        &mut self,
+        profile: &str,
+        old: &str,
+        new: &str,
+    ) -> Result<(), WorkshopError> {
+        let new = profile::check_name(new)?;
+        if !same(old, &new) && self.camera(profile, &new).is_ok() {
+            return Err(WorkshopError::new(format!(
+                "a camera named \"{new}\" already exists"
+            )));
+        }
+        self.edit_camera(profile, old, |c| {
+            c.name = new;
+            Ok(())
+        })
+    }
+
+    /// Adds the camera in a `.lccam` file to a profile; a clashing name
+    /// gets " (2)", " (3)", …. Returns the name it was added under.
+    ///
+    /// # Errors
+    ///
+    /// No such profile, or the file is not a valid camera file.
+    pub fn import_camera(&mut self, profile: &str, path: &Path) -> Result<String, WorkshopError> {
+        let file: camera::CameraFile = serde_json::from_str(&read(path)?)
+            .map_err(|e| WorkshopError::new(format!("not a LaserCraft camera file: {e}")))?;
+        if file.format != camera::FORMAT {
+            return Err(WorkshopError::new("not a LaserCraft camera file"));
+        }
+        if file.version > 1 {
+            return Err(WorkshopError::new(
+                "this camera file was made by a newer LaserCraft; update LaserCraft to import it",
+            ));
+        }
+        let mut cam = file.camera;
+        let base = cam.name.clone();
+        let mut n = 2;
+        while self.camera(profile, &cam.name).is_ok() {
+            cam.name = format!("{base} ({n})");
+            n += 1;
+        }
+        let name = cam.name.clone();
+        self.add_camera(profile, cam)?;
+        Ok(name)
+    }
+
+    /// Writes one camera as a `.lccam` file.
+    ///
+    /// # Errors
+    ///
+    /// No such camera, or the file cannot be written.
+    pub fn export_camera(
+        &self,
+        profile: &str,
+        name: &str,
+        path: &Path,
+    ) -> Result<(), WorkshopError> {
+        let cam = self.camera(profile, name)?.clone();
+        write_atomic(
+            path,
+            &pretty(&camera::CameraFile {
+                format: camera::FORMAT.to_owned(),
+                version: 1,
+                camera: cam,
             }),
         )
     }

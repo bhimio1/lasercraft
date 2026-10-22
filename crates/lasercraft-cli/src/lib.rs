@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use lasercraft_commands::{CommandError, Invocation, Registry, SESSION_COMMANDS, Session};
 use lasercraft_project::Project;
 
+mod camera;
 mod export;
 mod pattern;
 mod preview;
@@ -29,6 +30,10 @@ usage:
                  [--accel <mm/s²>] [--max-power <%>]
   lasercraft-cli simulate <project.lcproj> [--locked] [--user-origin X,Y]
                  <command> [<command> ...]
+  lasercraft-cli camera pattern <out.svg>
+  lasercraft-cli camera calibrate <standard|wide|fisheye> <picture> ...
+  lasercraft-cli camera overlay <lens.json> <alignment.json> <picture> <out.png>
+                 [<bed_w> <bed_h>]
   lasercraft-cli pattern <speed_power|interval> [<json>] [--project <p.lcproj>]
                  [--svg <out.svg>] [--gcode <out.gcode>]
   lasercraft-cli commands
@@ -124,6 +129,7 @@ pub fn run(args: &[String]) -> Result<String, CliError> {
         "export" => export::export(rest),
         "simulate" => simulate::simulate(rest),
         "pattern" => pattern::pattern(rest),
+        "camera" => camera::camera(rest),
         "commands" if rest.is_empty() => Ok(commands()),
         "help" | "--help" | "-h" => Ok(format!("{USAGE}\n")),
         other => Err(usage(&format!("unknown subcommand `{other}`"))),
