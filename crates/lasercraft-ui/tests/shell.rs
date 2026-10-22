@@ -808,3 +808,59 @@ fn the_speed_and_power_window_starts_the_pattern_it_was_told_is_valid() {
         )
     );
 }
+
+#[test]
+fn the_rotary_dialog_sends_one_change_and_shows_as_an_active_setup() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    h.key(Key::R, Modifiers::COMMAND | Modifiers::SHIFT);
+    assert!(h.texts().iter().any(|t| t == "Rotary attachment"));
+    let use_rotary = h.text_at("Use rotary").expect("Use rotary");
+    h.click(use_rotary);
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert_eq!(h.log, ["rotary.set enabled on"]);
+    assert!(h.session.project().rotary_on());
+    assert!(
+        h.texts().iter().any(|t| t == "Rotary"),
+        "status bar names it"
+    );
+    // Taper correction opens from the Machine menu now that rotary is on.
+    menu(&mut h, "Machine", "Taper correction…");
+    assert!(h.texts().iter().any(|t| t == "Taper correction"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log
+            .last()
+            .unwrap()
+            .starts_with("shape.taper top 80 100 64"),
+        "{:?}",
+        h.log
+    );
+}
+
+#[test]
+fn print_registration_lists_what_is_missing_and_shows_refusals() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    h.key(Key::Num0, Modifiers::ALT);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Print registration"), "{texts:?}");
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.contains("Connect the machine first.")),
+        "{texts:?}"
+    );
+    h.shell.command_failed(
+        &lasercraft_commands::Invocation::parse("registration.set_target 2").unwrap(),
+        "invalid argument for `registration.set_target`: Set target 1 first.",
+    );
+    // A new window is sized on its first frame and drawn on the next.
+    h.frame(Vec::new(), Modifiers::NONE);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Registration failed"));
+    assert!(
+        texts.iter().any(|t| t == "Set target 1 first."),
+        "{texts:?}"
+    );
+}

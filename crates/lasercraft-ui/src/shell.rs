@@ -18,6 +18,7 @@ use crate::layers_panel::{LayersPanel, palette_strip};
 use crate::materials_panel::MaterialsPanel;
 use crate::menus;
 use crate::preview::{Preview, PreviewWindow};
+use crate::setup_windows::SetupWindows;
 use crate::test_windows::{TestInfo, TestKind, TestRequest, TestWindow};
 use crate::theme::{Tokens, size};
 use crate::tool_column::ToolColumn;
@@ -120,6 +121,8 @@ pub struct Shell {
     materials: MaterialsPanel,
     /// The device profile windows (M8).
     devices: DeviceWindows,
+    /// Rotary, taper and print registration windows (M9).
+    setups: SetupWindows,
     /// Open test pattern windows (M8).
     tests: Vec<TestWindow>,
     /// A test window to open (needs the workshop, which `show` has).
@@ -130,6 +133,8 @@ pub struct Shell {
     edit_profile: bool,
     /// A pointer button is down (test settings are not remembered yet).
     dragging: bool,
+    /// A setup window to open once the project is at hand.
+    setup_request: Option<String>,
     /// The last pointer position over the canvas.
     pointer: Option<Point>,
     /// Whether the running stream is paused, for the pause/resume key.
@@ -160,11 +165,13 @@ impl Shell {
             tools: ToolColumn::default(),
             materials: MaterialsPanel::default(),
             devices: DeviceWindows::default(),
+            setups: SetupWindows::default(),
             tests: Vec::new(),
             open_test: None,
             pattern_preview: false,
             edit_profile: false,
             dragging: false,
+            setup_request: None,
             pointer: None,
             paused: false,
             adjust_requested: false,
@@ -177,6 +184,18 @@ impl Shell {
     #[must_use]
     pub fn preview_open(&self) -> bool {
         self.preview.is_some() && !self.pattern_preview
+    }
+
+    /// Tells the shell a command failed; registration steps show the
+    /// "Registration failed" message (`docs/spec/registration.md`).
+    pub fn command_failed(&mut self, invocation: &Invocation, message: &str) {
+        if invocation.name.starts_with("registration.") {
+            let text = message
+                .split_once(": ")
+                .filter(|(head, _)| head.starts_with("invalid argument") || head.contains('.'))
+                .map_or(message, |(_, rest)| rest);
+            self.setups.registration_failed(text.to_owned());
+        }
     }
 
     /// The test windows' settings to check, one per changed window.
@@ -319,6 +338,7 @@ impl Shell {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
+                self.canvas.set_ghost(self.setups.ghost(view.project));
                 let drawn = self.canvas.show(ui, view.project);
                 actions.extend(drawn.into_iter().map(Action::Run));
             });
@@ -343,6 +363,13 @@ impl Shell {
                 .map(Action::Run),
         );
         self.test_windows(ui.ctx(), view, &mut actions);
+        match self.setup_request.take().as_deref() {
+            Some("ui.rotary") => self.setups.open_rotary(view.project),
+            Some("ui.taper") => self.setups.open_taper(view.project),
+            _ => {}
+        }
+        self.setups
+            .show(ui.ctx(), view.project, view.laser, &mut actions);
         if std::mem::take(&mut self.edit_profile) {
             self.devices.open_current(view.project, view.workshop);
         }
@@ -667,6 +694,18 @@ impl Shell {
                 self.pattern_preview = false;
                 Action::Preview
             }
+            "ui.rotary" => {
+                self.setup_request = Some(invocation.name.clone());
+                return None;
+            }
+            "ui.taper" => {
+                self.setup_request = Some(invocation.name.clone());
+                return None;
+            }
+            "ui.registration" => {
+                self.setups.open_registration();
+                return None;
+            }
             "ui.device_profiles" => {
                 self.devices.open_list();
                 return None;
@@ -931,6 +970,69 @@ impl Shell {
             actions,
         );
         ui.separator();
+        ui.menu_button("Print registration", |ui| {
+            self.menu_line(ui, "Guided setup…", "ui.registration", true, "", actions);
+            let reg = view.project.registration();
+            let ready = laser.port.is_some() && laser.position.is_some();
+            let why = "Connect a ready machine first.";
+            self.menu_line(
+                ui,
+                "Set target 1",
+                "registration.set_target 1",
+                ready,
+                why,
+                actions,
+            );
+            let one = !reg.targets.is_empty() && ready;
+            self.menu_line(
+                ui,
+                "Set target 2",
+                "registration.set_target 2",
+                one,
+                "Set target 1 first.",
+                actions,
+            );
+            let two = reg.targets.len() == 2;
+            let need = "Set both targets first.";
+            self.menu_line(
+                ui,
+                "Fit job to targets",
+                "registration.fit scaled",
+                two,
+                need,
+                actions,
+            );
+            self.menu_line(
+                ui,
+                "Place job on targets (no scaling)",
+                "registration.fit rigid",
+                two,
+                need,
+                actions,
+            );
+            ui.separator();
+            let any = !reg.targets.is_empty();
+            self.menu_line(
+                ui,
+                "Clear registration",
+                "registration.clear",
+                any,
+                "No targets are set.",
+                actions,
+            );
+        });
+        ui.separator();
+        self.menu_line(ui, "Rotary attachment…", "ui.rotary", true, "", actions);
+        let rotary = view.project.rotary_on();
+        self.menu_line(
+            ui,
+            "Taper correction…",
+            "ui.taper",
+            rotary,
+            "Turn the rotary attachment on first.",
+            actions,
+        );
+        ui.separator();
         for (label, line) in [
             ("Line interval test…", "ui.test_interval"),
             ("Speed and power test…", "ui.test_speed_power"),
@@ -1054,6 +1156,22 @@ impl Shell {
                 let marker = if view.modified { " •" } else { "" };
                 ui.label(format!("{}{marker} — {file}", view.project.name()));
                 ui.separator();
+                let mut setups = Vec::new();
+                if view.project.rotary_on() {
+                    setups.push("Rotary");
+                }
+                if view.project.registration_transform().is_some() {
+                    setups.push("Print registration");
+                }
+                if !setups.is_empty() {
+                    ui.label(
+                        egui::RichText::new(setups.join(", "))
+                            .color(t.text)
+                            .background_color(t.success_soft),
+                    )
+                    .on_hover_text("Active setups: they change how jobs run");
+                    ui.separator();
+                }
                 let area = view.project.work_area();
                 let origin = area.origin.as_str().replace('-', " ");
                 ui.label(

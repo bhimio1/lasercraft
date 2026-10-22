@@ -54,6 +54,8 @@ pub struct Canvas {
     screen: Option<Rect>,
     /// Image textures (M7).
     textures: Textures,
+    /// Outlines a tool window previews this frame, document mm (M9).
+    ghost: Vec<(Vec<Point>, bool)>,
 }
 
 impl Canvas {
@@ -65,6 +67,11 @@ impl Canvas {
         }
         let p = self.interaction.pointer()?;
         project.shape_at(p, HIT_PX / view.scale())
+    }
+
+    /// Outlines to preview dashed this frame (a tool window's result).
+    pub fn set_ghost(&mut self, ghost: Vec<(Vec<Point>, bool)>) {
+        self.ghost = ghost;
     }
 
     /// Image textures held for drawing.
@@ -345,12 +352,64 @@ impl Canvas {
                 });
             }
         }
+        paint_ghost(painter, view, &self.ghost, &t);
+        paint_targets(painter, view, project, &t);
         if self.tool() == Tool::Nodes {
             paint_nodes(painter, view, project, &self.interaction, &t);
         } else {
             paint_selection(painter, view, project, preview.map(|(_, a)| a), &t);
         }
         paint_gesture(&self.interaction, ui, painter, view, &t);
+    }
+}
+
+/// A tool window's preview: dashed outlines in the drawing color.
+fn paint_ghost(painter: &egui::Painter, view: &View, ghost: &[(Vec<Point>, bool)], t: &Tokens) {
+    let stroke = Stroke::new(weight::NORMAL, t.drawing);
+    for (points, closed) in ghost {
+        let mut pts: Vec<Pos2> = points.iter().map(|p| pos(view.to_screen(*p))).collect();
+        if *closed && let Some(first) = pts.first().copied() {
+            pts.push(first);
+        }
+        painter.extend(egui::Shape::dashed_line(&pts, stroke, DASH.0, DASH.1));
+    }
+}
+
+/// Print registration targets: a numbered ring at each target's design
+/// point; with a fit, a dashed ring where it lands
+/// (`docs/spec/registration.md`).
+fn paint_targets(painter: &egui::Painter, view: &View, project: &Project, t: &Tokens) {
+    let reg = project.registration();
+    let fit = project.registration_transform();
+    let stroke = Stroke::new(weight::HEAVY, t.drawing);
+    for (i, target) in reg.targets.iter().enumerate() {
+        let c = pos(view.to_screen(target.design));
+        painter.circle_stroke(c, 9.0, stroke);
+        painter.line_segment(
+            [c - egui::vec2(13.0, 0.0), c + egui::vec2(13.0, 0.0)],
+            stroke,
+        );
+        painter.line_segment(
+            [c - egui::vec2(0.0, 13.0), c + egui::vec2(0.0, 13.0)],
+            stroke,
+        );
+        painter.text(
+            c + egui::vec2(12.0, -12.0),
+            egui::Align2::LEFT_BOTTOM,
+            (i + 1).to_string(),
+            egui::FontId::proportional(13.0),
+            t.drawing,
+        );
+        if let Some(f) = fit {
+            let at = pos(view.to_screen(f.apply(target.design)));
+            let ring: Vec<Pos2> = (0..=32)
+                .map(|k| {
+                    let a = f32::from(u8::try_from(k).unwrap_or(0)) / 32.0 * std::f32::consts::TAU;
+                    at + egui::vec2(a.cos(), a.sin()) * 12.0
+                })
+                .collect();
+            painter.extend(egui::Shape::dashed_line(&ring, stroke, DASH.0, DASH.1));
+        }
     }
 }
 

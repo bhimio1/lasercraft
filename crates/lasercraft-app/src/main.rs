@@ -123,6 +123,7 @@ impl App {
             }
             Err(err) => {
                 self.shell.log(format!("> {invocation}\nerror: {err}"));
+                self.shell.command_failed(invocation, &err.to_string());
                 if matches!(invocation.name.as_str(), "device.start" | "device.frame") {
                     self.laser.refuse(format!("Cannot run: {err}"));
                 }

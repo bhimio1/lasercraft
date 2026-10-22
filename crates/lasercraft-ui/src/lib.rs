@@ -17,6 +17,7 @@ mod layers_panel;
 mod materials_panel;
 mod menus;
 mod preview;
+mod setup_windows;
 mod shell;
 mod test_windows;
 mod textures;
@@ -36,7 +37,7 @@ pub use test_windows::{TestInfo, TestKind, TestRequest};
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 32] = [
+pub const UI_ACTIONS: [&str; 35] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -74,4 +75,8 @@ pub const UI_ACTIONS: [&str; 32] = [
     "ui.device_profile",
     "ui.test_speed_power",
     "ui.test_interval",
+    // M9: job setup windows.
+    "ui.rotary",
+    "ui.taper",
+    "ui.registration",
 ];

@@ -105,8 +105,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+Shift+A | Frame the selection *(legacy)* | later (with cut-selected-graphics) |
 | Pause / Ctrl+Break *(legacy)* | Pause or resume (`ui.device_pause`) / stop (`device.stop`, bound as Ctrl+Pause, which is what egui reports for Ctrl+Break); also always-visible buttons | M6 |
 | Alt+C | Capture a camera image | M9 |
-| Ctrl+Shift+R / Ctrl+Shift+F | Rotary / feeder setup | M9 |
-| Alt+0 … Alt+4 | Print-and-cut steps | M9 |
+| Ctrl+Shift+R / Ctrl+Shift+F | Rotary attachment (`ui.rotary`) / feeder setup | M9 / not planned |
+| Alt+0 … Alt+4 | Print registration: guided setup (`ui.registration`), set target 1 and 2 (`registration.set_target 1`/`2`), fit with and without scaling (`registration.fit scaled`/`rigid`) | M9 |
 
 ### Mouse and modifiers (M1)
 
