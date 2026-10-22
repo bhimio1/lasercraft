@@ -464,7 +464,7 @@ fn paint_selection(
 
 /// The machine-origin marker: a filled square on the corner and two arms
 /// along the bed edges pointing into the bed, with X and Y at their tips.
-fn paint_origin(
+pub(crate) fn paint_origin(
     ui: &egui::Ui,
     painter: &egui::Painter,
     bed: egui::Rect,
@@ -594,7 +594,7 @@ fn paint_gesture(
     }
 }
 
-fn paint_grid(painter: &egui::Painter, view: &View, bed: &Rect, t: &Tokens) {
+pub(crate) fn paint_grid(painter: &egui::Painter, view: &View, bed: &Rect, t: &Tokens) {
     let minor_visible = GRID_MM * view.scale() >= MIN_GRID_PX;
     let lines = |extent: f64| {
         // Clamped below, so the cast cannot overflow.

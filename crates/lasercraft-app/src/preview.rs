@@ -1,9 +1,9 @@
 //! Plans the job and turns the plan into what the preview window draws
 //! (`docs/spec/preview.md`). The UI never depends on the planner.
 
-use lasercraft_plan::{Machine, MoveKind, Plan, duration, num};
+use lasercraft_plan::{Machine, MoveKind, Plan, num};
 use lasercraft_project::Project;
-use lasercraft_ui::{Preview, PreviewKind, PreviewMove};
+use lasercraft_ui::{Preview, PreviewKind, PreviewMove, clock as duration};
 
 /// The preview of `project` on the default machine (device profiles: M8).
 pub fn build(project: &Project) -> Preview {
@@ -40,7 +40,7 @@ fn from_plan(project: &Project, plan: &Plan) -> Preview {
     let s = &plan.stats;
     let mut lines = vec![
         format!(
-            "Burn {} mm ({}), laser-off run-on {} mm ({}), travel {} mm ({})",
+            "Burn {} mm ({}), unlit {} mm ({}), travel {} mm ({})",
             num(s.burn_length),
             duration(s.burn_time),
             num(s.unlit_length),
