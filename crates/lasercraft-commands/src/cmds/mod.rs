@@ -21,6 +21,7 @@ mod image;
 // M8: device profiles, material libraries, test patterns.
 mod material;
 mod profile;
+mod test;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -46,6 +47,7 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     // M8
     all.extend(profile::commands());
     all.extend(material::commands());
+    all.extend(test::commands());
     all
 }
 

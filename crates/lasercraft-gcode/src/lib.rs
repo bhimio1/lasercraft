@@ -9,7 +9,7 @@ mod place;
 mod verify;
 mod write;
 
-pub use frame::{FrameShape, convex_hull, frame};
+pub use frame::{FrameShape, convex_hull, frame, frame_plan};
 pub use place::{Anchor, Placement, job_box, machine_delta, place, to_document, to_machine};
 pub use verify::{Limits, MAX_LINE, Report, Violation, verify};
 
@@ -147,8 +147,24 @@ pub fn export(
     options: &Options,
 ) -> Result<Exported, ExportError> {
     options.validate()?;
+    export_plan(project, plan(project, machine)?, machine, options)
+}
+
+/// As [`export`], for a plan made elsewhere (a test pattern): `project`
+/// supplies the work area and the layers' output settings.
+///
+/// # Errors
+///
+/// As [`export`].
+pub fn export_plan(
+    project: &Project,
+    planned: Plan,
+    machine: &Machine,
+    options: &Options,
+) -> Result<Exported, ExportError> {
+    options.validate()?;
     let plan = place(
-        plan(project, machine)?,
+        planned,
         project.work_area(),
         options.placement,
         machine.max_speed,

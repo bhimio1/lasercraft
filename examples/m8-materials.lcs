@@ -1,0 +1,30 @@
+# LaserCraft M8: a device profile, material libraries and a test pattern,
+# headless. Run from the repository root:
+#   lasercraft-cli script examples/m8-materials.lcs
+# It writes m8-shop.lcmat, m8-materials.lcproj and m8-test.gcode to the
+# current folder. Without --config the profiles and libraries live in memory.
+profile.add "Shop diode" width=300 height=200 max_power=80 air=m8
+profile.list
+project.set_device "Shop diode"
+library.use "LaserCraft starter"
+material.list
+library.new "My shop"
+library.set_device "Shop diode"
+layer.set 1 name Cut
+layer.set 1 speed 4
+layer.set 1 max_power 100
+layer.set 1 passes 3
+material.add Plywood 3 Cut 1
+material.add Plywood 3 Engrave 1
+material.set 2 mode fill
+material.set 2 speed 150
+material.set 2 max_power 30
+material.set 2 passes 1
+material.follow 2 2
+shape.add_rect 10 10 80 50 @1
+shape.add_ellipse 50 35 20 12 @2
+material.set 2 speed 160                # layer 2 follows and changes too
+library.save m8-shop.lcmat
+material.list
+project.save m8-materials.lcproj
+test.export speed_power m8-test.gcode "{\"rows\": {\"count\": 4, \"from\": 20, \"to\": 200}, \"columns\": {\"count\": 4, \"from\": 10, \"to\": 100}}"

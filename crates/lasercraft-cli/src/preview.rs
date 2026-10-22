@@ -15,7 +15,23 @@ struct Options {
     file: String,
     svg: Option<String>,
     moves: bool,
-    machine: Machine,
+    overrides: Overrides,
+}
+
+/// Machine flags given on the command line.
+#[derive(Default)]
+struct Overrides {
+    max_speed: Option<f64>,
+    acceleration: Option<f64>,
+    max_power: Option<f64>,
+}
+
+impl Overrides {
+    fn apply(&self, machine: &mut Machine) {
+        machine.max_speed = self.max_speed.unwrap_or(machine.max_speed);
+        machine.acceleration = self.acceleration.unwrap_or(machine.acceleration);
+        machine.max_power = self.max_power.unwrap_or(machine.max_power);
+    }
 }
 
 fn value(flag: &str, text: Option<&String>) -> Result<f64, CliError> {
@@ -28,7 +44,7 @@ fn options(args: &[String]) -> Result<Options, CliError> {
     let mut file = None;
     let mut svg = None;
     let mut moves = false;
-    let mut machine = Machine::default();
+    let mut overrides = Overrides::default();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
@@ -40,9 +56,9 @@ fn options(args: &[String]) -> Result<Options, CliError> {
                 );
             }
             "--moves" => moves = true,
-            "--max-speed" => machine.max_speed = value(arg, rest.next())?,
-            "--accel" => machine.acceleration = value(arg, rest.next())?,
-            "--max-power" => machine.max_power = value(arg, rest.next())?,
+            "--max-speed" => overrides.max_speed = Some(value(arg, rest.next())?),
+            "--accel" => overrides.acceleration = Some(value(arg, rest.next())?),
+            "--max-power" => overrides.max_power = Some(value(arg, rest.next())?),
             flag if flag.starts_with("--") => {
                 return Err(usage(&format!("unknown preview option `{flag}`")));
             }
@@ -55,7 +71,7 @@ fn options(args: &[String]) -> Result<Options, CliError> {
         file,
         svg,
         moves,
-        machine,
+        overrides,
     })
 }
 
@@ -63,8 +79,14 @@ fn options(args: &[String]) -> Result<Options, CliError> {
 pub(crate) fn preview(args: &[String]) -> Result<String, CliError> {
     let o = options(args)?;
     let project = Project::load(Path::new(&o.file)).map_err(failed)?;
-    let plan = lasercraft_plan::plan(&project, &o.machine).map_err(failed)?;
+    // The project's device profile first, then the flags.
+    let (mut machine, _, warning) = lasercraft_commands::job_settings(&project, &crate::workshop());
+    o.overrides.apply(&mut machine);
+    let plan = lasercraft_plan::plan(&project, &machine).map_err(failed)?;
     let mut out = format!("job \"{}\"\n", project.name());
+    if let Some(w) = warning {
+        let _ = writeln!(out, "{w}");
+    }
     if o.moves {
         out.push_str(&plan.dump());
     } else {
@@ -103,7 +125,7 @@ fn hex(color: u8) -> String {
 
 /// The toolpath as SVG in document millimetres: the bed outline, burn moves
 /// in layer colors, unlit moves dashed orange, travel dashed red.
-fn svg(project: &Project, plan: &Plan) -> String {
+pub(crate) fn svg(project: &Project, plan: &Plan) -> String {
     let area = project.work_area();
     let bed = Rect::from_corners(Point::ZERO, Point::new(area.width_mm, area.height_mm));
     let view = plan.stats.bounds.map_or(bed, |b| b.union(bed));

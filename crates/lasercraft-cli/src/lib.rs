@@ -2,19 +2,22 @@
 //! (`docs/spec/cli.md`). Every change goes through the command registry, just
 //! as in the app.
 
+use std::cell::RefCell;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lasercraft_commands::{CommandError, Invocation, Registry, SESSION_COMMANDS, Session};
 use lasercraft_project::Project;
 
 mod export;
+mod pattern;
 mod preview;
 mod simulate;
 
 /// Usage text printed by `help` and on bad arguments.
 pub const USAGE: &str = "\
 usage:
+  lasercraft-cli [--config <dir>] <subcommand> ...
   lasercraft-cli new <out.lcproj> [<width_mm> <height_mm>]
   lasercraft-cli run <project.lcproj> <command> [<command> ...]
   lasercraft-cli script <script.lcs> [<project.lcproj>]
@@ -26,6 +29,8 @@ usage:
                  [--accel <mm/s²>] [--max-power <%>]
   lasercraft-cli simulate <project.lcproj> [--locked] [--user-origin X,Y]
                  <command> [<command> ...]
+  lasercraft-cli pattern <speed_power|interval> [<json>] [--project <p.lcproj>]
+                 [--svg <out.svg>] [--gcode <out.gcode>]
   lasercraft-cli commands
   lasercraft-cli help";
 
@@ -66,8 +71,27 @@ fn usage(reason: &str) -> CliError {
     CliError::Usage(reason.to_owned())
 }
 
+thread_local! {
+    /// The configuration folder given with `--config`, for this run.
+    static CONFIG: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// The user data: from `--config <dir>`, or in memory only.
+fn workshop() -> lasercraft_workshop::Workshop {
+    CONFIG.with_borrow(|dir| match dir {
+        Some(dir) => {
+            let (ws, messages) = lasercraft_workshop::Workshop::load(dir);
+            for m in messages {
+                eprintln!("lasercraft-cli: {m}");
+            }
+            ws
+        }
+        None => lasercraft_workshop::Workshop::in_memory(),
+    })
+}
+
 fn session_with(project: Project) -> Session {
-    Session::new(project, Registry::with_builtin())
+    Session::with_workshop(project, Registry::with_builtin(), workshop())
 }
 
 /// Runs the CLI with `args` (without the program name) and returns what to
@@ -77,6 +101,17 @@ fn session_with(project: Project) -> Session {
 ///
 /// Returns [`CliError`] describing what went wrong.
 pub fn run(args: &[String]) -> Result<String, CliError> {
+    let args = match args {
+        [flag, dir, rest @ ..] if flag == "--config" => {
+            CONFIG.set(Some(PathBuf::from(dir)));
+            rest
+        }
+        [flag] if flag == "--config" => return Err(usage("--config needs a folder")),
+        _ => {
+            CONFIG.set(None);
+            args
+        }
+    };
     let (sub, rest) = args
         .split_first()
         .ok_or_else(|| usage("missing subcommand"))?;
@@ -88,6 +123,7 @@ pub fn run(args: &[String]) -> Result<String, CliError> {
         "preview" => preview::preview(rest),
         "export" => export::export(rest),
         "simulate" => simulate::simulate(rest),
+        "pattern" => pattern::pattern(rest),
         "commands" if rest.is_empty() => Ok(commands()),
         "help" | "--help" | "-h" => Ok(format!("{USAGE}\n")),
         other => Err(usage(&format!("unknown subcommand `{other}`"))),
@@ -262,6 +298,9 @@ pub fn summary(project: &Project) -> String {
         area.origin,
         project.shapes().len()
     );
+    if let Some(device) = project.device() {
+        let _ = write!(out, ", device \"{device}\"");
+    }
     for color in project.used_layers() {
         if let Ok(l) = project.layer(color) {
             let on_layer = || project.shapes().iter().filter(move |s| s.layer() == color);
@@ -273,6 +312,16 @@ pub fn summary(project: &Project) -> String {
                 l.name,
                 layer_settings(l, vectors, images)
             );
+            if let Some(f) = &l.follows {
+                let _ = write!(
+                    out,
+                    ", follows \"{}\" ({} {}, {})",
+                    f.description,
+                    f.material,
+                    f.level(),
+                    f.library
+                );
+            }
         }
     }
     for shape in project.shapes() {

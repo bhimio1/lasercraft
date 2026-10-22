@@ -90,6 +90,32 @@ pub fn frame(
     speed: f64,
     head: Option<Point>,
 ) -> Result<String, ExportError> {
+    frame_plan(
+        project,
+        plan(project, machine)?,
+        machine,
+        options,
+        shape,
+        speed,
+        head,
+    )
+}
+
+/// As [`frame`], for a plan made elsewhere (a test pattern) on `project`'s
+/// work area.
+///
+/// # Errors
+///
+/// As [`frame`].
+pub fn frame_plan(
+    project: &Project,
+    planned: Plan,
+    machine: &Machine,
+    options: &Options,
+    shape: FrameShape,
+    speed: f64,
+    head: Option<Point>,
+) -> Result<String, ExportError> {
     options.validate()?;
     if !(speed.is_finite() && speed > 0.0 && speed <= machine.max_speed) {
         return Err(ExportError::Invalid(format!(
@@ -106,7 +132,7 @@ pub fn frame(
         },
         Placement::Absolute => Placement::Absolute,
     };
-    let planned = place(plan(project, machine)?, area, placement, machine.max_speed);
+    let planned = place(planned, area, placement, machine.max_speed);
     let corners = outline(&planned, shape);
     let Some(&first) = corners.first() else {
         return Err(ExportError::Nothing);

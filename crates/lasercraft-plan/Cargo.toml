@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 lasercraft-geom.workspace = true
 lasercraft-project.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 lasercraft-commands.workspace = true

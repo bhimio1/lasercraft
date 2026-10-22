@@ -8,11 +8,13 @@ mod bounds;
 mod dump;
 mod emit;
 mod fill;
+mod font;
 mod image;
 mod line;
 mod machine;
 mod model;
 mod order;
+pub mod patterns;
 mod timing;
 
 pub use bounds::{Edge, OutOfBounds};
@@ -111,6 +113,92 @@ fn plan_images(
     }
 }
 
+/// Plans one layer's outlines and images into `out`; `None` when the layer
+/// has nothing to burn.
+pub(crate) fn plan_layer(
+    layer: &Layer,
+    outlines: Vec<Outline>,
+    images: &[&lasercraft_project::Shape],
+    machine: &Machine,
+    out: &mut Emitter,
+    warnings: &mut Vec<Warning>,
+) -> Option<LayerSummary> {
+    if outlines.is_empty() && images.is_empty() {
+        return None;
+    }
+    let has_vectors = !outlines.is_empty();
+    if layer.speed > machine.max_speed {
+        warn(
+            warnings,
+            layer,
+            format!(
+                "speed {} mm/s is above the machine's {} mm/s; the estimate uses the machine's speed",
+                num(layer.speed),
+                num(machine.max_speed)
+            ),
+        );
+    }
+    // Clamped to the layer's and the device's maximum (safety rule 6).
+    let power = layer.max_power.clamp(0.0, machine.max_power.min(100.0));
+    let feed = Feed {
+        layer: layer.color,
+        pass: 1,
+        speed: layer.speed,
+        power,
+    };
+    let mut overscan = 0.0;
+    if !outlines.is_empty() {
+        match layer.mode {
+            Mode::Line => {
+                let cuts = line::cuts(outlines, layer, warnings);
+                line::plan_layer(&cuts, layer.passes, feed, out);
+            }
+            Mode::Fill => {
+                let open = outlines.iter().filter(|o| !o.closed).count();
+                if open > 0 {
+                    warn(
+                        warnings,
+                        layer,
+                        format!("fill needs closed shapes; {open} open outline(s) skipped"),
+                    );
+                }
+                if layer.overscan {
+                    overscan = machine.overscan(layer.speed);
+                }
+                let settings = FillSettings {
+                    angle: layer.angle,
+                    interval: layer.interval,
+                    bidirectional: layer.bidirectional,
+                    crosshatch: layer.crosshatch,
+                    overscan,
+                };
+                let before = out.moves.len();
+                fill::plan_layer(&outlines, &settings, layer.passes, feed, out);
+                if out.moves.len() == before {
+                    warn(warnings, layer, "nothing to fill");
+                }
+            }
+        }
+    }
+    if !images.is_empty() {
+        if layer.overscan {
+            overscan = machine.overscan(layer.speed);
+        }
+        plan_images(images, layer, feed, overscan, out, warnings);
+    }
+    Some(LayerSummary {
+        color: layer.color,
+        name: layer.name.clone(),
+        mode: layer.mode,
+        passes: layer.passes,
+        speed: layer.speed,
+        power,
+        overscan,
+        vectors: has_vectors,
+        images: !images.is_empty(),
+    })
+}
+
 /// Plans the job: every output layer in order, each pass, line or fill.
 ///
 /// # Errors
@@ -129,80 +217,14 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
             .iter()
             .filter(|s| s.layer() == layer.color && s.geometry().is_image())
             .collect();
-        if outlines.is_empty() && images.is_empty() {
-            continue;
-        }
-        let has_vectors = !outlines.is_empty();
-        if layer.speed > machine.max_speed {
-            warn(
-                &mut warnings,
-                layer,
-                format!(
-                    "speed {} mm/s is above the machine's {} mm/s; the estimate uses the machine's speed",
-                    num(layer.speed),
-                    num(machine.max_speed)
-                ),
-            );
-        }
-        // Clamped to the layer's and the device's maximum (safety rule 6).
-        let power = layer.max_power.clamp(0.0, machine.max_power.min(100.0));
-        let feed = Feed {
-            layer: layer.color,
-            pass: 1,
-            speed: layer.speed,
-            power,
-        };
-        let mut overscan = 0.0;
-        if !outlines.is_empty() {
-            match layer.mode {
-                Mode::Line => {
-                    let cuts = line::cuts(outlines, layer, &mut warnings);
-                    line::plan_layer(&cuts, layer.passes, feed, &mut out);
-                }
-                Mode::Fill => {
-                    let open = outlines.iter().filter(|o| !o.closed).count();
-                    if open > 0 {
-                        warn(
-                            &mut warnings,
-                            layer,
-                            format!("fill needs closed shapes; {open} open outline(s) skipped"),
-                        );
-                    }
-                    if layer.overscan {
-                        overscan = machine.overscan(layer.speed);
-                    }
-                    let settings = FillSettings {
-                        angle: layer.angle,
-                        interval: layer.interval,
-                        bidirectional: layer.bidirectional,
-                        crosshatch: layer.crosshatch,
-                        overscan,
-                    };
-                    let before = out.moves.len();
-                    fill::plan_layer(&outlines, &settings, layer.passes, feed, &mut out);
-                    if out.moves.len() == before {
-                        warn(&mut warnings, layer, "nothing to fill");
-                    }
-                }
-            }
-        }
-        if !images.is_empty() {
-            if layer.overscan {
-                overscan = machine.overscan(layer.speed);
-            }
-            plan_images(&images, layer, feed, overscan, &mut out, &mut warnings);
-        }
-        layers.push(LayerSummary {
-            color: layer.color,
-            name: layer.name.clone(),
-            mode: layer.mode,
-            passes: layer.passes,
-            speed: layer.speed,
-            power,
-            overscan,
-            vectors: has_vectors,
-            images: !images.is_empty(),
-        });
+        layers.extend(plan_layer(
+            layer,
+            outlines,
+            &images,
+            machine,
+            &mut out,
+            &mut warnings,
+        ));
     }
     let mut moves = out.moves;
     timing::estimate(&mut moves, machine);

@@ -1,0 +1,67 @@
+added device profile "Shop diode"
+Shop diode (default): 300 × 200 mm, origin front left
+device profile "Shop diode": work area 300 × 200 mm, origin front left
+material library "LaserCraft starter" is active
+LaserCraft starter
+Aluminum
+  Black anodized
+     11  Engrave (fill, 100 mm/s, 70%)
+Basswood
+  3.00 mm
+      5  Cut (line, 5 mm/s, 100%)
+      4  Engrave (fill, 180 mm/s, 25%)
+Cardboard
+  2.00 mm
+      8  Cut (line, 10 mm/s, 80%)
+Leather
+  2.00 mm
+      9  Engrave (fill, 150 mm/s, 20%)
+     10  Score (line, 40 mm/s, 40%)
+MDF
+  3.00 mm
+      7  Cut (line, 3 mm/s, 100%)
+      6  Engrave (fill, 120 mm/s, 35%)
+Paper
+  0.20 mm
+     13  Cut (line, 30 mm/s, 40%)
+     14  Engrave (fill, 250 mm/s, 10%)
+Plywood
+  3.00 mm
+      3  Cut (line, 4 mm/s, 100%)
+      1  Engrave (fill, 150 mm/s, 30%)
+      2  Score (line, 30 mm/s, 50%)
+Slate
+  Tile
+     12  Engrave (fill, 120 mm/s, 60%)
+new material library "My shop"
+the library is for device profile "Shop diode"
+layer 1 name = Cut
+layer 1 speed = 4
+layer 1 max_power = 100
+layer 1 passes = 3
+added material entry 1 "Cut" from layer 01
+added material entry 2 "Engrave" from layer 01
+material entry 2: mode = fill
+material entry 2: speed = 150
+material entry 2: max_power = 30
+material entry 2: passes = 1
+layer 02 follows "Engrave" (My shop)
+added rect 1
+added ellipse 2
+material entry 2: speed = 160
+saved m8-shop.lcmat
+My shop
+Plywood
+  3.00 mm
+      1  Cut (line, 4 mm/s, 100%)
+      2  Engrave (fill, 160 mm/s, 30%)
+saved m8-materials.lcproj
+exported m8-test.gcode: speed and power test, 78.1 × 40.0 mm, 1993 lines, estimated 3 min 06 s
+Warning: speed 140 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
+Warning: speed 200 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
+Warning: the device maximum is 80%. 80% is used.
+project "Untitled": work area 300 × 200 mm, origin front-left, 2 shape(s), device "Shop diode"
+  layer  1 "Cut": line 4 mm/s, power 0–100%, 3 pass(es)
+  layer  2 "Layer 02": fill 160 mm/s, power 0–30%, 1 pass(es), interval 0.1 mm at 0°, both ways, follows "Engrave" (Plywood 3.00 mm, My shop)
+     1 @1  rect     (10, 10) – (90, 60)
+     2 @2  ellipse  (30, 23) – (70, 47)

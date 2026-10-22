@@ -1174,9 +1174,11 @@ version = "0.1.0"
 dependencies = [
  "lasercraft-commands",
  "lasercraft-device",
+ "lasercraft-gcode",
  "lasercraft-geom",
  "lasercraft-plan",
  "lasercraft-project",
+ "lasercraft-workshop",
  "serde_json",
 ]
 
@@ -1236,6 +1238,8 @@ dependencies = [
  "lasercraft-commands",
  "lasercraft-geom",
  "lasercraft-project",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

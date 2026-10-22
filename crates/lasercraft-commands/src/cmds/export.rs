@@ -83,7 +83,7 @@ fn options(
 }
 
 /// Writes `text` next to `path` and renames it into place.
-fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
+pub(super) fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = std::path::PathBuf::from(tmp);

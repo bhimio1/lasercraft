@@ -394,3 +394,94 @@ fn m7_images_script_and_gcode_match_golden() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn m8_materials_script_and_test_gcode_match_golden() {
+    let dir = temp_dir("materials");
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    let out = cli_in(&dir, &["script", &format!("{source}/m8-materials.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let gcode = std::fs::read_to_string(dir.join("m8-test.gcode")).unwrap();
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let (out_path, gcode_path) = (
+        format!("{golden}/m8-materials.out"),
+        format!("{golden}/m8-test.gcode"),
+    );
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(&out_path, stdout(&out)).unwrap();
+        std::fs::write(&gcode_path, &gcode).unwrap();
+    }
+    assert_eq!(
+        stdout(&out),
+        std::fs::read_to_string(&out_path).unwrap_or_default()
+    );
+    assert_eq!(
+        gcode,
+        std::fs::read_to_string(&gcode_path).unwrap_or_default()
+    );
+    // The power above the device's 80% was clamped.
+    assert!(stdout(&out).contains("the device maximum is 80%"));
+    assert!(!gcode.contains("S1000"), "nothing at full power");
+    // The project remembers its device and the follow mark.
+    let shown = cli_in(&dir, &["show", "m8-materials.lcproj", "--json"]);
+    let json = stdout(&shown);
+    assert!(
+        json.contains("\"device\": \"Shop diode\"") && json.contains("\"follows\""),
+        "{json}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn config_folder_keeps_profiles_between_runs_and_pattern_prints_a_plan() {
+    let dir = temp_dir("config");
+    let config = dir.join("config");
+    let config = path_str(&config);
+    let out = cli_in(&dir, &["--config", config, "new", "a.lcproj"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let out = cli_in(
+        &dir,
+        &[
+            "--config",
+            config,
+            "run",
+            "a.lcproj",
+            "profile.add Bench width=200 height=150",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    // The next run sees the profile, and new projects use it.
+    let out = cli_in(&dir, &["--config", config, "new", "b.lcproj"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let shown = stdout(&cli_in(&dir, &["show", "b.lcproj"]));
+    assert!(shown.contains("200 × 150"), "{shown}");
+    // Without --config, nothing is remembered.
+    let out = cli_in(&dir, &["run", "a.lcproj", "project.set_device Bench"]);
+    assert_eq!(out.status.code(), Some(1));
+    let out = cli_in(
+        &dir,
+        &[
+            "--config",
+            config,
+            "pattern",
+            "interval",
+            r#"{"patches": 3}"#,
+            "--project",
+            "b.lcproj",
+            "--svg",
+            "p.svg",
+            "--gcode",
+            "p.gcode",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(
+        text.starts_with("Line interval test:") && text.contains("fits the work area"),
+        "{text}"
+    );
+    assert!(dir.join("p.svg").exists() && dir.join("p.gcode").exists());
+    let out = cli_in(&dir, &["pattern", "focus"]);
+    assert_eq!(out.status.code(), Some(1));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

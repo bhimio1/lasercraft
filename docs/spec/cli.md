@@ -1,6 +1,7 @@
 # Spec: `lasercraft-cli`
 
-Milestone: M0 (preview arrives with M4, export with M5, simulate with M6).
+Milestone: M0 (preview arrives with M4, export with M5, simulate with M6,
+`--config` and `pattern` with M8).
 
 ## Subcommands
 
@@ -13,8 +14,19 @@ Milestone: M0 (preview arrives with M4, export with M5, simulate with M6).
 | `export <project.lcproj> <out.gcode> [--s-max <n>] [--air m7\|m8] [--finish] [--max-speed <mm/s>] [--accel <mm/s²>] [--max-power <%>]` | Run `project.export_gcode` (`docs/spec/gcode.md`): plan, refuse jobs that leave the work area or burn nothing, write verified GRBL G-code, and print its line count, burn length, highest `S` and estimated time. `--s-max` must equal GRBL's `$30`. Refusals exit with code 1 and write nothing. |
 | `preview <project.lcproj> [--svg <out.svg>] [--moves] [--max-speed <mm/s>] [--accel <mm/s²>] [--max-power <%>]` | Plan the job (`docs/spec/planning.md`) and print the start position, one line per layer, burn, unlit and travel distances with times, the total estimated time, the job bounds (overscan included), warnings, and whether the job fits the work area or the bounds error. `--moves` also lists every move (the planner's text dump). `--svg` writes the toolpath: the work area outline, burn moves in layer colors, unlit moves dashed orange, travel dashed red. The machine flags override the planner's default machine. A job that does not fit is reported, not an error: the refusal belongs to export and streaming. |
 | `simulate <project.lcproj> [--locked] [--user-origin X,Y] <command> [<command> …]` | Connect the real streaming controller to the simulated GRBL (`docs/spec/device.md`) on simulated time, with the work area as its travel, and run each argument as a command line, typically `device.*` (`docs/spec/laser.md`). The head position, user origin and `$30` are filled in as the app does. Each request plays out before the next command: streams until they finish, everything else until the machine rests. Prints each command's message, then stream outcomes, refusals, alarms and non-routine replies, and finally the laser-on length and stretch count, head position, state and simulated time. `--locked` starts the machine in alarm (homing required). A failing command exits with 1; the project file is never written. |
+| `pattern <speed_power\|interval> [<json>] [--project <p.lcproj>] [--svg <out.svg>] [--gcode <out.gcode>]` | Build a test pattern (`docs/spec/test-patterns.md`) on the project's work area (or the default one) with its device profile's limits, print its size, plan summary and whether it fits, and optionally write its toolpath SVG and G-code. |
 | `commands` | List every command's usage and summary, including `edit.*`. |
 | `help` | Print usage. |
+
+## User data (M8)
+
+- `--config <dir>` before the subcommand reads and writes device profiles,
+  open material libraries and test presets in that folder
+  (`docs/spec/devices.md`). Without it the CLI keeps them in memory only:
+  every run starts with no profiles and the starter library.
+- `show` adds `device "‹name›"` to the project line and `follows
+  "‹description›" (‹material› ‹thickness or group›, ‹library›)` to layers
+  that follow a material entry.
 
 ## Exit codes
 
