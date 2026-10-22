@@ -617,12 +617,7 @@ fn header(ui: &mut egui::Ui) {
 }
 
 /// The header line: the edited layer's chip and its name.
-fn name_line<'a>(
-    ui: &mut egui::Ui,
-    draft: &mut Layer,
-    layer: &Layer,
-    edits: &mut Vec<(&'a str, String)>,
-) {
+fn name_line(ui: &mut egui::Ui, draft: &mut Layer, layer: &Layer, edits: &mut Vec<(&str, String)>) {
     ui.horizontal(|ui| {
         swatch(ui, draft.color, size::ROW - 2.0, Mark::None);
         ui.label("Name");
@@ -665,7 +660,7 @@ impl Form {
             .spacing([size::GAP, size::GAP_TIGHT])
             .show(ui, |ui| {
                 add(self, ui);
-                if self.placed % self.pairs != 0 {
+                if !self.placed.is_multiple_of(self.pairs) {
                     ui.end_row();
                 }
             });
@@ -688,7 +683,7 @@ impl Form {
         .response
         .on_hover_text(tip);
         self.placed += 1;
-        if self.placed % self.pairs == 0 {
+        if self.placed.is_multiple_of(self.pairs) {
             ui.end_row();
         }
     }
@@ -699,7 +694,7 @@ impl Form {
             ui.label("");
             ui.label("");
             self.placed += 1;
-            if self.placed % self.pairs == 0 {
+            if self.placed.is_multiple_of(self.pairs) {
                 ui.end_row();
             }
         }
