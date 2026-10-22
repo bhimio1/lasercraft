@@ -1190,6 +1190,7 @@ dependencies = [
  "lasercraft-import",
  "lasercraft-plan",
  "lasercraft-project",
+ "lasercraft-workshop",
  "serde_json",
 ]
 

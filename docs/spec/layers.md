@@ -59,8 +59,8 @@ settings later.
   Min power (%) only in the image section, enabled for Grayscale.
 - A layer may follow a material library entry (M8, `docs/spec/materials.md`):
   its settings are then the entry's, `follows` names the entry, and
-  `layer.set`, `layer.set_all` and `layer.copy_settings` onto it are refused
-  until it stops following (`material.unfollow`).
+  changing its settings (other than name, output and show) is refused until
+  it stops following (`material.unfollow`).
 - Setting `max_power` below `min_power` fails; lower `min_power` first.
 - Power is clamped again to the device maximum at export (M5).
 - Hidden layers' shapes are not drawn and cannot be clicked. Layers with

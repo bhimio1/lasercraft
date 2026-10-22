@@ -1,6 +1,8 @@
 use lasercraft_project::Project;
 
-use crate::{CommandError, Invocation, Outcome, Registry};
+use lasercraft_workshop::Workshop;
+
+use crate::{CommandError, Context, Invocation, Outcome, Registry};
 
 /// Reserved command name handled by [`Session`]: undo the last undoable command.
 pub const UNDO: &str = "edit.undo";
@@ -34,6 +36,7 @@ struct HistoryEntry {
 /// A project together with its command registry and undo/redo history.
 pub struct Session {
     project: Project,
+    workshop: Workshop,
     registry: Registry,
     undo_stack: Vec<HistoryEntry>,
     redo_stack: Vec<HistoryEntry>,
@@ -44,8 +47,15 @@ impl Session {
     /// Creates a session with empty history.
     #[must_use]
     pub fn new(project: Project, registry: Registry) -> Self {
+        Self::with_workshop(project, registry, Workshop::in_memory())
+    }
+
+    /// Creates a session with empty history and the given user data.
+    #[must_use]
+    pub fn with_workshop(project: Project, registry: Registry, workshop: Workshop) -> Self {
         Self {
             project,
+            workshop,
             registry,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -57,6 +67,18 @@ impl Session {
     #[must_use]
     pub fn project(&self) -> &Project {
         &self.project
+    }
+
+    /// The user's device profiles, libraries and presets.
+    #[must_use]
+    pub fn workshop(&self) -> &Workshop {
+        &self.workshop
+    }
+
+    /// Takes the message about user data that could not be written, if the
+    /// last change could not be saved.
+    pub fn take_workshop_warning(&mut self) -> Option<String> {
+        self.workshop.take_warning()
     }
 
     /// The registry in use.
@@ -183,7 +205,11 @@ impl Session {
         if invocation.name == BATCH {
             self.execute_batch(&invocation.args)
         } else {
-            self.registry.execute(&mut self.project, invocation)
+            let mut cx = Context {
+                project: &mut self.project,
+                workshop: &mut self.workshop,
+            };
+            self.registry.execute(&mut cx, invocation)
         }
     }
 
@@ -429,6 +455,12 @@ mod tests {
             r#"project.set_notes "cut at 80%""#,
             "project.set_work_area 610 305",
             "project.set_origin rear-right",
+            "project.set_device Shop keep_area",
+            // M8: the starter library is open in a fresh session.
+            "material.apply 2 8",
+            "material.follow 1 9",
+            "material.unfollow 9",
+            "material.follow 3 9",
             r#"edit.batch "project.rename Batched" "project.set_work_area 300 200""#,
             "shape.add_rect 0 0 20 10",
             "shape.add_ellipse 50 50 10 5",
@@ -620,7 +652,23 @@ mod tests {
                 covered
                     || not_undoable.contains(&name)
                     || name.starts_with("select.")
-                    || name.starts_with("device."),
+                    || name.starts_with("device.")
+                    // User data (M8) is not undoable (`docs/spec/commands.md`).
+                    || name.starts_with("profile.")
+                    || name.starts_with("library.")
+                    || name.starts_with("test.")
+                    // Library edits; their project part is tested in
+                    // `cmds::material`.
+                    || matches!(
+                        name,
+                        "material.add"
+                            | "material.update"
+                            | "material.set"
+                            | "material.describe"
+                            | "material.duplicate"
+                            | "material.delete"
+                            | "material.list"
+                    ),
                 "add `{name}` to the round-trip script or list it as not undoable"
             );
         }

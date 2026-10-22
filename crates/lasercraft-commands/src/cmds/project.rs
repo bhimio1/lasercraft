@@ -5,12 +5,12 @@ use std::path::Path;
 use lasercraft_project::{Origin, Project};
 
 use crate::args::Args;
-use crate::command::cmd;
-use crate::{Command, CommandError, Invocation, Outcome};
+use crate::command::{ccmd, cmd};
+use crate::{Command, CommandError, Context, Invocation, Outcome};
 
 pub(super) fn commands() -> Vec<Box<dyn Command>> {
     vec![
-        cmd(
+        ccmd(
             "project.new",
             "project.new [<width_mm> <height_mm>]",
             "Start an empty project, optionally with a work area size. Clears undo history.",
@@ -55,14 +55,29 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
     ]
 }
 
-fn new(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let fresh = match args.len() {
+/// A new project; without a size it uses the default device profile, if
+/// there is one (`docs/spec/devices.md`).
+fn new(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let mut fresh = match args.len() {
         0 => Project::default(),
         2 => Project::with_work_area(args.f64(0, "width")?, args.f64(1, "height")?)?,
         _ => return Err(args.usage_error()),
     };
-    *project = fresh;
-    Ok(Outcome::reset("new project"))
+    let mut message = "new project".to_owned();
+    if args.len() == 0
+        && let Some(profile) = cx
+            .workshop
+            .default_profile()
+            .and_then(|name| cx.workshop.profile(name))
+    {
+        let area = profile.work_area();
+        fresh.set_device(Some(&profile.name))?;
+        fresh.set_work_area_size(area.width_mm, area.height_mm)?;
+        fresh.set_origin(area.origin);
+        message = format!("new project for device profile \"{}\"", profile.name);
+    }
+    *cx.project = fresh;
+    Ok(Outcome::reset(message))
 }
 
 fn load(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {

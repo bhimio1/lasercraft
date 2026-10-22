@@ -17,4 +17,5 @@ lasercraft-plan.workspace = true
 lasercraft-geom.workspace = true
 lasercraft-project.workspace = true
 lasercraft-import.workspace = true
+lasercraft-workshop.workspace = true
 serde_json.workspace = true

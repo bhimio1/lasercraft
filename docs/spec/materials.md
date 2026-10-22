@@ -62,8 +62,10 @@ An entry holds:
 - The project stores, per layer, `follows`: `{"library": …, "material":
   …, "thickness": … | "group": …, "description": …}` (`docs/spec/
   project-file.md`). It survives entry ids changing between files.
-- `layer.set`, `layer.set_all` with other settings and
-  `layer.copy_settings` onto a following layer are refused: "Layer ‹nn›
+- `layer.set` (except `name`, `output` and `show`) and
+  `layer.copy_settings` onto a following layer are refused (`layer.set_all`
+  replaces everything, the follow mark included, and is how undo restores
+  layers): "Layer ‹nn›
   follows material ‹description›. Stop following it first." (The inverse
   of a material command may still restore a following layer exactly.)
 - When an entry changes (`material.update`, `material.set`) every layer of

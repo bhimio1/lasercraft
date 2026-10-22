@@ -10,8 +10,8 @@ use lasercraft_project::Project;
 
 use super::export::{apply_option, key_value, number};
 use crate::args::Args;
-use crate::command::cmd;
-use crate::{Command, CommandError, Invocation, Outcome};
+use crate::command::{ccmd, cmd};
+use crate::{Command, CommandError, Context, Invocation, Outcome, job_settings};
 
 /// Default jog and framing speed, mm/s.
 pub const DEFAULT_SPEED: f64 = 50.0;
@@ -33,13 +33,13 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             "Stop anything running and disconnect.",
             |_, a| simple(a, Request::Disconnect, "disconnecting"),
         ),
-        cmd(
+        ccmd(
             "device.start",
             "device.start [from=absolute|current|user] [at=X,Y] [anchor=<name>] [s_max=<n>] [air=m7|m8] [finish=on|off] [max_speed=<mm/s>] [accel=<mm/s²>] [max_power=<%>]",
             "Run the job on the connected laser after the safety checks.",
             start,
         ),
-        cmd(
+        ccmd(
             "device.frame",
             "device.frame [outline] [from=absolute|current|user] [at=X,Y] [anchor=<name>] [speed=<mm/s>] [head=X,Y] [max_speed=<mm/s>] [accel=<mm/s²>]",
             "Trace the job's box (or its outline) with the laser off.",
@@ -216,10 +216,11 @@ struct JobArgs {
     outline: bool,
 }
 
-fn job_args(args: &Args<'_>, framing: bool) -> Result<JobArgs, CommandError> {
+fn job_args(cx: &Context<'_>, args: &Args<'_>, framing: bool) -> Result<JobArgs, CommandError> {
+    let (machine, options, _) = job_settings(cx.project, cx.workshop);
     let mut job = JobArgs {
-        machine: Machine::default(),
-        options: Options::default(),
+        machine,
+        options,
         from: StartFrom::Absolute,
         speed: DEFAULT_SPEED,
         head: None,
@@ -293,10 +294,10 @@ fn fmt(v: f64) -> String {
     lasercraft_plan::num(v)
 }
 
-fn start(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(args, false)?;
+fn start(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let job = job_args(cx, args, false)?;
     let out =
-        export(project, &job.machine, &job.options).map_err(|e| args.invalid(e.to_string()))?;
+        export(cx.project, &job.machine, &job.options).map_err(|e| args.invalid(e.to_string()))?;
     Ok(Outcome::device(
         format!(
             "starting the job ({}): {} lines, burn {:.1} mm, estimated {}",
@@ -312,16 +313,23 @@ fn start(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError
     ))
 }
 
-fn frame_job(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(args, true)?;
+fn frame_job(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let job = job_args(cx, args, true)?;
     let shape = if job.outline {
         FrameShape::Outline
     } else {
         FrameShape::Box
     };
     let speed = job.speed.min(job.machine.max_speed);
-    let gcode = frame(project, &job.machine, &job.options, shape, speed, job.head)
-        .map_err(|e| args.invalid(e.to_string()))?;
+    let gcode = frame(
+        cx.project,
+        &job.machine,
+        &job.options,
+        shape,
+        speed,
+        job.head,
+    )
+    .map_err(|e| args.invalid(e.to_string()))?;
     Ok(Outcome::device(
         format!(
             "framing the job's {} ({}) at {} mm/s, laser off",

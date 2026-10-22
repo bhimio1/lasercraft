@@ -18,6 +18,9 @@ mod export;
 pub(crate) mod device;
 // M7: images.
 mod image;
+// M8: device profiles, material libraries, test patterns.
+mod material;
+mod profile;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -40,6 +43,9 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(device::commands());
     // M7
     all.extend(image::commands());
+    // M8
+    all.extend(profile::commands());
+    all.extend(material::commands());
     all
 }
 

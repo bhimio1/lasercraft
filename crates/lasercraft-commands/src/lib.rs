@@ -15,13 +15,15 @@ mod cmds;
 mod command;
 mod error;
 mod invocation;
+mod machine;
 mod registry;
 mod session;
 
 pub use action::action_name;
 pub use cmds::device::{DeviceContext, with_context};
-pub use command::{Command, Outcome};
+pub use command::{Command, Context, Outcome};
 pub use error::CommandError;
 pub use invocation::Invocation;
+pub use machine::job_settings;
 pub use registry::Registry;
 pub use session::{BATCH, REDO, SESSION_COMMANDS, Session, UNDO};

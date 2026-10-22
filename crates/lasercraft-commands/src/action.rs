@@ -78,6 +78,13 @@ pub fn action_name(invocation: &Invocation) -> String {
         "project.set_work_area" => "change work area",
         "project.set_origin" => "change origin corner",
         "project.set_notes" => "edit project notes",
+        "project.set_device" => "change device profile",
+        "material.apply" => "apply material",
+        "material.follow" => "follow material",
+        "material.unfollow" => "stop following material",
+        "material.update" | "material.set" | "material.describe" | "material.delete" => {
+            "material change"
+        }
         "edit.batch" => {
             return invocation
                 .args
