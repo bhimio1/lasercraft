@@ -1,7 +1,9 @@
 # Spec: project file (`.lcproj`)
 
 Milestones: M0 (version 1), M1 (version 2 adds shapes), M2 (version 3 adds
-layers). Later milestones add
+layers), M3 (version 4 adds paths), M7 (version 5 adds images), M8 (optional `device` and `follows`, no
+version bump: older readers refuse the unknown fields), M9 (optional
+`rotary` and `registration`, no version bump for the same reason). Later milestones add
 fields and bump `version` when old readers must refuse a file.
 
 ## Format
@@ -12,7 +14,7 @@ newline, so files diff cleanly and golden tests compare exact text.
 ```json
 {
   "format": "lasercraft-project",
-  "version": 3,
+  "version": 5,
   "name": "Untitled",
   "notes": "",
   "work_area": {
@@ -43,15 +45,19 @@ item per line.
 | Field | Meaning |
 | --- | --- |
 | `format` | Always `lasercraft-project`. |
-| `version` | Format version, currently 3. Older files load (no shapes: none; no layers: default layers, every shape on layer 0) and are saved as version 3. |
+| `version` | Format version, currently 5. Older files load (no shapes: none; no layers: default layers, every shape on layer 0) and are saved as version 5. |
 | `name` | Display name, 1–200 characters after trimming. |
 | `notes` | Free text, at most 20 000 characters. Optional when reading. |
 | `work_area.width_mm`, `height_mm` | Reachable bed size, 1–10 000 mm, finite. |
 | `work_area.origin` | Bed corner where machine coordinates are zero: `front_left`, `front_right`, `rear_left`, `rear_right`. "Front" is the side nearest the operator. |
 | `next_id` | Next object id to hand out; greater than every shape id. |
 | `layers.order` | Output order: all 30 colors exactly once. |
-| `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. The planning settings `kerf`, `tabs` and `tab_width` (M4) are optional: they are written only when they differ from their defaults and read as defaults when missing, so they did not need a version bump. |
-| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, `polyline` with `points` as `[x, y]` pairs and `closed`, or `path` with `subpaths`, `docs/spec/geometry.md`), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
+| `layers.changed` | Full settings (`docs/spec/layers.md`) of the layers that differ from the defaults, by color; others are defaults. The planning settings `kerf`, `tabs` and `tab_width` (M4) and the image settings `halftone_cells`, `halftone_angle` and `dot_correction` (M7) are optional: they are written only when they differ from their defaults and read as defaults when missing, so they did not need a version bump. |
+| `shapes` | Shapes in drawing order (`docs/spec/shapes.md`): `id` (unique, ≥ 1), `layer` (color 0–29, default 0), `geometry` (`rect` with `width`/`height`, `ellipse` with `rx`/`ry`, `polyline` with `points` as `[x, y]` pairs and `closed`, `path` with `subpaths` (`docs/spec/geometry.md`), or `image` with `width`, `height`, `pixels`, `brightness`, `contrast`, `gamma` and `png` (`docs/spec/images.md`)), and `transform` as the six numbers `[a, b, c, d, e, f]` of SVG's `matrix()`. |
+| `device` | M8, optional: the name of the project's device profile (`docs/spec/devices.md`); left out when none. |
+| `layers.changed[].follows` | M8, optional: the material entry the layer follows (`docs/spec/materials.md`), as `{"library", "material", "thickness" or "group", "description"}`; left out when the layer follows none. |
+| `rotary` | M9, optional: the rotary settings `{"enabled", "kind", "mm_per_turn", "roller_diameter", "object_diameter", "mirror"}` (`docs/spec/rotary.md`); left out when they are the defaults. |
+| `registration` | M9, optional: print registration targets and fit (`docs/spec/registration.md`); left out when there are no targets. |
 | `shapes[].groups` | M3, optional: the group ids the shape belongs to, outermost first (`docs/spec/arrange.md`); left out when the shape is not grouped. Ids are ≥ 1, not repeated, and below `next_id`. Older files have none, so no version bump was needed. |
 
 Document coordinates are millimetres with x to the right and y downwards

@@ -15,4 +15,8 @@ lasercraft-geom.workspace = true
 lasercraft-commands.workspace = true
 lasercraft-project.workspace = true
 lasercraft-import.workspace = true
+lasercraft-workshop.workspace = true
+lasercraft-camera.workspace = true
 egui.workspace = true
+serde_json.workspace = true
+

@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use lasercraft_project::Project;
-
-use crate::{Command, CommandError, Invocation, Outcome, cmds};
+use crate::{Command, CommandError, Context, Invocation, Outcome, cmds};
 
 /// The set of commands that can change a project.
 #[derive(Default)]
@@ -66,7 +64,7 @@ impl Registry {
         self.commands.is_empty()
     }
 
-    /// Runs an invocation against a project.
+    /// Runs an invocation against a project and workshop.
     ///
     /// # Errors
     ///
@@ -74,13 +72,13 @@ impl Registry {
     /// error from the command itself.
     pub fn execute(
         &self,
-        project: &mut Project,
+        cx: &mut Context<'_>,
         invocation: &Invocation,
     ) -> Result<Outcome, CommandError> {
         let command = self
             .get(&invocation.name)
             .ok_or_else(|| CommandError::Unknown(invocation.name.clone()))?;
-        command.execute(project, &invocation.args)
+        command.execute(cx, &invocation.args)
     }
 }
 
@@ -108,9 +106,14 @@ mod tests {
     #[test]
     fn unknown_command_is_reported() {
         let registry = Registry::with_builtin();
-        let mut project = Project::default();
+        let mut project = lasercraft_project::Project::default();
+        let mut workshop = lasercraft_workshop::Workshop::in_memory();
+        let mut cx = Context {
+            project: &mut project,
+            workshop: &mut workshop,
+        };
         let err = registry
-            .execute(&mut project, &Invocation::bare("nope.nothing"))
+            .execute(&mut cx, &Invocation::bare("nope.nothing"))
             .unwrap_err();
         assert_eq!(err, CommandError::Unknown("nope.nothing".to_owned()));
     }

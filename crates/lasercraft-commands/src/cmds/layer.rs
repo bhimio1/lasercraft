@@ -62,10 +62,26 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
     ]
 }
 
+/// Refuses to change the settings of a layer that follows a material entry
+/// (`docs/spec/materials.md`).
+fn not_following(project: &Project, color: Color, args: &Args<'_>) -> Result<(), CommandError> {
+    match &project.layer(color)?.follows {
+        Some(f) => Err(args.invalid(format!(
+            "Layer {color:02} follows material {}. Stop following it first.",
+            f.description
+        ))),
+        None => Ok(()),
+    }
+}
+
 fn set(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     args.expect(3, 3)?;
     let color = args.color_at(0)?;
     let key = args.str(1)?;
+    // A following layer keeps its own name, output and show.
+    if !matches!(key, "name" | "output" | "show") {
+        not_following(project, color, args)?;
+    }
     let old = project.layer(color)?.get(key)?;
     project.set_layer_setting(color, key, args.str(2)?)?;
     let new = project.layer(color)?.get(key)?;
@@ -92,6 +108,9 @@ fn set_all(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErr
     let color = args.color_at(0)?;
     let settings: Layer = serde_json::from_str(args.str(1)?)
         .map_err(|e| args.invalid(format!("not layer settings: {e}")))?;
+    // A full replacement includes the follow mark: settings without one
+    // also stop the layer following (this is how material commands are
+    // undone).
     let inverse = replace(project, color, settings)?;
     Ok(Outcome::undoable(
         format!("layer {color} settings replaced"),
@@ -102,8 +121,10 @@ fn set_all(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErr
 fn copy_settings(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     args.expect(2, 2)?;
     let (from, to) = (args.color_at(0)?, args.color_at(1)?);
+    not_following(project, to, args)?;
     let mut settings = project.layer(from)?.clone();
     settings.name.clone_from(&project.layer(to)?.name);
+    settings.follows = None;
     let inverse = replace(project, to, settings)?;
     Ok(Outcome::undoable(
         format!("copied layer {from} settings to layer {to}"),

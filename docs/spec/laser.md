@@ -29,6 +29,8 @@ Placement arguments: `from=absolute|current|user` (default absolute),
 absolute) and `anchor=<name>` (default `bottom-left`). The app fills in `at`
 (from the last status report or the stored user origin), `head` and `s_max`
 (from `$30`) when the user did not give them. Default speed: 50 mm/s.
+`device.start` lists the planner's warnings after its summary (M9), one
+"Warning: …" line each.
 
 ## Coordinates
 
@@ -102,36 +104,74 @@ Where the job runs (the "Start From" setting, kept per app session):
   streams it. Every refusal (bounds, nothing to burn, laser mode off, not
   idle, missing position) is shown and nothing is sent.
 - **Pause / Resume** is one button; **Stop** next to it. Both are visible and
-  enabled whenever a device is connected, in the panel and in the status bar
-  (rule 7). When the running job uses `M3`, the pause button reads "Pause
-  (motion)" and its tooltip says the laser is also switched off once stopped.
-- Progress: a bar with acknowledged lines out of the total, elapsed time and
-  the plan's estimate.
+  enabled whenever a device is connected, in the Machine panel and in the
+  job bar (rule 7). When the running job uses `M3`, the pause button reads
+  "Pause (motion only)", the job bar says "The laser may stay on", and the
+  tooltip says LaserCraft switches the laser off once the head has stopped.
+- Progress: elapsed time (h:mm:ss), a bar, and "‹n›% sent" (lines accepted
+  by the controller; the machine may still be working). After a stream:
+  "Job finished in ‹h:mm:ss›.", "Job stopped at ‹n›% sent." or "Job stopped
+  by a fault at ‹n›% sent.". The plan's remaining-time estimate is later.
 
 ## Console
 
 - Shows every line sent (`>` prefix) and received, newest last, limited to the
-  last 500 lines. "Show all" also shows status reports and polling, which are
-  hidden by default.
+  last 500 lines. "Show all messages" also shows status reports and polling
+  (in muted text, sent ones with `→`), which are hidden by default. Not
+  connected, it says "Not connected. Messages from GRBL appear here once you
+  connect."
 - A text field sends a line to the controller (`Console` request; refused
   while a stream runs). This is the user's explicit action; the console does
   not filter G-code.
 
 ## Alarms and faults
 
-- An `Alarm` shows a window with the code, our explanation and two buttons:
-  Unlock (`$X`) and Home (`$H`). It stays until closed.
-- A failed stream, a stall and a disconnect show their reason in the panel
-  and in the log. Permission denied shows the Linux help text.
+- An `Alarm` shows a band in the Machine panel: "Alarm ‹n›: ‹meaning›.
+  Streaming stopped. …, then click Clear alarm." with Clear alarm (`$X`),
+  Home (`$H`) and Show in console. It stays until GRBL leaves the alarm
+  state; the status bar's Messages field repeats it.
+- A failed stream, a stall and a connection lost during a job show a fault
+  band with Show in console and Hide, and a line in the log. A refused
+  Start or Frame shows "Cannot run: ‹reason›" with Show in job preview and
+  Hide. Permission denied shows the Serial port access help with Try again
+  and Hide.
+- Nothing offers Resume after an alarm or a fault.
 
 ## Panel layout
 
-The Laser panel shares the right dock with Cuts/Layers as a tab. From top to
-bottom: connection row (port list with "simulator", baud, refresh, Connect /
-Disconnect), status line (state and position), Start / Pause / Stop / Frame /
-Frame outline, Start From and the 3 × 3 job origin grid, Move section (jog
-arrows around Home, distance, speed, Set / Clear / Go to origin, Unlock),
-progress, console.
+Three dock panels (`docs/spec/style/machine-panels.md`):
+
+- **Machine** (lower dock group): state line (dot, state word, "on ‹port›
+  at ‹baud› baud"), progress; Pause / Resume, Stop, Start; Frame, Frame
+  outline, Save G-code…; bands (constant power, refused job, alarm, fault,
+  serial port access); Home, Go to user origin; "Place job at" (Absolute
+  coordinates, Current position, User origin) and the "Job reference point"
+  3 × 3 grid; connection row (Connect / Disconnect, Port, Baud rate,
+  Refresh ports).
+- **Jog** (upper group tab): Head position read-out (click copies it into
+  Move head to), Move head to X (mm) / Y (mm) / Go, the jog pad (arrows
+  around Home), Jog distance (mm), Jog speed (mm/s), Set user origin, Clear
+  user origin. Jog arrows move the head in screen directions, so their
+  tooltips say "Jog up" and so on rather than an axis sign.
+- **Console** (upper group tab): input line ("Type a GRBL command"), the
+  "Show all messages" switch and the log.
+
+State words, derived by the app from the connection, GRBL's state and its
+own stream: Not connected, Connecting…, Ready, Running, Framing, Paused,
+Jogging, Homing, Alarm, Door open, Checking, Sleeping, No response. One
+rule (`Enabled::of`) decides which controls work, for the panels, the job
+bar and the Machine menu: Pause and Stop whenever connected; Start and
+Frame when ready with an output layer that has shapes; Home when ready or
+in alarm; the jog pad when ready or jogging; Clear alarm only in alarm;
+Disconnect not while a stream runs.
+
+Names: "Start From" is now "Place job at", the job origin grid "Job
+reference point", "Set / Clear / Go to origin" "Set / Clear / Go to user
+origin", "Unlock" "Clear alarm" (command `device.unlock` unchanged).
+
+Open owner decisions, not applied: jogs past the bed shortened (today) or
+refused; a homing requirement for Go and Go to user origin; refusing
+laser-on console lines.
 
 ## Shortcuts
 

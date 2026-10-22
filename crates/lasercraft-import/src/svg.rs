@@ -21,6 +21,70 @@ pub fn parse(data: &[u8]) -> Result<Vec<Imported>, ImportError> {
     Ok(out)
 }
 
+/// One painted element of an SVG drawn for the UI (an icon), in SVG user
+/// units, with what the painter needs to know about its style.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Styled {
+    /// The outline in user units (not millimetres).
+    pub path: Path,
+    /// The element's id, empty when it has none.
+    pub id: String,
+    /// The element is filled.
+    pub filled: bool,
+    /// The element is stroked.
+    pub stroked: bool,
+    /// The stroke's dash pattern in user units, if dashed.
+    pub dashes: Option<Vec<f64>>,
+}
+
+/// Parses SVG data into styled outlines in user units, for icons drawn in
+/// LaserCraft's own subset (`docs/spec/ui-shell.md`, "Icons").
+///
+/// # Errors
+///
+/// Returns an [`ImportError`] when the data is not valid SVG.
+pub fn parse_styled(data: &[u8]) -> Result<Vec<Styled>, ImportError> {
+    let tree = usvg::Tree::from_data(data, &usvg::Options::default())
+        .map_err(|e| ImportError::new(format!("not a valid SVG file: {e}")))?;
+    let mut out = Vec::new();
+    walk_styled(tree.root(), &mut out);
+    Ok(out)
+}
+
+fn walk_styled(group: &usvg::Group, out: &mut Vec<Styled>) {
+    for node in group.children() {
+        match node {
+            usvg::Node::Group(g) => walk_styled(g, out),
+            usvg::Node::Path(p) if p.is_visible() => {
+                let t = p.abs_transform();
+                let affine = Affine {
+                    m: [t.sx, t.ky, t.kx, t.sy, t.tx, t.ty].map(f64::from),
+                };
+                let Some(path) = to_path(p.data()).map(|path| path.transformed(&affine)) else {
+                    continue;
+                };
+                // The id may sit on the element or on a group around it.
+                let id = if p.id().is_empty() {
+                    group.id()
+                } else {
+                    p.id()
+                };
+                out.push(Styled {
+                    path,
+                    id: id.to_owned(),
+                    filled: p.fill().is_some(),
+                    stroked: p.stroke().is_some(),
+                    dashes: p
+                        .stroke()
+                        .and_then(usvg::Stroke::dasharray)
+                        .map(|d| d.iter().map(|v| f64::from(*v)).collect()),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 fn walk(group: &usvg::Group, out: &mut Vec<Imported>) {
     for node in group.children() {
         match node {
@@ -127,6 +191,22 @@ fn to_path(data: &usvg::tiny_skia_path::Path) -> Option<Path> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn styled_parsing_keeps_ids_fills_and_dashes_in_user_units() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+            <rect x="3" y="6" width="18" height="12" fill="none" stroke="#000"/>
+            <circle id="accent" cx="12" cy="12" r="2" fill="#000"/>
+            <line x1="2" y1="2" x2="22" y2="2" stroke="#000" stroke-dasharray="2 2"/>
+        </svg>"##;
+        let parts = parse_styled(svg).unwrap();
+        assert_eq!(parts.len(), 3);
+        let b = parts[0].path.bounds().unwrap();
+        assert!((b.min.x - 3.0).abs() < 1e-6 && (b.max.y - 18.0).abs() < 1e-6);
+        assert!(parts[0].stroked && !parts[0].filled && parts[0].id.is_empty());
+        assert!(parts[1].filled && !parts[1].stroked && parts[1].id == "accent");
+        assert_eq!(parts[2].dashes.as_deref(), Some(&[2.0, 2.0][..]));
+    }
 
     fn svg(body: &str) -> Vec<Imported> {
         let doc = format!(

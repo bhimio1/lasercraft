@@ -1,0 +1,25 @@
+# LaserCraft M7: image engraving, headless. Run from the repository root:
+#   lasercraft-cli script examples/m7-images.lcs
+# It writes m7-images.lcproj and m7-images.gcode to the current folder.
+project.rename Photo tile
+project.set_work_area 200 150
+project.import examples/fixtures/m7-photo.png @2   # 254 DPI: 12 × 8 mm
+shape.move 20 20 1
+image.adjust 1 contrast=20 gamma=1.2
+project.import examples/fixtures/m7-tile.jpg @3    # 300 DPI: 1.355 × 0.677 mm
+shape.scale 10 10 2                                # make it 13.5 × 6.8 mm
+shape.move 50 20 2
+layer.set 2 name Photo
+layer.set 2 image.dither jarvis
+layer.set 2 image.interval 0.25
+layer.set 2 speed 80
+layer.set 2 max_power 40
+layer.set 3 name Tile
+layer.set 3 image.dither grayscale
+layer.set 3 image.interval 0.5
+layer.set 3 min_power 5
+layer.set 3 max_power 30
+layer.set 3 overscan on
+shape.add_rect 15 15 50 25 @1                      # a cut frame around both
+project.save m7-images.lcproj
+project.export_gcode m7-images.gcode s_max=1000

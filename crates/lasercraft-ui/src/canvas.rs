@@ -1,7 +1,7 @@
 //! The canvas: draws the bed, grid and shapes, and feeds pointer input to
 //! [`Interaction`] (`docs/spec/canvas.md`).
 
-use egui::{Color32, Pos2, Sense, Stroke, StrokeKind};
+use egui::{Pos2, Sense, Stroke, StrokeKind};
 use lasercraft_commands::Invocation;
 use lasercraft_geom::manipulate::Handle;
 use lasercraft_geom::{Affine, Point, Rect, flatten, nodes};
@@ -11,6 +11,8 @@ use crate::colors::layer_color;
 use crate::interaction::{
     Ctx, Draft, GRID_MM, Interaction, Mods, NodeKey, Tool, moved_part, rotate_handle,
 };
+use crate::textures::Textures;
+use crate::theme::{DASH, Tokens, size, weight};
 use crate::view::{View, ZOOM_STEP};
 
 /// Major grid lines every this many millimetres.
@@ -21,17 +23,10 @@ const MIN_GRID_PX: f64 = 6.0;
 const FIT_MARGIN_PX: f64 = 24.0;
 /// Outline flattening tolerance on screen, in pixels.
 const FLATTEN_PX: f64 = 0.3;
+/// Hover pick tolerance, pixels (as clicking).
+const HIT_PX: f64 = 5.0;
 /// Scroll pixels per factor-of-e zoom.
 const SCROLL_PER_E: f64 = 400.0;
-
-/// The bed is drawn as a light sheet in every theme so dark layer colors
-/// (layer 0 is black) stay visible.
-const BED: Color32 = Color32::from_gray(246);
-const GRID: Color32 = Color32::from_gray(90);
-const SHAPE: Color32 = Color32::from_rgb(70, 140, 235);
-const SELECTED: Color32 = Color32::from_rgb(255, 150, 40);
-const DRAFT: Color32 = Color32::from_rgb(120, 200, 120);
-const ORIGIN: Color32 = Color32::from_rgb(220, 60, 40);
 
 fn pos(p: Point) -> Pos2 {
     Pos2::new(p.x as f32, p.y as f32)
@@ -50,13 +45,63 @@ fn rect_of(r: egui::Rect) -> Rect {
 pub struct Canvas {
     view: Option<View>,
     fit_requested: bool,
+    /// The screen and bed the view was last fitted to, while the user has
+    /// not zoomed or panned since; the view then follows size changes.
+    fitted: Option<(Rect, Rect)>,
     interaction: Interaction,
     /// The primary button went down on the canvas (so its release is ours).
     pressed_here: bool,
     screen: Option<Rect>,
+    /// Image textures (M7).
+    textures: Textures,
+    /// Outlines a tool window previews this frame, document mm (M9).
+    ghost: Vec<(Vec<Point>, bool)>,
+    /// The camera overlay and its texture, by revision (M9).
+    overlay: Option<(
+        u64,
+        std::sync::Arc<lasercraft_camera::overlay::Overlay>,
+        Option<egui::TextureHandle>,
+    )>,
 }
 
 impl Canvas {
+    /// The shape the Select tool would pick under the pointer, drawn lifted
+    /// (`docs/spec/canvas.md`, "View"); none while a gesture runs.
+    fn hovered(&self, project: &Project, view: &View) -> Option<u32> {
+        if self.tool() != Tool::Select || self.interaction.busy() {
+            return None;
+        }
+        let p = self.interaction.pointer()?;
+        project.shape_at(p, HIT_PX / view.scale())
+    }
+
+    /// The camera overlay to draw under the shapes.
+    pub fn set_overlay(
+        &mut self,
+        overlay: Option<std::sync::Arc<lasercraft_camera::overlay::Overlay>>,
+        revision: u64,
+    ) {
+        match overlay {
+            None => self.overlay = None,
+            Some(o) => {
+                if self.overlay.as_ref().is_none_or(|(r, ..)| *r != revision) {
+                    self.overlay = Some((revision, o, None));
+                }
+            }
+        }
+    }
+
+    /// Outlines to preview dashed this frame (a tool window's result).
+    pub fn set_ghost(&mut self, ghost: Vec<(Vec<Point>, bool)>) {
+        self.ghost = ghost;
+    }
+
+    /// Image textures held for drawing.
+    #[must_use]
+    pub fn image_textures(&self) -> usize {
+        self.textures.count()
+    }
+
     /// The active tool.
     #[must_use]
     pub fn tool(&self) -> Tool {
@@ -103,22 +148,42 @@ impl Canvas {
             return;
         };
         match (action, &mut self.view) {
-            ("view.zoom_in", Some(v)) => v.zoom_about(screen.center(), ZOOM_STEP),
-            ("view.zoom_out", Some(v)) => v.zoom_about(screen.center(), 1.0 / ZOOM_STEP),
+            ("view.zoom_in", Some(v)) => {
+                v.zoom_about(screen.center(), ZOOM_STEP);
+                self.fitted = None;
+            }
+            ("view.zoom_out", Some(v)) => {
+                v.zoom_about(screen.center(), 1.0 / ZOOM_STEP);
+                self.fitted = None;
+            }
             _ => self.fit_requested = true,
         }
     }
 
     /// Draws the canvas and returns the commands the user's gestures produced.
     pub fn show(&mut self, ui: &mut egui::Ui, project: &Project) -> Vec<Invocation> {
+        self.textures.update(ui.ctx(), project);
+        if let Some((_, overlay, texture @ None)) = &mut self.overlay {
+            let image = egui::ColorImage::from_rgba_unmultiplied(
+                [overlay.width as usize, overlay.height as usize],
+                &overlay.rgba,
+            );
+            *texture = Some(ui.ctx().load_texture(
+                "camera-overlay",
+                image,
+                egui::TextureOptions::LINEAR,
+            ));
+        }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let screen = rect_of(response.rect);
         self.screen = Some(screen);
         let area = project.work_area();
         let bed = Rect::from_corners(Point::ZERO, Point::new(area.width_mm, area.height_mm));
-        if self.view.is_none() || self.fit_requested {
+        let moved = self.fitted.is_some_and(|fitted| fitted != (screen, bed));
+        if self.view.is_none() || self.fit_requested || moved {
             self.view = Some(View::fit(&screen, &bed, FIT_MARGIN_PX));
             self.fit_requested = false;
+            self.fitted = Some((screen, bed));
         }
         let mut view = self
             .view
@@ -176,11 +241,15 @@ impl Canvas {
             let factor = (f64::from(scroll) / SCROLL_PER_E).exp() * f64::from(pinch);
             if factor != 1.0 {
                 view.zoom_about(point(p), factor);
+                self.fitted = None;
             }
         }
         let panning = middle || (space && down);
         if panning && (hovered || self.pressed_here) {
-            view.pan(point(Pos2::ZERO + delta));
+            if delta != egui::Vec2::ZERO {
+                view.pan(point(Pos2::ZERO + delta));
+                self.fitted = None;
+            }
             return Vec::new();
         }
 
@@ -225,20 +294,36 @@ impl Canvas {
         project: &Project,
         bed: &Rect,
     ) {
-        let visuals = ui.visuals();
-        painter.rect_filled(painter.clip_rect(), 0.0, visuals.extreme_bg_color);
+        let t = Tokens::of(ui.ctx());
+        painter.rect_filled(painter.clip_rect(), 0.0, t.canvas);
         let bed_screen =
             egui::Rect::from_two_pos(pos(view.to_screen(bed.min)), pos(view.to_screen(bed.max)));
-        painter.rect_filled(bed_screen, 0.0, BED);
-        paint_grid(painter, view, bed, GRID);
-        painter.rect_stroke(bed_screen, 0.0, Stroke::new(1.5, GRID), StrokeKind::Middle);
-        let corner = match project.work_area().origin {
-            Origin::FrontLeft => bed_screen.left_bottom(),
-            Origin::FrontRight => bed_screen.right_bottom(),
-            Origin::RearLeft => bed_screen.left_top(),
-            Origin::RearRight => bed_screen.right_top(),
-        };
-        painter.circle_filled(corner, 5.0, ORIGIN);
+        painter.rect_filled(bed_screen, 0.0, t.bed);
+        if let Some((_, overlay, Some(texture))) = &self.overlay {
+            let size = Point::new(
+                f64::from(overlay.width) * overlay.mm_per_px,
+                f64::from(overlay.height) * overlay.mm_per_px,
+            );
+            let r = egui::Rect::from_two_pos(
+                pos(view.to_screen(bed.min)),
+                pos(view.to_screen(bed.min + size)),
+            );
+            painter.image(
+                texture.id(),
+                r,
+                egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+        paint_grid(painter, view, bed, &t);
+        painter.rect_stroke(
+            bed_screen,
+            0.0,
+            Stroke::new(weight::THIN, t.bed_edge),
+            StrokeKind::Middle,
+        );
+        paint_origin(ui, painter, bed_screen, project.work_area().origin, &t);
+        let hovered = self.hovered(project, view);
 
         let preview = self.interaction.preview();
         let tolerance = FLATTEN_PX / view.scale();
@@ -254,10 +339,11 @@ impl Canvas {
             if !layer.output {
                 color = color.gamma_multiply(0.3);
             }
-            let width = if project.is_selected(shape.id()) {
-                2.5
+            let lifted = project.is_selected(shape.id()) || hovered == Some(shape.id());
+            let width = if lifted {
+                weight::HEAVY
             } else {
-                1.25
+                weight::NORMAL
             };
             let stroke = Stroke::new(width, color);
             let edited = self
@@ -265,13 +351,49 @@ impl Canvas {
                 .part_drag()
                 .filter(|(id, ..)| *id == shape.id())
                 .and_then(|(id, part, to)| moved_part(project, id, part, to));
+            let place = |p: Point| pos(view.to_screen(moved.map_or(p, |t| t.apply(p))));
+            if let (Some(image), Some(texture)) =
+                (shape.geometry().image(), self.textures.get(shape.id()))
+            {
+                let xf = shape.transform();
+                let corners = [
+                    Point::new(0.0, 0.0),
+                    Point::new(image.width, 0.0),
+                    Point::new(image.width, image.height),
+                    Point::new(0.0, image.height),
+                ]
+                .map(|p| place(xf.apply(p)));
+                // White leaves the texture's own grays as they are.
+                let tint = if layer.output {
+                    t.handle_fill
+                } else {
+                    t.handle_fill.gamma_multiply(0.4)
+                };
+                let mut mesh = egui::Mesh::with_texture(texture);
+                for (corner, uv) in corners.iter().zip([
+                    Pos2::new(0.0, 0.0),
+                    Pos2::new(1.0, 0.0),
+                    Pos2::new(1.0, 1.0),
+                    Pos2::new(0.0, 1.0),
+                ]) {
+                    mesh.vertices.push(egui::epaint::Vertex {
+                        pos: *corner,
+                        uv,
+                        color: tint,
+                    });
+                }
+                mesh.add_triangle(0, 1, 2);
+                mesh.add_triangle(0, 2, 3);
+                painter.add(egui::Shape::mesh(mesh));
+                painter.add(egui::Shape::closed_line(
+                    corners.to_vec(),
+                    Stroke::new(1.0, color),
+                ));
+            }
             let outlines =
                 edited.map_or_else(|| shape.outlines(tolerance), |p| p.flatten(tolerance));
             for (points, closed) in outlines {
-                let screen: Vec<Pos2> = points
-                    .iter()
-                    .map(|p| pos(view.to_screen(moved.map_or(*p, |t| t.apply(*p)))))
-                    .collect();
+                let screen: Vec<Pos2> = points.iter().map(|p| place(*p)).collect();
                 painter.add(if closed {
                     egui::Shape::closed_line(screen, stroke)
                 } else {
@@ -279,18 +401,64 @@ impl Canvas {
                 });
             }
         }
+        paint_ghost(painter, view, &self.ghost, &t);
+        paint_targets(painter, view, project, &t);
         if self.tool() == Tool::Nodes {
-            paint_nodes(painter, view, project, &self.interaction);
+            paint_nodes(painter, view, project, &self.interaction, &t);
         } else {
-            paint_selection(
-                painter,
-                view,
-                project,
-                preview.map(|(_, t)| t),
-                visuals.extreme_bg_color,
-            );
+            paint_selection(painter, view, project, preview.map(|(_, a)| a), &t);
         }
-        paint_gesture(&self.interaction, ui, painter, view);
+        paint_gesture(&self.interaction, ui, painter, view, &t);
+    }
+}
+
+/// A tool window's preview: dashed outlines in the drawing color.
+fn paint_ghost(painter: &egui::Painter, view: &View, ghost: &[(Vec<Point>, bool)], t: &Tokens) {
+    let stroke = Stroke::new(weight::NORMAL, t.drawing);
+    for (points, closed) in ghost {
+        let mut pts: Vec<Pos2> = points.iter().map(|p| pos(view.to_screen(*p))).collect();
+        if *closed && let Some(first) = pts.first().copied() {
+            pts.push(first);
+        }
+        painter.extend(egui::Shape::dashed_line(&pts, stroke, DASH.0, DASH.1));
+    }
+}
+
+/// Print registration targets: a numbered ring at each target's design
+/// point; with a fit, a dashed ring where it lands
+/// (`docs/spec/registration.md`).
+fn paint_targets(painter: &egui::Painter, view: &View, project: &Project, t: &Tokens) {
+    let reg = project.registration();
+    let fit = project.registration_transform();
+    let stroke = Stroke::new(weight::HEAVY, t.drawing);
+    for (i, target) in reg.targets.iter().enumerate() {
+        let c = pos(view.to_screen(target.design));
+        painter.circle_stroke(c, 9.0, stroke);
+        painter.line_segment(
+            [c - egui::vec2(13.0, 0.0), c + egui::vec2(13.0, 0.0)],
+            stroke,
+        );
+        painter.line_segment(
+            [c - egui::vec2(0.0, 13.0), c + egui::vec2(0.0, 13.0)],
+            stroke,
+        );
+        painter.text(
+            c + egui::vec2(12.0, -12.0),
+            egui::Align2::LEFT_BOTTOM,
+            (i + 1).to_string(),
+            egui::FontId::proportional(13.0),
+            t.drawing,
+        );
+        if let Some(f) = fit {
+            let at = pos(view.to_screen(f.apply(target.design)));
+            let ring: Vec<Pos2> = (0..=32)
+                .map(|k| {
+                    let a = f32::from(u8::try_from(k).unwrap_or(0)) / 32.0 * std::f32::consts::TAU;
+                    at + egui::vec2(a.cos(), a.sin()) * 12.0
+                })
+                .collect();
+            painter.extend(egui::Shape::dashed_line(&ring, stroke, DASH.0, DASH.1));
+        }
     }
 }
 
@@ -317,8 +485,14 @@ fn node_keys(ui: &egui::Ui) -> Vec<NodeKey> {
 
 /// Nodes (squares, subpath starts filled) and handles (circles on a line
 /// to their node) of the selected paths, with the dragged edit applied.
-fn paint_nodes(painter: &egui::Painter, view: &View, project: &Project, interaction: &Interaction) {
-    let stroke = Stroke::new(1.0, SELECTED);
+fn paint_nodes(
+    painter: &egui::Painter,
+    view: &View,
+    project: &Project,
+    interaction: &Interaction,
+    t: &Tokens,
+) {
+    let outline = Stroke::new(weight::THIN, t.selection);
     let dragged = interaction.part_drag();
     for id in project.selection() {
         let Some(shape) = project.shape(id) else {
@@ -327,23 +501,31 @@ fn paint_nodes(painter: &egui::Painter, view: &View, project: &Project, interact
         let Geometry::Path(local) = shape.geometry() else {
             continue;
         };
-        let path = dragged
-            .filter(|(d, ..)| *d == id)
+        let moving = dragged.filter(|(d, ..)| *d == id);
+        let path = moving
             .and_then(|(d, part, to)| moved_part(project, d, part, to))
             .unwrap_or_else(|| local.transformed(shape.transform()));
         for (_, _, _, handle, node) in nodes::handles(&path) {
             let (h, n) = (pos(view.to_screen(handle)), pos(view.to_screen(node)));
-            painter.line_segment([n, h], Stroke::new(1.0, SELECTED.gamma_multiply(0.6)));
-            painter.circle_stroke(h, 3.5, stroke);
+            painter.line_segment([n, h], Stroke::new(weight::HAIRLINE, t.text_muted));
+            painter.circle_filled(h, 3.0, t.handle_fill);
+            painter.circle_stroke(h, 3.0, outline);
         }
         for (_, node, at) in nodes::nodes(&path) {
             let square =
                 egui::Rect::from_center_size(pos(view.to_screen(at)), egui::vec2(7.0, 7.0));
             if node == 0 {
-                painter.rect_filled(square, 0.0, SELECTED);
+                // The start of a subpath.
+                let big = square.expand(1.0);
+                painter.rect_filled(big, 0.0, t.start_marker);
             } else {
-                painter.rect_filled(square, 0.0, BED);
-                painter.rect_stroke(square, 0.0, stroke, StrokeKind::Middle);
+                painter.rect_filled(square, 0.0, t.node);
+                painter.rect_stroke(
+                    square,
+                    0.0,
+                    Stroke::new(weight::THIN, t.text),
+                    StrokeKind::Middle,
+                );
             }
         }
     }
@@ -354,41 +536,106 @@ fn paint_selection(
     view: &View,
     project: &Project,
     preview: Option<Affine>,
-    handle_fill: Color32,
+    t: &Tokens,
 ) {
     let selection = project.selection();
     let Ok(Some(bounds)) = project.bounds_of(&selection) else {
         return;
     };
-    let bounds = preview.map_or(bounds, |t| bounds.transformed(&t));
-    let stroke = Stroke::new(1.0, SELECTED);
+    let bounds = preview.map_or(bounds, |a| bounds.transformed(&a));
+    let stroke = Stroke::new(weight::NORMAL, t.selection);
     let a = pos(view.to_screen(bounds.min));
     let b = pos(view.to_screen(bounds.max));
     let box_points = [a, Pos2::new(b.x, a.y), b, Pos2::new(a.x, b.y), a];
-    painter.extend(egui::Shape::dashed_line(&box_points, stroke, 5.0, 4.0));
+    painter.extend(egui::Shape::dashed_line(
+        &box_points,
+        stroke,
+        DASH.0,
+        DASH.1,
+    ));
+    if preview.is_some() {
+        // Handles hide while the selection is being dragged.
+        return;
+    }
     for handle in Handle::ALL {
         let c = pos(view.to_screen(handle.position(&bounds)));
         let square = egui::Rect::from_center_size(c, egui::vec2(8.0, 8.0));
-        painter.rect_filled(square, 1.0, handle_fill);
-        painter.rect_stroke(square, 1.0, stroke, StrokeKind::Middle);
+        painter.rect_filled(square, 0.0, t.handle_fill);
+        painter.rect_stroke(square, 0.0, stroke, StrokeKind::Middle);
     }
     let top = pos(view.to_screen(Handle::Top.position(&bounds)));
     let knob = pos(view.to_screen(rotate_handle(&bounds, view.scale())));
-    painter.line_segment([top, knob], stroke);
+    painter.line_segment([top, knob], Stroke::new(weight::HAIRLINE, t.selection));
+    painter.circle_filled(knob, 5.0, t.handle_fill);
     painter.circle_stroke(knob, 5.0, stroke);
 }
 
-fn paint_gesture(interaction: &Interaction, ui: &egui::Ui, painter: &egui::Painter, view: &View) {
+/// The machine-origin marker: a filled square on the corner and two arms
+/// along the bed edges pointing into the bed, with X and Y at their tips.
+pub(crate) fn paint_origin(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    bed: egui::Rect,
+    origin: Origin,
+    t: &Tokens,
+) {
+    let (corner, dx, dy) = match origin {
+        Origin::FrontLeft => (bed.left_bottom(), 1.0, -1.0),
+        Origin::FrontRight => (bed.right_bottom(), -1.0, -1.0),
+        Origin::RearLeft => (bed.left_top(), 1.0, 1.0),
+        Origin::RearRight => (bed.right_top(), -1.0, 1.0),
+    };
+    let square = size::ICON_SMALL * 0.6;
+    let inward = egui::vec2(dx * square / 2.0, dy * square / 2.0);
+    painter.rect_filled(
+        egui::Rect::from_center_size(corner + inward, egui::Vec2::splat(square)),
+        0.0,
+        t.origin_marker,
+    );
+    let arm = size::ICON_SMALL * 2.0;
+    if bed.width() < arm * 3.0 || bed.height() < arm * 3.0 {
+        return;
+    }
+    let stroke = Stroke::new(weight::HEAVY, t.origin_marker);
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    for (dir, letter) in [(egui::vec2(dx, 0.0), "X"), (egui::vec2(0.0, dy), "Y")] {
+        let tip = corner + dir * arm;
+        painter.line_segment([corner, tip], stroke);
+        let side = egui::vec2(-dir.y, dir.x) * 3.5;
+        painter.add(egui::Shape::convex_polygon(
+            vec![tip + dir * 5.0, tip + side, tip - side],
+            t.origin_marker,
+            Stroke::NONE,
+        ));
+        // Letters sit inside the bed, beside the arm's tip.
+        let offset = dir * 12.0 + egui::vec2(dx * dir.y.abs(), dy * dir.x.abs()) * 9.0;
+        painter.text(
+            tip + offset,
+            egui::Align2::CENTER_CENTER,
+            letter,
+            font.clone(),
+            t.origin_marker,
+        );
+    }
+}
+
+fn paint_gesture(
+    interaction: &Interaction,
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    view: &View,
+    t: &Tokens,
+) {
     if let Some((rect, mode)) = interaction.marquee() {
         let r =
             egui::Rect::from_two_pos(pos(view.to_screen(rect.min)), pos(view.to_screen(rect.max)));
+        painter.rect_filled(r, 0.0, t.marquee.gamma_multiply(0.08));
+        let stroke = Stroke::new(weight::NORMAL, t.marquee);
         match mode {
             BoxMode::Contained => {
-                painter.rect_filled(r, 0.0, SHAPE.gamma_multiply(0.15));
-                painter.rect_stroke(r, 0.0, Stroke::new(1.0, SHAPE), StrokeKind::Middle);
+                painter.rect_stroke(r, 0.0, stroke, StrokeKind::Middle);
             }
             BoxMode::Touching => {
-                painter.rect_filled(r, 0.0, DRAFT.gamma_multiply(0.15));
                 let pts = [
                     r.left_top(),
                     r.right_top(),
@@ -396,12 +643,7 @@ fn paint_gesture(interaction: &Interaction, ui: &egui::Ui, painter: &egui::Paint
                     r.left_bottom(),
                     r.left_top(),
                 ];
-                painter.extend(egui::Shape::dashed_line(
-                    &pts,
-                    Stroke::new(1.0, DRAFT),
-                    5.0,
-                    4.0,
-                ));
+                painter.extend(egui::Shape::dashed_line(&pts, stroke, DASH.0, DASH.1));
             }
         }
     }
@@ -409,16 +651,24 @@ fn paint_gesture(interaction: &Interaction, ui: &egui::Ui, painter: &egui::Paint
         shift: i.modifiers.shift,
         ctrl: i.modifiers.command || i.modifiers.ctrl,
     });
-    let stroke = Stroke::new(1.5, DRAFT);
+    let stroke = Stroke::new(weight::NORMAL, t.drawing);
+    let dashed = |points: Vec<Pos2>| egui::Shape::dashed_line(&points, stroke, DASH.0, DASH.1);
     match interaction.draft(mods) {
         Some(Draft::Rect(r)) => {
             let r =
                 egui::Rect::from_two_pos(pos(view.to_screen(r.min)), pos(view.to_screen(r.max)));
-            painter.rect_stroke(r, 0.0, stroke, StrokeKind::Middle);
+            let pts = vec![
+                r.left_top(),
+                r.right_top(),
+                r.right_bottom(),
+                r.left_bottom(),
+                r.left_top(),
+            ];
+            painter.extend(dashed(pts));
         }
         Some(Draft::Ellipse(r)) => {
             let c = r.center();
-            let points = flatten::ellipse_points(
+            let mut points: Vec<Pos2> = flatten::ellipse_points(
                 r.width() / 2.0,
                 r.height() / 2.0,
                 FLATTEN_PX / view.scale(),
@@ -426,17 +676,33 @@ fn paint_gesture(interaction: &Interaction, ui: &egui::Ui, painter: &egui::Paint
             .into_iter()
             .map(|p| pos(view.to_screen(p + c)))
             .collect();
-            painter.add(egui::Shape::closed_line(points, stroke));
+            if let Some(first) = points.first().copied() {
+                points.push(first);
+            }
+            painter.extend(dashed(points));
         }
         Some(Draft::Polyline(points)) => {
-            let points = points.into_iter().map(|p| pos(view.to_screen(p))).collect();
-            painter.add(egui::Shape::line(points, stroke));
+            let points: Vec<Pos2> = points.into_iter().map(|p| pos(view.to_screen(p))).collect();
+            painter.extend(dashed(points.clone()));
+            for (i, p) in points.iter().enumerate() {
+                let square = egui::Rect::from_center_size(*p, egui::vec2(6.0, 6.0));
+                let fill = if i == 0 { t.start_marker } else { t.node };
+                painter.rect_filled(square, 0.0, fill);
+                if i > 0 {
+                    painter.rect_stroke(
+                        square,
+                        0.0,
+                        Stroke::new(weight::THIN, t.text),
+                        StrokeKind::Middle,
+                    );
+                }
+            }
         }
         None => {}
     }
 }
 
-fn paint_grid(painter: &egui::Painter, view: &View, bed: &Rect, color: Color32) {
+pub(crate) fn paint_grid(painter: &egui::Painter, view: &View, bed: &Rect, t: &Tokens) {
     let minor_visible = GRID_MM * view.scale() >= MIN_GRID_PX;
     let lines = |extent: f64| {
         // Clamped below, so the cast cannot overflow.
@@ -454,10 +720,10 @@ fn paint_grid(painter: &egui::Painter, view: &View, bed: &Rect, color: Color32) 
             } else {
                 (Point::new(bed.min.x, at), Point::new(bed.max.x, at))
             };
-            let alpha = if major { 0.5 } else { 0.2 };
+            let color = if major { t.grid_major } else { t.grid_minor };
             painter.line_segment(
                 [pos(view.to_screen(a)), pos(view.to_screen(b))],
-                Stroke::new(1.0, color.gamma_multiply(alpha)),
+                Stroke::new(weight::HAIRLINE, color),
             );
         }
     }

@@ -92,6 +92,41 @@ impl Default for WorkArea {
 }
 
 impl WorkArea {
+    /// The origin corner as a document point.
+    #[must_use]
+    pub fn origin_point(&self) -> lasercraft_geom::Point {
+        let (w, h) = (self.width_mm, self.height_mm);
+        match self.origin {
+            Origin::FrontLeft => lasercraft_geom::Point::new(0.0, h),
+            Origin::FrontRight => lasercraft_geom::Point::new(w, h),
+            Origin::RearLeft => lasercraft_geom::Point::new(0.0, 0.0),
+            Origin::RearRight => lasercraft_geom::Point::new(w, 0.0),
+        }
+    }
+
+    fn signs(&self) -> (f64, f64) {
+        let o = self.origin_point();
+        (
+            if o.x == 0.0 { 1.0 } else { -1.0 },
+            if o.y == 0.0 { 1.0 } else { -1.0 },
+        )
+    }
+
+    /// A document point in machine coordinates: signed distances from the
+    /// origin corner, growing into the bed.
+    #[must_use]
+    pub fn to_machine(&self, p: lasercraft_geom::Point) -> lasercraft_geom::Point {
+        let (o, (sx, sy)) = (self.origin_point(), self.signs());
+        lasercraft_geom::Point::new(sx * (p.x - o.x), sy * (p.y - o.y))
+    }
+
+    /// A machine position as a document point (inverse of `to_machine`).
+    #[must_use]
+    pub fn to_document(&self, m: lasercraft_geom::Point) -> lasercraft_geom::Point {
+        let (o, (sx, sy)) = (self.origin_point(), self.signs());
+        lasercraft_geom::Point::new(o.x + sx * m.x, o.y + sy * m.y)
+    }
+
     /// A validated work area.
     ///
     /// # Errors

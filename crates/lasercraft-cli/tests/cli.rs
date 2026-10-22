@@ -355,3 +355,193 @@ fn m6_simulate_runs_device_commands_on_the_simulated_grbl() {
     assert_eq!(out.status.code(), Some(2));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn m7_images_script_and_gcode_match_golden() {
+    let dir = temp_dir("images");
+    let fixtures = dir.join("examples/fixtures");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    for name in ["m7-photo.png", "m7-tile.jpg"] {
+        std::fs::copy(format!("{source}/fixtures/{name}"), fixtures.join(name)).unwrap();
+    }
+    let out = cli_in(&dir, &["script", &format!("{source}/m7-images.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let gcode = std::fs::read_to_string(dir.join("m7-images.gcode")).unwrap();
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let (out_path, gcode_path) = (
+        format!("{golden}/m7-images.out"),
+        format!("{golden}/m7-images.gcode"),
+    );
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(&out_path, stdout(&out)).unwrap();
+        std::fs::write(&gcode_path, &gcode).unwrap();
+    }
+    assert_eq!(
+        stdout(&out),
+        std::fs::read_to_string(&out_path).unwrap_or_default()
+    );
+    assert_eq!(
+        gcode,
+        std::fs::read_to_string(&gcode_path).unwrap_or_default()
+    );
+    // The saved project reloads with its images intact.
+    let shown = cli_in(&dir, &["show", "m7-images.lcproj"]);
+    assert!(
+        stdout(&shown).contains("image jarvis at 0.25 mm"),
+        "{}",
+        stdout(&shown)
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn m8_materials_script_and_test_gcode_match_golden() {
+    let dir = temp_dir("materials");
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    let out = cli_in(&dir, &["script", &format!("{source}/m8-materials.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let gcode = std::fs::read_to_string(dir.join("m8-test.gcode")).unwrap();
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let (out_path, gcode_path) = (
+        format!("{golden}/m8-materials.out"),
+        format!("{golden}/m8-test.gcode"),
+    );
+    if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(&out_path, stdout(&out)).unwrap();
+        std::fs::write(&gcode_path, &gcode).unwrap();
+    }
+    assert_eq!(
+        stdout(&out),
+        std::fs::read_to_string(&out_path).unwrap_or_default()
+    );
+    assert_eq!(
+        gcode,
+        std::fs::read_to_string(&gcode_path).unwrap_or_default()
+    );
+    // The power above the device's 80% was clamped.
+    assert!(stdout(&out).contains("the device maximum is 80%"));
+    assert!(!gcode.contains("S1000"), "nothing at full power");
+    // The project remembers its device and the follow mark.
+    let shown = cli_in(&dir, &["show", "m8-materials.lcproj", "--json"]);
+    let json = stdout(&shown);
+    assert!(
+        json.contains("\"device\": \"Shop diode\"") && json.contains("\"follows\""),
+        "{json}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn config_folder_keeps_profiles_between_runs_and_pattern_prints_a_plan() {
+    let dir = temp_dir("config");
+    let config = dir.join("config");
+    let config = path_str(&config);
+    let out = cli_in(&dir, &["--config", config, "new", "a.lcproj"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let out = cli_in(
+        &dir,
+        &[
+            "--config",
+            config,
+            "run",
+            "a.lcproj",
+            "profile.add Bench width=200 height=150",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    // The next run sees the profile, and new projects use it.
+    let out = cli_in(&dir, &["--config", config, "new", "b.lcproj"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let shown = stdout(&cli_in(&dir, &["show", "b.lcproj"]));
+    assert!(shown.contains("200 × 150"), "{shown}");
+    // Without --config, nothing is remembered.
+    let out = cli_in(&dir, &["run", "a.lcproj", "project.set_device Bench"]);
+    assert_eq!(out.status.code(), Some(1));
+    let out = cli_in(
+        &dir,
+        &[
+            "--config",
+            config,
+            "pattern",
+            "interval",
+            r#"{"patches": 3}"#,
+            "--project",
+            "b.lcproj",
+            "--svg",
+            "p.svg",
+            "--gcode",
+            "p.gcode",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(
+        text.starts_with("Line interval test:") && text.contains("fits the work area"),
+        "{text}"
+    );
+    assert!(dir.join("p.svg").exists() && dir.join("p.gcode").exists());
+    let out = cli_in(&dir, &["pattern", "focus"]);
+    assert_eq!(out.status.code(), Some(1));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn m9_setups_script_and_gcode_match_golden() {
+    let dir = temp_dir("setups");
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    let out = cli_in(&dir, &["script", &format!("{source}/m9-setups.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let files = [
+        ("m9-setups.out", stdout(&out)),
+        (
+            "m9-registered.gcode",
+            std::fs::read_to_string(dir.join("m9-registered.gcode")).unwrap(),
+        ),
+        (
+            "m9-rotary.gcode",
+            std::fs::read_to_string(dir.join("m9-rotary.gcode")).unwrap(),
+        ),
+    ];
+    for (name, text) in &files {
+        let path = format!("{golden}/{name}");
+        if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+            std::fs::write(&path, text).unwrap();
+        }
+        assert_eq!(
+            text,
+            &std::fs::read_to_string(&path).unwrap_or_default(),
+            "{name}"
+        );
+    }
+    // The registered job is turned: its first cut is not axis-aligned.
+    let registered = &files[1].1;
+    assert!(registered.contains("G1 X42.459 Y359.504"), "{registered}");
+    // Rotary halves Y (100 mm per turn on a 200 mm circumference) and the
+    // feeds of vertical moves with it.
+    let rotary = &files[2].1;
+    assert!(rotary.contains("Y330..360"), "{rotary}");
+    // The preview names the rotary and checks X only.
+    let preview = cli_in(&dir, &["preview", "m9-setups.lcproj"]);
+    let text = stdout(&preview);
+    assert!(text.contains("rotary: Y turns 108°"), "{text}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn camera_pattern_writes_the_sheet_and_calibrate_refuses_too_few_pictures() {
+    let dir = temp_dir("camera");
+    let out = cli_in(&dir, &["camera", "pattern", "sheet.svg"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let svg = std::fs::read_to_string(dir.join("sheet.svg")).unwrap();
+    assert_eq!(svg.matches("<circle").count(), 63);
+    let photo = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/fixtures/m7-photo.png"
+    );
+    let out = cli_in(&dir, &["camera", "calibrate", "standard", photo]);
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("left out"), "{}", stderr(&out));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

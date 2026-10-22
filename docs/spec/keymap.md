@@ -2,7 +2,7 @@
 
 Milestones: M0 (file and edit), M1 (selection, drawing, transform, view), M2
 (notes, side panels), M3 (import, text, nodes, groups, booleans, alignment), M4
-(job preview), M6 (laser: start, frame, pause/stop, home, jog).
+(job preview), M6 (laser: start, frame, pause/stop, home, jog), M7 (adjust image).
 Later chords are bound as their commands arrive; the table below says when.
 
 ## Behavior
@@ -13,13 +13,21 @@ Later chords are bound as their commands arrive; the table below says when.
 - A user keymap can replace the default: `lasercraft --keymap <file>`.
 - `Ctrl` means `Cmd` and `Alt` means `Option` on macOS, which is exactly how the
   published macOS list differs from the Windows/Linux one.
-- Shortcuts are ignored while a text field has keyboard focus.
+- Shortcuts are ignored while a text field has keyboard focus, except the
+  chords bound to `ui.device_pause` and `device.stop`, which always act
+  (`docs/spec/safety.md`, rule 7).
 - A chord bound twice in one file is an error naming the line.
 - Invocations are registry commands, or front-end actions: `ui.*` (files,
   tools, paste at the pointer, notes, side panels, laser actions that use the
   Laser panel's settings) and `view.*` (zoom). Front-end actions do not
   change the project; the actions they lead to are commands.
-- Menu items show the chord bound to their action.
+- Menu items and tooltips show the chord bound to their action, in symbol
+  form (`docs/spec/style/naming.md`, "Chords"): "Ctrl+=", "Ctrl+-",
+  "Ctrl+`", ".", ",", "PgUp", "PgDn", "Del", "Esc", "Alt++", and the
+  words Left, Right, Up and Down for arrow keys (the UI font has no arrow
+  glyphs); Cmd and Option
+  instead of Ctrl and Alt on macOS. The keymap file and error messages
+  keep the key names ("Ctrl+Equals", "PageUp"), which parse back.
 
 ## Default bindings
 
@@ -67,7 +75,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+W / Ctrl+B | Weld / boolean helper | M3 / later |
 | Alt++ / Alt+- / Alt+* | Union / subtract / intersect | M3 / M3 / not bindable (below) |
 | Alt+Shift+C / Ctrl+K / Alt+B | Cut shapes / trim / break apart | later / later / M3 |
-| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset (window) / convert to path / convert to bitmap | M3 / M3 / M7 |
+| Alt+O / Ctrl+Shift+C / Ctrl+Shift+B | Offset (window) / convert to path / convert to bitmap | M3 / M3 / later |
+| Alt+I | Adjust the selected image (`ui.adjust_image`; Tools → Adjust Image…) | M7 |
 | Alt+J / Alt+Shift+O / Alt+D | Join open paths / optimize / delete duplicates | M3 / later / later |
 | Ctrl+G / Ctrl+U | Group / ungroup | M3 |
 | Alt+←/→/↑/↓ | Align left / right / top / bottom | M3 |
@@ -96,8 +105,8 @@ own words. The source is the v2.0 cheat sheet unless marked *(legacy)*.
 | Ctrl+Shift+A | Frame the selection *(legacy)* | later (with cut-selected-graphics) |
 | Pause / Ctrl+Break *(legacy)* | Pause or resume (`ui.device_pause`) / stop (`device.stop`, bound as Ctrl+Pause, which is what egui reports for Ctrl+Break); also always-visible buttons | M6 |
 | Alt+C | Capture a camera image | M9 |
-| Ctrl+Shift+R / Ctrl+Shift+F | Rotary / feeder setup | M9 |
-| Alt+0 … Alt+4 | Print-and-cut steps | M9 |
+| Ctrl+Shift+R / Ctrl+Shift+F | Rotary attachment (`ui.rotary`) / feeder setup | M9 / not planned |
+| Alt+0 … Alt+4 | Print registration: guided setup (`ui.registration`), set target 1 and 2 (`registration.set_target 1`/`2`), fit with and without scaling (`registration.fit scaled`/`rigid`) | M9 |
 
 ### Mouse and modifiers (M1)
 
@@ -132,6 +141,11 @@ image" in v2.0 and "cut shapes" moved to Alt+Shift+C, so the legacy Alt+C
 conflict is gone.
 
 ## Sources
+
+- Alt+I (Adjust Image) and Ctrl+Shift+B (Convert to Bitmap):
+  https://docs.lightburnsoftware.com/2.1/Reference/UI/ToolsMenu/,
+  https://docs.lightburnsoftware.com/2.1/Reference/ConvertToBitmap/ (read
+  2026-10-21).
 
 - LightBurn 2.0 Windows hotkey cheat sheet, rev. 2.0, 13 Nov 2025:
   https://docs.lightburnsoftware.com/2.0/download/LightBurnWindowsHotkeysV2.0.pdf

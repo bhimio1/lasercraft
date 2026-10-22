@@ -1,5 +1,8 @@
 /target
 **/*.rs.bk
+# Release packaging: the binary copied in for the Flatpak, and outputs.
+/packaging/flatpak/lasercraft
+/dist/
 .DS_Store
 # Agent worktrees (local only)
 /.claude/worktrees/

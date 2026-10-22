@@ -90,6 +90,32 @@ pub fn frame(
     speed: f64,
     head: Option<Point>,
 ) -> Result<String, ExportError> {
+    frame_plan(
+        project,
+        plan(project, machine)?,
+        machine,
+        options,
+        shape,
+        speed,
+        head,
+    )
+}
+
+/// As [`frame`], for a plan made elsewhere (a test pattern) on `project`'s
+/// work area.
+///
+/// # Errors
+///
+/// As [`frame`].
+pub fn frame_plan(
+    project: &Project,
+    planned: Plan,
+    machine: &Machine,
+    options: &Options,
+    shape: FrameShape,
+    speed: f64,
+    head: Option<Point>,
+) -> Result<String, ExportError> {
     options.validate()?;
     if !(speed.is_finite() && speed > 0.0 && speed <= machine.max_speed) {
         return Err(ExportError::Invalid(format!(
@@ -106,7 +132,7 @@ pub fn frame(
         },
         Placement::Absolute => Placement::Absolute,
     };
-    let planned = place(plan(project, machine)?, area, placement, machine.max_speed);
+    let planned = place(planned, area, placement, machine.max_speed);
     let corners = outline(&planned, shape);
     let Some(&first) = corners.first() else {
         return Err(ExportError::Nothing);
@@ -141,14 +167,32 @@ pub fn frame(
     if let Some(h) = head {
         moves.push(edge(MoveKind::Travel, at, to_document(area, h)));
     }
-    let path = Plan {
+    let mut path = Plan {
         start,
         layers: Vec::new(),
         stats: Stats::of(&moves),
         moves,
         warnings: Vec::new(),
     };
-    path.check_bounds(area).map_err(ExportError::OutOfBounds)?;
+    let rotary = project.rotary_on().then(|| project.rotary());
+    if let Some(r) = &rotary {
+        // Only the outline turns; the head's own position stays where it is.
+        let about = crate::rotary::about_y(&planned, area, placement);
+        let ends = (path.moves.first().map(|m| m.from), head.is_some());
+        crate::rotary::apply(&mut path, r, about);
+        if let (Some(from), true) = ends {
+            if let Some(m) = path.moves.first_mut() {
+                m.from = from;
+            }
+            if let (Some(m), Some(h)) = (path.moves.last_mut(), head) {
+                m.to = to_document(area, h);
+            }
+        }
+        path.check_bounds_x(area)
+    } else {
+        path.check_bounds(area)
+    }
+    .map_err(ExportError::OutOfBounds)?;
 
     let mut out = String::from("(LaserCraft frame: laser off)\nG90 G21\nM5 S0\n");
     let xy = |p: Point| {
@@ -168,6 +212,7 @@ pub fn frame(
         width: area.width_mm,
         height: area.height_mm,
         s_ceiling: 0.0,
+        y_free: rotary.is_some(),
     };
     let report = verify(&out, &limits).map_err(ExportError::Verify)?;
     if report.burn_length > 0.0 {

@@ -8,10 +8,13 @@ mod bounds;
 mod dump;
 mod emit;
 mod fill;
+mod font;
+mod image;
 mod line;
 mod machine;
 mod model;
 mod order;
+pub mod patterns;
 mod timing;
 
 pub use bounds::{Edge, OutOfBounds};
@@ -74,52 +77,87 @@ fn warn(warnings: &mut Vec<Warning>, layer: &Layer, message: impl Into<String>) 
     });
 }
 
-/// Plans the job: every output layer in order, each pass, line or fill.
-///
-/// # Errors
-///
-/// Fails only for machine parameters out of range.
-pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
-    machine.validate()?;
-    let start = origin_point(project.work_area());
-    let mut out = Emitter::new(start, machine.max_speed);
-    let mut layers = Vec::new();
-    let mut warnings = Vec::new();
-    for layer in project.layers().iter().filter(|l| l.output) {
-        let outlines = outlines(project, layer);
-        if outlines.is_empty() {
-            continue;
+/// Plans a layer's images after its vector shapes, every pass.
+fn plan_images(
+    images: &[&lasercraft_project::Shape],
+    layer: &Layer,
+    feed: Feed,
+    overscan: f64,
+    out: &mut Emitter,
+    warnings: &mut Vec<Warning>,
+) {
+    let mut rasters = Vec::new();
+    for shape in images {
+        match image::raster_of(shape, layer) {
+            Ok(Some(raster)) if raster.lit() > 0 => rasters.push((shape.id(), raster)),
+            Ok(_) => {}
+            Err(reason) => warnings.push(Warning {
+                layer: layer.color,
+                shape: Some(shape.id()),
+                message: format!("image skipped: {reason}"),
+            }),
         }
-        if layer.speed > machine.max_speed {
-            warn(
-                &mut warnings,
-                layer,
-                format!(
-                    "speed {} mm/s is above the machine's {} mm/s; the estimate uses the machine's speed",
-                    num(layer.speed),
-                    num(machine.max_speed)
-                ),
-            );
+    }
+    let rows = image::Rows {
+        bidirectional: layer.bidirectional,
+        overscan,
+        correction: layer.image.dot_correction,
+        grayscale: layer.image.dither == lasercraft_project::Dither::Grayscale,
+        min_power: layer.min_power.clamp(0.0, feed.power),
+    };
+    for pass in 1..=layer.passes {
+        let feed = Feed { pass, ..feed };
+        for (id, raster) in &rasters {
+            image::emit(raster, *id, &rows, &feed, out);
         }
-        // Clamped to the layer's and the device's maximum (safety rule 6).
-        let power = layer.max_power.clamp(0.0, machine.max_power.min(100.0));
-        let feed = Feed {
-            layer: layer.color,
-            pass: 1,
-            speed: layer.speed,
-            power,
-        };
-        let mut overscan = 0.0;
+    }
+}
+
+/// Plans one layer's outlines and images into `out`; `None` when the layer
+/// has nothing to burn.
+pub(crate) fn plan_layer(
+    layer: &Layer,
+    outlines: Vec<Outline>,
+    images: &[&lasercraft_project::Shape],
+    machine: &Machine,
+    out: &mut Emitter,
+    warnings: &mut Vec<Warning>,
+) -> Option<LayerSummary> {
+    if outlines.is_empty() && images.is_empty() {
+        return None;
+    }
+    let has_vectors = !outlines.is_empty();
+    if layer.speed > machine.max_speed {
+        warn(
+            warnings,
+            layer,
+            format!(
+                "speed {} mm/s is above the machine's {} mm/s; the estimate uses the machine's speed",
+                num(layer.speed),
+                num(machine.max_speed)
+            ),
+        );
+    }
+    // Clamped to the layer's and the device's maximum (safety rule 6).
+    let power = layer.max_power.clamp(0.0, machine.max_power.min(100.0));
+    let feed = Feed {
+        layer: layer.color,
+        pass: 1,
+        speed: layer.speed,
+        power,
+    };
+    let mut overscan = 0.0;
+    if !outlines.is_empty() {
         match layer.mode {
             Mode::Line => {
-                let cuts = line::cuts(outlines, layer, &mut warnings);
-                line::plan_layer(&cuts, layer.passes, feed, &mut out);
+                let cuts = line::cuts(outlines, layer, warnings);
+                line::plan_layer(&cuts, layer.passes, feed, out);
             }
             Mode::Fill => {
                 let open = outlines.iter().filter(|o| !o.closed).count();
                 if open > 0 {
                     warn(
-                        &mut warnings,
+                        warnings,
                         layer,
                         format!("fill needs closed shapes; {open} open outline(s) skipped"),
                     );
@@ -135,21 +173,61 @@ pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
                     overscan,
                 };
                 let before = out.moves.len();
-                fill::plan_layer(&outlines, &settings, layer.passes, feed, &mut out);
+                fill::plan_layer(&outlines, &settings, layer.passes, feed, out);
                 if out.moves.len() == before {
-                    warn(&mut warnings, layer, "nothing to fill");
+                    warn(warnings, layer, "nothing to fill");
                 }
             }
         }
-        layers.push(LayerSummary {
-            color: layer.color,
-            name: layer.name.clone(),
-            mode: layer.mode,
-            passes: layer.passes,
-            speed: layer.speed,
-            power,
-            overscan,
-        });
+    }
+    if !images.is_empty() {
+        if layer.overscan {
+            overscan = machine.overscan(layer.speed);
+        }
+        plan_images(images, layer, feed, overscan, out, warnings);
+    }
+    Some(LayerSummary {
+        color: layer.color,
+        name: layer.name.clone(),
+        mode: layer.mode,
+        passes: layer.passes,
+        speed: layer.speed,
+        power,
+        overscan,
+        vectors: has_vectors,
+        images: !images.is_empty(),
+    })
+}
+
+/// Plans the job: every output layer in order, each pass, line or fill.
+///
+/// # Errors
+///
+/// Fails only for machine parameters out of range.
+pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
+    machine.validate()?;
+    // Print registration moves the whole job (`docs/spec/registration.md`).
+    let fitted = project.as_run();
+    let project: &Project = &fitted;
+    let start = origin_point(project.work_area());
+    let mut out = Emitter::new(start, machine.max_speed);
+    let mut layers = Vec::new();
+    let mut warnings = Vec::new();
+    for layer in project.layers().iter().filter(|l| l.output) {
+        let outlines = outlines(project, layer);
+        let images: Vec<&lasercraft_project::Shape> = project
+            .shapes()
+            .iter()
+            .filter(|s| s.layer() == layer.color && s.geometry().is_image())
+            .collect();
+        layers.extend(plan_layer(
+            layer,
+            outlines,
+            &images,
+            machine,
+            &mut out,
+            &mut warnings,
+        ));
     }
     let mut moves = out.moves;
     timing::estimate(&mut moves, machine);

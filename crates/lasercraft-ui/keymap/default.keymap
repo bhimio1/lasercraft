@@ -122,3 +122,15 @@ Ctrl+Shift+[   = ui.jog_down
 Ctrl+Shift+{   = ui.jog_down
 Ctrl+Alt+[     = ui.jog_left
 Ctrl+Alt+]     = ui.jog_right
+
+# Images (M7)
+Alt+I          = ui.adjust_image
+
+# Job setups (M9)
+Ctrl+Shift+R = ui.rotary
+Alt+0        = ui.registration
+Alt+1        = registration.set_target 1
+Alt+2        = registration.set_target 2
+Alt+3        = registration.fit scaled
+Alt+4        = registration.fit rigid
+Alt+C        = ui.camera_capture

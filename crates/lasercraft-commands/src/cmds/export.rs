@@ -2,16 +2,14 @@
 
 use std::path::Path;
 
+use crate::args::Args;
+use crate::command::ccmd;
+use crate::{Command, CommandError, Context, Outcome, job_settings};
 use lasercraft_gcode::{Air, Options, export};
 use lasercraft_plan::{Machine, duration};
-use lasercraft_project::Project;
-
-use crate::args::Args;
-use crate::command::cmd;
-use crate::{Command, CommandError, Outcome};
 
 pub(super) fn commands() -> Vec<Box<dyn Command>> {
-    vec![cmd(
+    vec![ccmd(
         "project.export_gcode",
         "project.export_gcode <path> [s_max=<n>] [air=m7|m8] [finish=on|off] [max_speed=<mm/s>] [accel=<mm/s²>] [max_power=<%>]",
         "Write the job as GRBL G-code after the work-area and safety checks.",
@@ -67,10 +65,14 @@ pub(super) fn apply_option(
     Ok(true)
 }
 
-/// Machine and export options from `key=value` arguments.
-fn options(args: &Args<'_>, from: usize) -> Result<(Machine, Options), CommandError> {
-    let mut machine = Machine::default();
-    let mut options = Options::default();
+/// Machine and export options: the device profile's, then the
+/// `key=value` arguments.
+fn options(
+    cx: &Context<'_>,
+    args: &Args<'_>,
+    from: usize,
+) -> Result<(Machine, Options), CommandError> {
+    let (mut machine, mut options, _) = job_settings(cx.project, cx.workshop);
     for i in from..args.len() {
         let (key, value) = key_value(args, args.str(i)?)?;
         if !apply_option(args, key, value, &mut machine, &mut options)? {
@@ -81,7 +83,7 @@ fn options(args: &Args<'_>, from: usize) -> Result<(Machine, Options), CommandEr
 }
 
 /// Writes `text` next to `path` and renames it into place.
-fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
+pub(super) fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = std::path::PathBuf::from(tmp);
@@ -91,10 +93,10 @@ fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
     })
 }
 
-fn export_gcode(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
+fn export_gcode(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
     let path = args.str(0)?;
-    let (machine, options) = options(args, 1)?;
-    let out = export(project, &machine, &options).map_err(|e| args.invalid(e.to_string()))?;
+    let (machine, options) = options(cx, args, 1)?;
+    let out = export(cx.project, &machine, &options).map_err(|e| args.invalid(e.to_string()))?;
     write_atomically(Path::new(path), &out.gcode)
         .map_err(|e| args.invalid(format!("cannot write {path}: {e}")))?;
     Ok(Outcome::done(format!(
@@ -108,9 +110,9 @@ fn export_gcode(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comma
 
 #[cfg(test)]
 mod tests {
-    use crate::{Registry, Session};
+    use lasercraft_project::Project;
 
-    use super::*;
+    use crate::{Registry, Session};
 
     fn temp(tag: &str) -> std::path::PathBuf {
         let dir =

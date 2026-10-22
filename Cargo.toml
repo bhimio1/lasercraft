@@ -19,6 +19,8 @@ lasercraft-plan = { path = "crates/lasercraft-plan" }
 lasercraft-gcode = { path = "crates/lasercraft-gcode" }
 lasercraft-device = { path = "crates/lasercraft-device" }
 lasercraft-ui = { path = "crates/lasercraft-ui" }
+lasercraft-workshop = { path = "crates/lasercraft-workshop" }
+lasercraft-camera = { path = "crates/lasercraft-camera" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 i_overlay = "9.1"
@@ -26,7 +28,11 @@ egui = "0.37"
 usvg = { version = "0.48.1", default-features = false }
 fontdb = { version = "0.24.0", default-features = false, features = ["std", "fs", "fontconfig"] }
 ttf-parser = { version = "0.25.1", default-features = false, features = ["std"] }
+png = "0.18.1"
+zune-jpeg = { version = "0.5.15", default-features = false, features = ["std"] }
 serialport = { version = "4.10", default-features = false }
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-native"] }
+ureq = "2.12"
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 
 [workspace.lints.rust]
@@ -35,3 +41,9 @@ missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Release builds (docs/spec/release.md).
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

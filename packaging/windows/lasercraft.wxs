@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Windows installer (docs/spec/release.md), WiX Toolset v5:
+     wix build -arch x64 -d Version=<x.y.z> -d Binary=<lasercraft.exe>
+               -d License=<LICENSE> -o LaserCraft-<x.y.z>-x86_64.msi lasercraft.wxs
+     The UpgradeCode never changes, so a new version replaces an old one. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="LaserCraft"
+           Manufacturer="LaserCraft contributors"
+           Version="$(var.Version)"
+           UpgradeCode="6E1F2A43-9B7C-4D2E-8F15-3C5A7B90D6E1"
+           Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of LaserCraft is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="LaserCraft">
+        <Component Id="Program">
+          <File Id="LaserCraftExe" Source="$(var.Binary)" Name="lasercraft.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="License">
+          <File Id="LicenseFile" Source="$(var.License)" Name="LICENSE.txt" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="LaserCraftShortcut"
+                  Name="LaserCraft"
+                  Description="Design and run jobs on laser cutters and engravers"
+                  Target="[INSTALLFOLDER]lasercraft.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKMU" Key="Software\LaserCraft" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="LaserCraft" Level="1">
+      <ComponentRef Id="Program" />
+      <ComponentRef Id="License" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

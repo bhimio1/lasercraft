@@ -16,6 +16,16 @@ mod path;
 mod export;
 // M6: the laser.
 pub(crate) mod device;
+// M7: images.
+mod image;
+// M8: device profiles, material libraries, test patterns.
+mod material;
+mod profile;
+mod test;
+// M9: rotary, print registration, taper, cameras.
+mod camera;
+mod setup;
+pub(crate) mod trace;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -36,6 +46,17 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(export::commands());
     // M6
     all.extend(device::commands());
+    // M7
+    all.extend(image::commands());
+    // M8
+    all.extend(profile::commands());
+    all.extend(material::commands());
+    all.extend(test::commands());
+    // M9
+    all.extend(setup::commands());
+    all.extend(setup::hidden());
+    all.extend(camera::commands());
+    all.extend(trace::commands());
     all
 }
 

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (docs/spec/release.md). -->
+<component type="desktop-application">
+  <id>io.github.bhimio1.LaserCraft</id>
+  <name>LaserCraft</name>
+  <summary>Design and run jobs on laser cutters and engravers</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>
+      LaserCraft lays out vector art, text and images on layers, plans the
+      laser's moves and runs the job on GRBL laser controllers over USB
+      serial, with framing, pause and stop always at hand.
+    </p>
+    <ul>
+      <li>Shapes, text, SVG and DXF import, node editing and booleans</li>
+      <li>Line, fill and image layers with a job preview and time estimate</li>
+      <li>Material libraries, device profiles and test patterns</li>
+      <li>Rotary attachments, print and cut, and camera overlays</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.bhimio1.LaserCraft.desktop</launchable>
+  <provides>
+    <binary>lasercraft</binary>
+  </provides>
+  <url type="homepage">https://github.com/bhimio1/lasercraft</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Engineering</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-22"/>
+  </releases>
+</component>

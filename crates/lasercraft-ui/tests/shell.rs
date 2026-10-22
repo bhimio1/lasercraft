@@ -16,10 +16,16 @@ struct Harness {
     time: f64,
     log: Vec<String>,
     laser: LaserView,
+    /// Window height, px.
+    height: f32,
 }
 
 impl Harness {
     fn new(lines: &[&str]) -> Self {
+        Self::with_height(lines, 800.0)
+    }
+
+    fn with_height(lines: &[&str], height: f32) -> Self {
         let mut session = Session::new(Project::default(), Registry::with_builtin());
         for line in lines {
             session.run_line(line).unwrap();
@@ -31,7 +37,10 @@ impl Harness {
             time: 0.0,
             log: Vec::new(),
             laser: LaserView::default(),
+            height,
         };
+        // Panels settle to their content's size on the second frame.
+        h.frame(Vec::new(), Modifiers::NONE);
         h.frame(Vec::new(), Modifiers::NONE);
         h
     }
@@ -40,7 +49,7 @@ impl Harness {
     fn frame(&mut self, mut events: Vec<Event>, modifiers: Modifiers) {
         events.insert(0, Event::ModifiersChanged(modifiers));
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, self.height))),
             time: Some(self.time),
             events,
             ..RawInput::default()
@@ -57,6 +66,8 @@ impl Harness {
                 undo: undo.as_ref(),
                 can_redo: session.redo_depth() > 0,
                 laser,
+                workshop: session.workshop(),
+                camera: &lasercraft_ui::CameraView::default(),
             };
             actions = shell.show(ui, &view);
         });
@@ -166,7 +177,7 @@ fn clipboard_events_map_to_the_clipboard_chords() {
     h.frame(vec![Event::PointerMoved(target)], Modifiers::NONE);
     h.frame(vec![Event::Paste("[]".to_owned())], Modifiers::NONE);
     assert_eq!(h.log[0], "edit.copy");
-    assert!(h.log[1].starts_with("edit.paste 2"), "{:?}", h.log);
+    assert!(h.log[1].starts_with("edit.paste "), "{:?}", h.log);
     let pasted = h.bounds(2).center();
     assert!(
         pasted.approx_eq(Point::new(200.0, 100.0), 0.01),
@@ -236,6 +247,8 @@ fn layers_panel_lists_used_layers() {
             undo,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -281,6 +294,8 @@ fn alt_p_opens_the_preview_and_draws_what_it_is_given() {
             undo: None,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -372,6 +387,8 @@ fn alt_shift_l_asks_where_to_save_gcode() {
             undo: None,
             can_redo: false,
             laser: &LaserView::default(),
+            workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -386,8 +403,36 @@ fn alt_shift_l_asks_where_to_save_gcode() {
 impl Harness {
     /// Every piece of text drawn in one frame.
     fn texts(&mut self) -> Vec<String> {
+        self.drawn_texts()
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect()
+    }
+
+    /// Where `want` was last drawn (the topmost copy).
+    fn text_at(&mut self, want: &str) -> Option<Pos2> {
+        self.drawn_texts()
+            .into_iter()
+            .rev()
+            .find(|(text, _)| text == want)
+            .map(|(_, rect)| rect.center())
+    }
+
+    fn click(&mut self, pos: Pos2) {
+        let button = |pressed| Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        self.frame(vec![Event::PointerMoved(pos)], Modifiers::NONE);
+        self.frame(vec![button(true)], Modifiers::NONE);
+        self.frame(vec![button(false)], Modifiers::NONE);
+    }
+
+    fn drawn_texts(&mut self) -> Vec<(String, Rect)> {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, self.height))),
             time: Some(self.time),
             ..RawInput::default()
         };
@@ -400,6 +445,8 @@ impl Harness {
                 undo: None,
                 can_redo: false,
                 laser,
+                workshop: session.workshop(),
+                camera: &lasercraft_ui::CameraView::default(),
             };
             let _ = shell.show(ui, &view);
         });
@@ -408,7 +455,10 @@ impl Harness {
             .shapes
             .iter()
             .filter_map(|c| match &c.shape {
-                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                egui::Shape::Text(text) => Some((
+                    text.galley.text().to_owned(),
+                    Rect::from_min_size(text.pos, text.galley.size()),
+                )),
                 _ => None,
             })
             .collect()
@@ -462,20 +512,26 @@ fn laser_shortcuts_run_device_commands_with_the_panel_settings() {
     assert_eq!(h.log, ["device.resume"]);
 }
 
-#[test]
-fn stop_and_pause_show_whenever_a_laser_is_connected() {
-    let mut h = Harness::new(&[]);
-    let texts = h.texts();
-    assert!(!texts.iter().any(|t| t == "Stop"), "no laser, no Stop");
+fn connected(h: &mut Harness) {
     h.laser.port = Some("/dev/ttyUSB0".into());
+    h.laser.baud = Some(115_200);
     h.laser.ready = true;
-    h.laser.state = "Idle".into();
+    h.laser.word = lasercraft_ui::MachineWord::Ready;
+    // A new layer is laid out once before it is drawn.
+    h.frame(Vec::new(), Modifiers::NONE);
+}
+
+#[test]
+fn the_job_bar_shows_stop_and_pause_whenever_a_laser_is_connected() {
+    let mut h = Harness::new(&[]);
+    // F12 hides the dock and its Machine panel; the job bar stays.
+    h.key(Key::F12, Modifiers::NONE);
+    let texts = h.texts();
+    assert!(!texts.iter().any(|t| t == "Stop"), "no laser, no job bar");
+    connected(&mut h);
     let texts = h.texts();
     assert!(texts.iter().any(|t| t == "Stop") && texts.iter().any(|t| t == "Pause"));
-    assert!(
-        texts.iter().any(|t| t == "Laser Idle on /dev/ttyUSB0"),
-        "{texts:?}"
-    );
+    assert!(texts.iter().any(|t| t == "Ready"), "{texts:?}");
     // A job with constant power says Pause only holds motion.
     h.laser.busy = Some(lasercraft_ui::Busy {
         kind: "job".into(),
@@ -485,16 +541,50 @@ fn stop_and_pause_show_whenever_a_laser_is_connected() {
         paused: false,
         constant_power: true,
     });
-    assert!(h.texts().iter().any(|t| t == "Pause (motion)"));
+    h.laser.word = lasercraft_ui::MachineWord::Running;
+    let texts = h.texts();
+    for want in ["Pause (motion only)", "The laser may stay on", "25% sent"] {
+        assert!(texts.iter().any(|t| t == want), "{want}: {texts:?}");
+    }
 }
 
 #[test]
-fn the_laser_tab_shows_status_console_and_the_alarm_window() {
+fn stop_in_the_job_bar_works_with_windows_open() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 50 30", "select.all"]);
+    connected(&mut h);
+    // Open the project notes and the offset window over everything.
+    h.key(Key::N, Modifiers::CTRL | Modifiers::ALT);
+    h.key(Key::O, Modifiers::ALT);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Project notes") && texts.iter().any(|t| t == "Offset"));
+    let stop = h.text_at("Stop").expect("Stop is drawn");
+    h.log.clear();
+    h.click(stop);
+    assert!(h.log.iter().any(|l| l == "device.stop"), "{:?}", h.log);
+}
+
+#[test]
+fn pause_and_stop_chords_work_while_typing() {
     let mut h = Harness::new(&[]);
-    h.shell.show_laser_tab();
-    h.laser.port = Some("simulator".into());
-    h.laser.ready = true;
-    h.laser.state = "Idle".into();
+    connected(&mut h);
+    // Focus the command line and type.
+    let field = h
+        .text_at("Type a command, for example project.set_work_area 400 300")
+        .unwrap();
+    h.click(field);
+    h.frame(vec![Event::Text("abc".into())], Modifiers::NONE);
+    h.log.clear();
+    h.key(Key::Pause, Modifiers::NONE);
+    h.key(Key::Pause, Modifiers::CTRL);
+    // Other chords stay with the text field.
+    h.key(Key::H, Modifiers::CTRL);
+    assert_eq!(h.log, ["device.pause", "device.stop"]);
+}
+
+#[test]
+fn the_machine_jog_and_console_panels_show_their_parts() {
+    let mut h = Harness::new(&[]);
+    connected(&mut h);
     h.laser.position = Some([12.5, 30.0]);
     h.laser.console = vec![
         lasercraft_ui::ConsoleLine {
@@ -508,21 +598,370 @@ fn the_laser_tab_shows_status_console_and_the_alarm_window() {
             routine: true,
         },
     ];
+    h.laser.word = lasercraft_ui::MachineWord::Alarm;
     h.laser.alarm = Some("Alarm 1: a limit switch was hit".into());
     let texts = h.texts();
     for want in [
-        "Ready (Idle) at X12.5 Y30 on simulator",
-        "> $$",
-        "Laser alarm",
+        "Machine",
+        "on /dev/ttyUSB0 at 115200 baud",
+        "Alarm",
         "Alarm 1: a limit switch was hit",
-        "Unlock",
-        "Set origin",
+        "Clear alarm",
         "Frame outline",
+        "Place job at",
+        "Layers",
+        "Jog",
+        "Console",
     ] {
         assert!(texts.iter().any(|t| t == want), "{want}: {texts:?}");
     }
+    let jog = h.text_at("Jog").unwrap();
+    h.click(jog);
+    let texts = h.texts();
+    for want in [
+        "Head position",
+        "X 12.50  Y 30.00",
+        "Set user origin",
+        "Jog distance (mm)",
+    ] {
+        assert!(texts.iter().any(|t| t == want), "{want}: {texts:?}");
+    }
+    h.shell.show_panel(lasercraft_ui::DockPanel::Console);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "> $$"), "{texts:?}");
     assert!(
         !texts.iter().any(|t| t.starts_with("<Idle")),
         "routine lines are hidden by default"
+    );
+}
+
+#[test]
+fn the_menu_bar_titles_are_in_order() {
+    let mut h = Harness::new(&[]);
+    let texts = h.texts();
+    let titles = [
+        "File", "Edit", "Tools", "Arrange", "Machine", "View", "Window",
+    ];
+    let at: Vec<usize> = titles
+        .iter()
+        .map(|t| {
+            texts
+                .iter()
+                .position(|x| x == t)
+                .unwrap_or_else(|| panic!("{t}"))
+        })
+        .collect();
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "{texts:?}");
+}
+
+#[test]
+fn images_are_drawn_as_textures_and_alt_i_opens_their_adjustments() {
+    use lasercraft_commands::Invocation;
+    use lasercraft_project::raster::Gray;
+    use lasercraft_project::{Geometry, Image};
+    let mut h = Harness::new(&[]);
+    let img = Geometry::Image(Image::new(
+        40.0,
+        20.0,
+        Gray::new(4, 2, vec![0, 80, 160, 255, 255, 160, 80, 0]).unwrap(),
+    ));
+    let shape = format!(
+        r#"{{"id":7,"layer":2,"geometry":{},"transform":[1.0,0.0,0.0,1.0,50.0,50.0]}}"#,
+        serde_json::to_string(&img).unwrap()
+    );
+    h.session
+        .run(&Invocation::new("shape.insert", ["0".to_owned(), shape]))
+        .unwrap();
+    h.frame(Vec::new(), Modifiers::NONE);
+    assert_eq!(h.shell.image_textures(), 1);
+    // Nothing selected: Alt+I only explains.
+    h.session.run_line("select.clear").unwrap();
+    h.key(Key::I, Modifiers::ALT);
+    assert!(!h.texts().iter().any(|t| t == "Image adjustments"));
+    h.session.run_line("select.set 7").unwrap();
+    h.key(Key::I, Modifiers::ALT);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Image adjustments"), "{texts:?}");
+    // Deleting the image drops its texture.
+    h.session.run_line("shape.delete 7").unwrap();
+    h.frame(Vec::new(), Modifiers::NONE);
+    assert_eq!(h.shell.image_textures(), 0);
+}
+
+#[test]
+fn the_materials_tab_applies_an_entry_to_the_edited_layer() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20 @4"]);
+    let tab = h.text_at("Materials").expect("Materials tab");
+    h.click(tab);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "LaserCraft starter"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "Library    "), "{texts:?}");
+    let entry = h.text_at("Engrave").expect("an entry");
+    h.click(entry);
+    let apply = h.text_at("Apply to layer").expect("Apply to layer");
+    h.click(apply);
+    assert_eq!(h.log.len(), 1, "{:?}", h.log);
+    assert!(
+        h.log[0].starts_with("material.apply ") && h.log[0].ends_with(" 4"),
+        "{:?}",
+        h.log
+    );
+    // Following a material makes the editor read-only and shows the band.
+    let entry = h.text_at("Engrave").expect("an entry");
+    h.click(entry);
+    let follow = h.text_at("Follow this entry").expect("Follow this entry");
+    h.click(follow);
+    assert!(h.session.project().layer(4).unwrap().follows.is_some());
+    let layers = h.text_at("Layers").expect("Layers tab");
+    h.click(layers);
+    let texts = h.texts();
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.starts_with("Follows material Engrave")),
+        "{texts:?}"
+    );
+    let stop = h.text_at("Stop following").expect("Stop following");
+    h.click(stop);
+    assert!(h.session.project().layer(4).unwrap().follows.is_none());
+}
+
+fn menu(h: &mut Harness, menu: &str, row: &str) {
+    // The menu bar's copy is the highest one.
+    let at = h
+        .drawn_texts()
+        .into_iter()
+        .filter(|(t, _)| t == menu)
+        .map(|(_, r)| r.center())
+        .min_by(|a, b| a.y.total_cmp(&b.y))
+        .unwrap_or_else(|| panic!("{menu} menu"));
+    h.click(at);
+    let at = h.text_at(row).unwrap_or_else(|| panic!("{row}"));
+    h.click(at);
+}
+
+#[test]
+fn device_profiles_are_added_from_the_dialog_and_chosen_in_the_machine_panel() {
+    // A tall window shows the whole Machine panel.
+    let mut h = Harness::with_height(&[], 1400.0);
+    menu(&mut h, "Machine", "Device profiles…");
+    let new = h.text_at("New profile…").expect("Device profiles dialog");
+    h.click(new);
+    assert!(h.texts().iter().any(|t| t == "New device profile"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log[0].starts_with("profile.add \"Laser 1\" width=400"),
+        "{:?}",
+        h.log
+    );
+    assert_eq!(h.session.workshop().profiles().len(), 1);
+    let close = h.text_at("Close").expect("Close");
+    h.click(close);
+    // The Device dropdown lists it; choosing it names it in the project.
+    let device = h.text_at("(none)").expect("Device dropdown");
+    h.click(device);
+    let row = h
+        .drawn_texts()
+        .into_iter()
+        .rev()
+        .find(|(t, _)| t.starts_with("Laser 1 "))
+        .map(|(_, r)| r.center())
+        .unwrap_or_else(|| panic!("profile row: {:?}", h.texts()));
+    h.click(row);
+    assert_eq!(h.session.project().device(), Some("Laser 1"));
+}
+
+#[test]
+fn the_speed_and_power_window_starts_the_pattern_it_was_told_is_valid() {
+    let mut h = Harness::new(&[]);
+    menu(&mut h, "Machine", "Speed and power test…");
+    let requests = h.shell.test_requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].kind, lasercraft_ui::TestKind::SpeedPower);
+    assert!(h.shell.test_requests().is_empty(), "nothing changed");
+    // Until the app answers, the job buttons stay off.
+    connected(&mut h);
+    let start = h.text_at("Start").expect("Start");
+    h.click(start);
+    assert!(
+        h.log.iter().all(|l| !l.starts_with("device.test")),
+        "{:?}",
+        h.log
+    );
+    let full = serde_json::json!({"rows": {"count": 3}});
+    h.shell.set_test_info(
+        lasercraft_ui::TestKind::SpeedPower,
+        lasercraft_ui::TestInfo {
+            revision: requests[0].revision,
+            settings: Some(full.clone()),
+            size: Some((40.0, 30.0)),
+            ..lasercraft_ui::TestInfo::default()
+        },
+    );
+    assert!(h.texts().iter().any(|t| t == "Pattern size 40.0 × 30.0 mm"));
+    // The window's Start is the topmost copy.
+    let start = h.text_at("Start").expect("Start");
+    h.click(start);
+    assert_eq!(
+        h.log.last().unwrap(),
+        &format!(
+            "device.test speed_power {} from=absolute anchor=bottom-left",
+            lasercraft_commands::Invocation::new("x", [full.to_string()])
+                .to_string()
+                .trim_start_matches("x ")
+        )
+    );
+}
+
+#[test]
+fn the_rotary_dialog_sends_one_change_and_shows_as_an_active_setup() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    h.key(Key::R, Modifiers::COMMAND | Modifiers::SHIFT);
+    assert!(h.texts().iter().any(|t| t == "Rotary attachment"));
+    let use_rotary = h.text_at("Use rotary").expect("Use rotary");
+    h.click(use_rotary);
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert_eq!(h.log, ["rotary.set enabled on"]);
+    assert!(h.session.project().rotary_on());
+    assert!(
+        h.texts().iter().any(|t| t == "Rotary"),
+        "status bar names it"
+    );
+    // Taper correction opens from the Machine menu now that rotary is on.
+    menu(&mut h, "Machine", "Taper correction…");
+    assert!(h.texts().iter().any(|t| t == "Taper correction"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log
+            .last()
+            .unwrap()
+            .starts_with("shape.taper top 80 100 64"),
+        "{:?}",
+        h.log
+    );
+}
+
+#[test]
+fn print_registration_lists_what_is_missing_and_shows_refusals() {
+    let mut h = Harness::new(&["shape.add_rect 10 10 20 20"]);
+    h.key(Key::Num0, Modifiers::ALT);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Print registration"), "{texts:?}");
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.contains("Connect the machine first.")),
+        "{texts:?}"
+    );
+    h.shell.command_failed(
+        &lasercraft_commands::Invocation::parse("registration.set_target 2").unwrap(),
+        "invalid argument for `registration.set_target`: Set target 1 first.",
+    );
+    // A new window is sized on its first frame and drawn on the next.
+    h.frame(Vec::new(), Modifiers::NONE);
+    let texts = h.texts();
+    assert!(texts.iter().any(|t| t == "Registration failed"));
+    assert!(
+        texts.iter().any(|t| t == "Set target 1 first."),
+        "{texts:?}"
+    );
+}
+
+#[test]
+fn a_camera_brings_up_the_camera_panel_and_add_camera_starts_with_its_kind() {
+    let mut h = Harness::new(&[
+        "profile.add Shop width=300 height=200",
+        "project.set_device Shop",
+        "camera.add Top simulated",
+    ]);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let tab = h.text_at("Camera").expect("Camera tab");
+    h.click(tab);
+    let texts = h.texts();
+    assert!(
+        texts.iter().any(|t| t == "Capture camera image"),
+        "{texts:?}"
+    );
+    assert!(texts.iter().any(|t| t == "Top"), "{texts:?}");
+    let capture = h.text_at("Capture camera image").unwrap();
+    h.click(capture);
+    assert!(
+        h.log.iter().any(|l| l.starts_with("Camera(Capture")),
+        "{:?}",
+        h.log
+    );
+    // Add camera… opens the wizard; choosing a kind adds the camera.
+    let add = h.text_at("Add camera…").expect("Add camera…");
+    h.click(add);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let simulated = h.text_at("Simulated camera").expect("kind cards");
+    h.click(simulated);
+    assert!(
+        h.log
+            .iter()
+            .any(|l| l == "camera.add \"Simulated camera 2\" simulated"),
+        "{:?}",
+        h.log
+    );
+    assert_eq!(h.session.workshop().cameras("Shop").unwrap().len(), 2);
+    assert!(h.texts().iter().any(|t| t == "Choose the picture source"));
+}
+
+#[test]
+fn trace_to_vectors_traces_the_selected_image_once_the_app_answers() {
+    use lasercraft_commands::Invocation;
+    use lasercraft_project::raster::Gray;
+    use lasercraft_project::{Geometry, Image};
+    use lasercraft_ui::{TraceInfo, TraceSource};
+    let mut h = Harness::new(&[]);
+    let img = Geometry::Image(Image::new(
+        40.0,
+        20.0,
+        Gray::new(4, 2, vec![0, 80, 160, 255, 255, 160, 80, 0]).unwrap(),
+    ));
+    let shape = format!(
+        r#"{{"id":7,"layer":2,"geometry":{},"transform":[1.0,0.0,0.0,1.0,50.0,50.0]}}"#,
+        serde_json::to_string(&img).unwrap()
+    );
+    h.session
+        .run(&Invocation::new("shape.insert", ["0".to_owned(), shape]))
+        .unwrap();
+    h.session.run_line("select.set 7").unwrap();
+    menu(&mut h, "Tools", "Trace to vectors…");
+    let request = h.shell.trace_request().expect("a request");
+    assert_eq!(request.source, TraceSource::Image(7));
+    assert!(h.shell.trace_request().is_none(), "nothing changed");
+    // OK stays off until the app has traced.
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    assert!(
+        h.log.iter().all(|l| !l.starts_with("image.trace")),
+        "{:?}",
+        h.log
+    );
+    h.shell.set_trace_info(TraceInfo {
+        revision: request.revision,
+        picture: Some(std::sync::Arc::new(lasercraft_camera::Picture::filled(
+            4, 2, [200; 3],
+        ))),
+        size: (4, 2),
+        loops: vec![vec![
+            Point::new(0.0, 0.0),
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+        ]],
+        counts: (1, 3),
+        ..TraceInfo::default()
+    });
+    assert!(h.texts().iter().any(|t| t == "1 path(s), 3 nodes"));
+    let ok = h.text_at("OK").expect("OK");
+    h.click(ok);
+    let last = h.log.last().unwrap();
+    assert!(
+        last.starts_with("image.trace 7 ") && last.ends_with(" @0"),
+        "{last}"
     );
 }

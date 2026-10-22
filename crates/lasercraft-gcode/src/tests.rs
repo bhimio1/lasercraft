@@ -337,6 +337,7 @@ fn frames_are_laser_off_and_traced_at_the_given_speed() {
         width: 100.0,
         height: 80.0,
         s_ceiling: 0.0,
+        y_free: false,
     };
     let report = verify(&text, &limits).unwrap();
     assert_eq!(report.burn_length, 0.0);
@@ -381,6 +382,7 @@ fn outline_frames_follow_the_convex_hull() {
         width: 100.0,
         height: 100.0,
         s_ceiling: 0.0,
+        y_free: false,
     };
     let b = verify(&boxed, &limits).unwrap().unlit_length;
     let h = verify(&hull, &limits).unwrap().unlit_length;
@@ -404,4 +406,29 @@ fn frame_refusals() {
         frame(&p, &m, &off, FrameShape::Box, 10.0, None).unwrap_err(),
         ExportError::OutOfBounds(_)
     ));
+}
+
+#[test]
+fn image_jobs_export_with_power_per_gray_level() {
+    use lasercraft_project::Image;
+    use lasercraft_project::raster::Gray;
+    let mut p = Project::with_work_area(100.0, 80.0).unwrap();
+    let img = Image::new(3.0, 1.0, Gray::new(3, 1, vec![0, 128, 255]).unwrap());
+    p.add_shape_on(Geometry::Image(img), Affine::translate(5.0, 5.0), 1)
+        .unwrap();
+    set(
+        &mut p,
+        1,
+        &[
+            ("image.dither", "grayscale"),
+            ("image.interval", "1"),
+            ("max_power", "80"),
+            ("min_power", "20"),
+        ],
+    );
+    let out = export(&p, &Machine::default(), &Options::default()).unwrap();
+    assert!(out.gcode.contains("S800"), "{}", out.gcode);
+    assert!(out.gcode.contains("S498.82"), "{}", out.gcode);
+    assert!((out.report.burn_length - out.plan.stats.burn_length).abs() < 1e-9);
+    assert_eq!(out.report.burn_length, 2.0, "the white dot is not burned");
 }

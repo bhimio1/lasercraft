@@ -1,0 +1,29 @@
+renamed to Photo tile
+work area 200 × 150 mm
+imported examples/fixtures/m7-photo.png as image 1: 120 × 80 pixels, 12 × 8 mm
+moved 1 shape(s) by (20, 20)
+image 1: brightness 0, contrast 20, gamma 1.2
+imported examples/fixtures/m7-tile.jpg as image 2: 16 × 8 pixels, 1.355 × 0.677 mm
+scaled 1 shape(s) by (10, 10)
+moved 1 shape(s) by (50, 20)
+layer 2 name = Photo
+layer 2 image.dither = jarvis
+layer 2 image.interval = 0.25
+layer 2 speed = 80
+layer 2 max_power = 40
+layer 3 name = Tile
+layer 3 image.dither = grayscale
+layer 3 image.interval = 0.5
+layer 3 min_power = 5
+layer 3 max_power = 30
+layer 3 overscan = on
+added rect 3
+saved m7-images.lcproj
+exported m7-images.gcode: 428 lines, burn 453.8 mm, max S 400, estimated 33.7 s
+project "Photo tile": work area 200 × 150 mm, origin front-left, 3 shape(s)
+  layer  1 "Layer 01": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  2 "Photo": image 80 mm/s, power 0–40%, 1 pass(es), image jarvis at 0.25 mm
+  layer  3 "Tile": image 10 mm/s, power 5–30%, 1 pass(es), image grayscale at 0.5 mm
+     1 @2  image    (20, 20) – (32, 28)
+     2 @3  image    (43.904, 16.952) – (57.451, 23.725)
+     3 @1  rect     (15, 15) – (65, 40)

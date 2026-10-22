@@ -1,5 +1,6 @@
 use lasercraft_device::Request;
 use lasercraft_project::Project;
+use lasercraft_workshop::Workshop;
 
 use crate::{CommandError, Invocation, args::Args};
 
@@ -59,7 +60,17 @@ impl Outcome {
     }
 }
 
-/// A named action that changes a [`Project`].
+/// What a command runs with: the project, and the user's workshop of
+/// device profiles, material libraries and test presets
+/// (`docs/spec/commands.md`, "User data commands").
+pub struct Context<'a> {
+    /// The project.
+    pub project: &'a mut Project,
+    /// The user's data outside the project.
+    pub workshop: &'a mut Workshop,
+}
+
+/// A named action that changes a [`Project`] or the user's workshop.
 pub trait Command: Send + Sync {
     /// Unique name in `area.action` form.
     fn name(&self) -> &'static str;
@@ -75,19 +86,31 @@ pub trait Command: Send + Sync {
     /// # Errors
     ///
     /// Returns a [`CommandError`] if the arguments are wrong or the project rejects
-    /// the change. On error the project must be left unchanged.
-    fn execute(&self, project: &mut Project, args: &[String]) -> Result<Outcome, CommandError>;
+    /// the change. On error the project and the workshop must be left
+    /// unchanged.
+    fn execute(&self, cx: &mut Context<'_>, args: &[String]) -> Result<Outcome, CommandError>;
 }
 
-/// Signature of a table-driven command body.
+/// Signature of a table-driven command body that needs only the project.
 pub(crate) type RunFn = fn(&mut Project, &Args<'_>) -> Result<Outcome, CommandError>;
+
+/// Signature of a table-driven command body that needs the workshop too.
+pub(crate) type ContextFn = fn(&mut Context<'_>, &Args<'_>) -> Result<Outcome, CommandError>;
+
+/// A command body.
+pub(crate) enum Body {
+    /// Project only.
+    Project(RunFn),
+    /// Project and workshop.
+    Context(ContextFn),
+}
 
 /// A command defined by a name, help text and a function.
 pub(crate) struct FnCommand {
     pub name: &'static str,
     pub summary: &'static str,
     pub usage: &'static str,
-    pub run: RunFn,
+    pub run: Body,
 }
 
 impl Command for FnCommand {
@@ -103,8 +126,12 @@ impl Command for FnCommand {
         self.usage
     }
 
-    fn execute(&self, project: &mut Project, args: &[String]) -> Result<Outcome, CommandError> {
-        (self.run)(project, &Args::new(self.name, self.usage, args))
+    fn execute(&self, cx: &mut Context<'_>, args: &[String]) -> Result<Outcome, CommandError> {
+        let args = Args::new(self.name, self.usage, args);
+        match self.run {
+            Body::Project(run) => run(cx.project, &args),
+            Body::Context(run) => run(cx, &args),
+        }
     }
 }
 
@@ -119,6 +146,21 @@ pub(crate) fn cmd(
         name,
         summary,
         usage,
-        run,
+        run: Body::Project(run),
+    })
+}
+
+/// Builds a boxed [`FnCommand`] whose body needs the workshop.
+pub(crate) fn ccmd(
+    name: &'static str,
+    usage: &'static str,
+    summary: &'static str,
+    run: ContextFn,
+) -> Box<dyn Command> {
+    Box::new(FnCommand {
+        name,
+        summary,
+        usage,
+        run: Body::Context(run),
     })
 }

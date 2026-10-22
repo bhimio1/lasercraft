@@ -81,6 +81,42 @@ impl fmt::Display for Chord {
     }
 }
 
+impl Chord {
+    /// How menus and tooltips show the chord (`docs/spec/style/naming.md`,
+    /// "Chords"): key symbols instead of key names ("Ctrl+=", "PgUp",
+    /// "Del"), and Cmd / Option on macOS.
+    #[must_use]
+    pub fn label(&self) -> String {
+        let mac = cfg!(target_os = "macos");
+        let mut out = String::new();
+        if self.ctrl {
+            out.push_str(if mac { "Cmd+" } else { "Ctrl+" });
+        }
+        if self.shift {
+            out.push_str("Shift+");
+        }
+        if self.alt {
+            out.push_str(if mac { "Option+" } else { "Alt+" });
+        }
+        let key = egui::Key::from_name(&self.key);
+        out.push_str(match key {
+            Some(egui::Key::PageUp) => "PgUp",
+            Some(egui::Key::PageDown) => "PgDn",
+            Some(egui::Key::Delete) => "Del",
+            Some(egui::Key::Escape) => "Esc",
+            Some(egui::Key::Minus) => "-",
+            // The UI font has no arrow glyphs.
+            Some(egui::Key::ArrowLeft) => "Left",
+            Some(egui::Key::ArrowRight) => "Right",
+            Some(egui::Key::ArrowUp) => "Up",
+            Some(egui::Key::ArrowDown) => "Down",
+            Some(k) => k.symbol_or_name(),
+            None => &self.key,
+        });
+        out
+    }
+}
+
 /// Chord → invocation bindings.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Keymap {
@@ -189,6 +225,21 @@ mod tests {
         let b = Chord::parse("Ctrl+Shift+S").unwrap();
         assert_eq!(a, b);
         assert_eq!(a.to_string(), "Ctrl+Shift+S");
+        if !cfg!(target_os = "macos") {
+            for (text, label) in [
+                ("Ctrl+Equals", "Ctrl+="),
+                ("Ctrl+Minus", "Ctrl+-"),
+                ("Delete", "Del"),
+                ("Escape", "Esc"),
+                ("Ctrl+PageUp", "Ctrl+PgUp"),
+                ("Alt+Plus", "Alt++"),
+                ("Ctrl+Backtick", "Ctrl+`"),
+                ("Period", "."),
+                ("Ctrl+Shift+S", "Ctrl+Shift+S"),
+            ] {
+                assert_eq!(Chord::parse(text).unwrap().label(), label, "{text}");
+            }
+        }
         assert_eq!(Chord::parse("Ctrl++").unwrap().key, "Plus");
         assert_eq!(
             Chord::from_event(egui::Key::Z, egui::Modifiers::COMMAND),

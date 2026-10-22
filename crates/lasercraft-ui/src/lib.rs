@@ -4,25 +4,45 @@
 //! clicks, menu picks, shortcuts and console lines into [`Action`]s. The app
 //! runs those through the command session (`docs/spec/ui-shell.md`).
 
+mod camera_panel;
+mod camera_windows;
 mod canvas;
 pub mod colors;
+mod device_dialogs;
 mod dialogs;
+mod dock;
+mod icons;
 pub mod interaction;
 pub mod keymap;
 mod laser_panel;
 mod layers_panel;
+mod materials_panel;
+mod menus;
 mod preview;
+mod setup_windows;
 mod shell;
+mod test_windows;
+mod textures;
+pub mod theme;
+mod tool_column;
+mod trace_window;
 pub mod view;
+pub mod widgets;
 
-pub use laser_panel::{ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, LaserAction, LaserView};
+pub use camera_panel::{CameraAction, CameraLive, CameraStatus, CameraView, LensCapture};
+pub use dock::DockPanel;
+pub use laser_panel::{
+    ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, Enabled, LaserAction, LaserView, MachineWord, clock,
+};
 pub use preview::{Preview, PreviewKind, PreviewMove};
 pub use shell::{Action, Shell, ShellView};
+pub use test_windows::{TestInfo, TestKind, TestRequest};
+pub use trace_window::{TraceInfo, TraceRequest, TraceSource};
 
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 27] = [
+pub const UI_ACTIONS: [&str; 38] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -53,4 +73,19 @@ pub const UI_ACTIONS: [&str; 27] = [
     "ui.jog_down",
     "ui.jog_left",
     "ui.jog_right",
+    // M7: the Adjust Image window.
+    "ui.adjust_image",
+    // M8: device profile and test pattern windows.
+    "ui.device_profiles",
+    "ui.device_profile",
+    "ui.test_speed_power",
+    "ui.test_interval",
+    // M9: job setup windows.
+    "ui.rotary",
+    "ui.taper",
+    "ui.registration",
+    "ui.camera_list",
+    "ui.camera_capture",
+    // Trace to vectors.
+    "ui.trace_image",
 ];

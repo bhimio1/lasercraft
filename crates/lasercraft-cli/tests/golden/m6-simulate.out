@@ -1,5 +1,6 @@
 > device.start
 starting the job (absolute coordinates): 105 lines, burn 743.1 mm, estimated 40.6 s
+Warning: speed 120 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
 refused: cannot start the job: the machine is not idle (Alarm)
 > device.home
 homing
@@ -18,9 +19,11 @@ framing the job's outline (center at X150 Y110) at 50 mm/s, laser off
 frame completed
 > device.start from=current anchor=center
 starting the job (center at X150 Y110): 106 lines, burn 743.1 mm, estimated 41.0 s
+Warning: speed 120 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
 job completed
 > device.start from=user anchor=top-right
 starting the job (top-right at X200 Y150): 105 lines, burn 743.1 mm, estimated 40.6 s
+Warning: speed 120 mm/s is above the machine's 100 mm/s; the estimate uses the machine's speed
 job completed
 > device.send $32
 sending `$32`

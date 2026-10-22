@@ -25,8 +25,8 @@ Milestone: M3.
 - A file that yields no shapes fails with "nothing to import" and changes
   nothing. A file that cannot be read or parsed fails with the reason.
 - Text in a file is not imported. Convert text to outlines in the program
-  that made the file first. Raster images inside a file are skipped (images
-  arrive with M7). The CLI and console report how many shapes were added.
+  that made the file first. Raster images inside an SVG are skipped; PNG and
+  JPEG files are imported as image shapes (`docs/spec/images.md`, M7). The CLI and console report how many shapes were added.
 
 ## Colors to layers
 

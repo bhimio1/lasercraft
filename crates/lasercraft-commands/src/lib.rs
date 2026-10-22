@@ -9,17 +9,22 @@
 //! - Names are `area.action`, such as `project.set_work_area`.
 //! - Lengths are millimetres, angles degrees.
 
+mod action;
 mod args;
 mod cmds;
 mod command;
 mod error;
 mod invocation;
+mod machine;
 mod registry;
 mod session;
 
+pub use action::action_name;
 pub use cmds::device::{DeviceContext, with_context};
-pub use command::{Command, Outcome};
+pub use cmds::trace::{MAX_NODES, TraceSettings, Traced, trace};
+pub use command::{Command, Context, Outcome};
 pub use error::CommandError;
 pub use invocation::Invocation;
+pub use machine::job_settings;
 pub use registry::Registry;
 pub use session::{BATCH, REDO, SESSION_COMMANDS, Session, UNDO};

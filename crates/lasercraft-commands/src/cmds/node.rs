@@ -134,11 +134,12 @@ fn to_path(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandErr
     let changes: Vec<(u32, Geometry)> = ids
         .iter()
         .filter_map(|id| project.shape(*id))
-        .filter(|s| !matches!(s.geometry(), Geometry::Path(_)))
+        .filter(|s| !matches!(s.geometry(), Geometry::Path(_) | Geometry::Image(_)))
         .map(|s| (s.id(), Geometry::Path(s.geometry().to_path())))
         .collect();
     if changes.is_empty() {
-        return Err(args.invalid("nothing to convert: the shapes are already paths"));
+        return Err(args
+            .invalid("nothing to convert: the shapes are already paths (images have no outline)"));
     }
     let count = changes.len();
     let inverse = set_geometries(project, changes)?;
@@ -277,6 +278,7 @@ fn close(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError
 
 fn join(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
     let ids = args.ids(0, project)?;
+    super::objects::vector_only(project, &ids, args)?;
     let subpaths: Vec<_> = ids
         .iter()
         .filter_map(|id| project.shape(*id))

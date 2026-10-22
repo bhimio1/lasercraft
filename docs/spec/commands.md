@@ -27,6 +27,34 @@ Milestone: M0.
   not undoable. Their outcome carries a device request (`Outcome::device`)
   that the front end delivers to the device thread or the simulator.
 
+## User data commands (M8)
+
+- Besides the project, a session holds the user's **workshop**: device
+  profiles (`docs/spec/devices.md`), open material libraries
+  (`docs/spec/materials.md`) and test presets (`docs/spec/test-patterns.md`).
+  Commands run with both; most only touch the project.
+- `profile.*`, `library.*`, `test.preset_*` and the library half of
+  `material.*` change the workshop. Workshop changes are not undoable. When
+  the workshop has a folder, profile and preset changes are written to it
+  at once; libraries are written by `library.save`.
+- A command that changes both (for example `material.update`, which also
+  updates the layers that follow the entry) records only the project part
+  in undo history.
+- A failing command leaves the project and the workshop as they were.
+
+## M9 commands
+
+- `rotary.*` (`docs/spec/rotary.md`), `registration.*`
+  (`docs/spec/registration.md`) and `shape.taper` (`docs/spec/taper.md`)
+  change the project and are undoable.
+- `camera.*` (`docs/spec/camera.md`) change the device profile's cameras
+  (workshop data, saved at once, not undoable); `camera.pattern`,
+  `camera.overlay` and `camera.list` change nothing.
+- `device.rotary_test`, `device.camera_pattern`,
+  `device.camera_pattern_frame` and `registration.expected` are device
+  commands. `registration.set_target` reads the head position (`head=`)
+  that the front end adds, as for framing.
+
 ## Undo and redo
 
 - Undoable commands return an inverse invocation that restores the previous
@@ -40,6 +68,17 @@ Milestone: M0.
   was, and a redo recreates objects with the same ids.
 - Commands that replace the whole document (`project.new`, `project.load`) clear
   both stacks. `project.save` is not an edit and is not recorded.
+
+## Action names
+
+- `action_name(invocation)` gives the readable name of what an undoable
+  command did, lower case, for the Edit menu's "Undo ‹action›": "move",
+  "rotate 90° clockwise", "align left edges", "change layer max power",
+  "move layer down". It never shows a command id or a raw setting key.
+- A batch reads as its first line; anything without a name reads
+  "changes". A test checks every undoable command in the round-trip script
+  has a name of its own.
+- Redo stays plain "Redo".
 
 ## Batches
 
@@ -80,3 +119,4 @@ and `arrange.*` (`docs/spec/arrange.md`).
 ## Sources
 
 - Own design, carried over from the owner's MusicCraft command registry.
+- Action names: `docs/spec/style/naming.md` ("Undo ‹action›", own design).

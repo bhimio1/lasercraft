@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LaserCraft
+GenericName=Laser cutter software
+Comment=Design and run jobs on laser cutters and engravers
+Exec=lasercraft %f
+Icon=io.github.bhimio1.LaserCraft
+Terminal=false
+Categories=Graphics;Engineering;
+Keywords=laser;engraver;cutter;GRBL;CNC;
+StartupWMClass=lasercraft

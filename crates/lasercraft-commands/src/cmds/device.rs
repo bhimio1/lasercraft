@@ -10,8 +10,8 @@ use lasercraft_project::Project;
 
 use super::export::{apply_option, key_value, number};
 use crate::args::Args;
-use crate::command::cmd;
-use crate::{Command, CommandError, Invocation, Outcome};
+use crate::command::{ccmd, cmd};
+use crate::{Command, CommandError, Context, Invocation, Outcome, job_settings};
 
 /// Default jog and framing speed, mm/s.
 pub const DEFAULT_SPEED: f64 = 50.0;
@@ -33,17 +33,29 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             "Stop anything running and disconnect.",
             |_, a| simple(a, Request::Disconnect, "disconnecting"),
         ),
-        cmd(
+        ccmd(
             "device.start",
             "device.start [from=absolute|current|user] [at=X,Y] [anchor=<name>] [s_max=<n>] [air=m7|m8] [finish=on|off] [max_speed=<mm/s>] [accel=<mm/s²>] [max_power=<%>]",
             "Run the job on the connected laser after the safety checks.",
             start,
         ),
-        cmd(
+        ccmd(
             "device.frame",
             "device.frame [outline] [from=absolute|current|user] [at=X,Y] [anchor=<name>] [speed=<mm/s>] [head=X,Y] [max_speed=<mm/s>] [accel=<mm/s²>]",
             "Trace the job's box (or its outline) with the laser off.",
             frame_job,
+        ),
+        ccmd(
+            "device.test",
+            "device.test <speed_power|interval> [json] [from=absolute|current|user] [at=X,Y] [anchor=<name>] [s_max=<n>] [air=m7|m8] [max_speed=<mm/s>] [accel=<mm/s²>] [max_power=<%>]",
+            "Run a test pattern on the connected laser after the safety checks.",
+            test_start,
+        ),
+        ccmd(
+            "device.test_frame",
+            "device.test_frame <speed_power|interval> [json] [outline] [from=absolute|current|user] [at=X,Y] [anchor=<name>] [speed=<mm/s>] [head=X,Y]",
+            "Trace a test pattern's box (or outline) with the laser off.",
+            test_frame,
         ),
         cmd(
             "device.pause",
@@ -133,7 +145,11 @@ fn point_arg(key: &str, p: Point) -> String {
 pub fn with_context(invocation: &Invocation, ctx: &DeviceContext) -> Invocation {
     let mut out = invocation.clone();
     let name = invocation.name.as_str();
-    if matches!(name, "device.start" | "device.frame") && !has_key(invocation, "at") {
+    let job = matches!(
+        name,
+        "device.start" | "device.frame" | "device.test" | "device.test_frame"
+    );
+    if job && !has_key(invocation, "at") {
         let at = match arg_value(invocation, "from") {
             Some("current") => ctx.head,
             Some("user") => ctx.user_origin,
@@ -143,14 +159,24 @@ pub fn with_context(invocation: &Invocation, ctx: &DeviceContext) -> Invocation 
             out.args.push(point_arg("at", at));
         }
     }
-    if name == "device.start"
-        && !has_key(invocation, "s_max")
+    if matches!(
+        name,
+        "device.start" | "device.test" | "device.camera_pattern"
+    ) && !has_key(invocation, "s_max")
         && let Some(s_max) = ctx.s_max
     {
         out.args.push(format!("s_max={}", fmt(s_max)));
     }
-    if matches!(name, "device.frame" | "device.jog")
-        && !has_key(invocation, "head")
+    if matches!(
+        name,
+        "device.frame"
+            | "device.test_frame"
+            | "device.jog"
+            | "device.camera_pattern_frame"
+            | "registration.set_target"
+            | "camera.align"
+            | "camera.align_find"
+    ) && !has_key(invocation, "head")
         && let Some(head) = ctx.head
     {
         out.args.push(point_arg("head", head));
@@ -181,14 +207,14 @@ fn connect(_: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
 }
 
 /// `X,Y` in machine mm.
-fn xy(args: &Args<'_>, key: &str, value: &str) -> Result<Point, CommandError> {
+pub(super) fn xy(args: &Args<'_>, key: &str, value: &str) -> Result<Point, CommandError> {
     let (x, y) = value
         .split_once(',')
         .ok_or_else(|| args.invalid(format!("{key} needs X,Y, not `{value}`")))?;
     Ok(Point::new(number(args, key, x)?, number(args, key, y)?))
 }
 
-fn speed(args: &Args<'_>, value: &str) -> Result<f64, CommandError> {
+pub(super) fn speed(args: &Args<'_>, value: &str) -> Result<f64, CommandError> {
     let v = number(args, "speed", value)?;
     if v > 0.0 && v <= MAX_SPEED {
         Ok(v)
@@ -216,10 +242,16 @@ struct JobArgs {
     outline: bool,
 }
 
-fn job_args(args: &Args<'_>, framing: bool) -> Result<JobArgs, CommandError> {
+fn job_args(
+    cx: &Context<'_>,
+    args: &Args<'_>,
+    framing: bool,
+    from: usize,
+) -> Result<JobArgs, CommandError> {
+    let (machine, options, _) = job_settings(cx.project, cx.workshop);
     let mut job = JobArgs {
-        machine: Machine::default(),
-        options: Options::default(),
+        machine,
+        options,
         from: StartFrom::Absolute,
         speed: DEFAULT_SPEED,
         head: None,
@@ -227,9 +259,9 @@ fn job_args(args: &Args<'_>, framing: bool) -> Result<JobArgs, CommandError> {
     };
     let mut at = None;
     let mut anchor = Anchor::default();
-    for i in 0..args.len() {
+    for i in from..args.len() {
         let raw = args.str(i)?;
-        if framing && i == 0 && raw == "outline" {
+        if framing && i == from && raw == "outline" {
             job.outline = true;
             continue;
         }
@@ -293,13 +325,34 @@ fn fmt(v: f64) -> String {
     lasercraft_plan::num(v)
 }
 
-fn start(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(args, false)?;
+/// Print registration places the job by its targets
+/// (`docs/spec/registration.md`): any other placement is replaced.
+fn registered(cx: &Context<'_>, job: &mut JobArgs) -> String {
+    if cx.project.registration_transform().is_none() {
+        return String::new();
+    }
+    let moved = job.options.placement != Placement::Absolute;
+    job.options.placement = Placement::Absolute;
+    if moved {
+        "\nPrint registration places the job by its targets.".to_owned()
+    } else {
+        String::new()
+    }
+}
+
+fn start(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let mut job = job_args(cx, args, false, 0)?;
+    let note = registered(cx, &mut job);
     let out =
-        export(project, &job.machine, &job.options).map_err(|e| args.invalid(e.to_string()))?;
+        export(cx.project, &job.machine, &job.options).map_err(|e| args.invalid(e.to_string()))?;
+    let mut warnings = String::new();
+    for w in &out.plan.warnings {
+        warnings.push_str("\nWarning: ");
+        warnings.push_str(&w.message);
+    }
     Ok(Outcome::device(
         format!(
-            "starting the job ({}): {} lines, burn {:.1} mm, estimated {}",
+            "starting the job ({}): {} lines, burn {:.1} mm, estimated {}{note}{warnings}",
             placement_text(&job.options),
             out.report.lines,
             out.report.burn_length,
@@ -312,21 +365,98 @@ fn start(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError
     ))
 }
 
-fn frame_job(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(args, true)?;
+fn frame_job(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let mut job = job_args(cx, args, true, 0)?;
+    let note = registered(cx, &mut job);
     let shape = if job.outline {
         FrameShape::Outline
     } else {
         FrameShape::Box
     };
     let speed = job.speed.min(job.machine.max_speed);
-    let gcode = frame(project, &job.machine, &job.options, shape, speed, job.head)
-        .map_err(|e| args.invalid(e.to_string()))?;
+    let gcode = frame(
+        cx.project,
+        &job.machine,
+        &job.options,
+        shape,
+        speed,
+        job.head,
+    )
+    .map_err(|e| args.invalid(e.to_string()))?;
     Ok(Outcome::device(
         format!(
-            "framing the job's {} ({}) at {} mm/s, laser off",
+            "framing the job's {} ({}) at {} mm/s, laser off{note}",
             if job.outline { "outline" } else { "box" },
             placement_text(&job.options),
+            fmt(speed)
+        ),
+        Request::Stream {
+            kind: StreamKind::Frame,
+            gcode,
+        },
+    ))
+}
+
+/// The kind and settings a `device.test*` command names, and where its job
+/// arguments start.
+fn test_parts<'a>(args: &Args<'a>) -> Result<(&'a str, Option<&'a str>, usize), CommandError> {
+    if args.len() == 0 {
+        return Err(args.usage_error());
+    }
+    let kind = args.str(0)?;
+    if args.len() > 1 && args.str(1)?.trim_start().starts_with('{') {
+        Ok((kind, Some(args.str(1)?), 2))
+    } else {
+        Ok((kind, None, 1))
+    }
+}
+
+fn test_start(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let (kind, json, from) = test_parts(args)?;
+    let job = job_args(cx, args, false, from)?;
+    let pattern = super::test::pattern(cx, args, kind, json, &job.machine)?;
+    let out =
+        lasercraft_gcode::export_plan(&pattern.project, pattern.plan, &job.machine, &job.options)
+            .map_err(|e| args.invalid(e.to_string()))?;
+    Ok(Outcome::device(
+        format!(
+            "starting the {} ({}): {} lines, estimated {}",
+            pattern.project.name().to_lowercase(),
+            placement_text(&job.options),
+            out.report.lines,
+            duration(out.plan.stats.total_time)
+        ),
+        Request::Stream {
+            kind: StreamKind::Job,
+            gcode: out.gcode,
+        },
+    ))
+}
+
+fn test_frame(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    let (kind, json, from) = test_parts(args)?;
+    let job = job_args(cx, args, true, from)?;
+    let pattern = super::test::pattern(cx, args, kind, json, &job.machine)?;
+    let shape = if job.outline {
+        FrameShape::Outline
+    } else {
+        FrameShape::Box
+    };
+    let speed = job.speed.min(job.machine.max_speed);
+    let gcode = lasercraft_gcode::frame_plan(
+        &pattern.project,
+        pattern.plan,
+        &job.machine,
+        &job.options,
+        shape,
+        speed,
+        job.head,
+    )
+    .map_err(|e| args.invalid(e.to_string()))?;
+    Ok(Outcome::device(
+        format!(
+            "framing the {} at {} mm/s, laser off",
+            pattern.project.name().to_lowercase(),
             fmt(speed)
         ),
         Request::Stream {

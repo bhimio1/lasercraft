@@ -11,6 +11,7 @@ v1.7); Windows and macOS are supported too. Developed primarily on CachyOS.
 - `ARCHITECTURE.md`: crate graph, threading model, command registry, dependencies.
 - `docs/spec/`: behavior specs. **Write or update the spec before the code.**
 - `docs/spec/safety.md`: binding laser safety requirements.
+- `docs/spec/style/`: UI style guide (layout, names, toolbars, colors as tokens, icons).
 
 ## Clean-room rules (summary; full text in `docs/clean-room.md`)
 
@@ -68,7 +69,9 @@ cargo test --workspace
 ```
 
 CI (`.github/workflows/ci.yml`) runs these on Linux and `cargo check` on Windows
-and macOS.
+and macOS, plus `cargo xtask parity --check docs/parity.md` and
+`packaging/check.sh`. Release packages come from
+`.github/workflows/release.yml` (`docs/spec/release.md`).
 
 ## Working style
 
@@ -78,11 +81,17 @@ and macOS.
 - Keep functions small and crates focused.
 - Commit with clear messages, push to a branch, open a PR. Never push tags.
 
-## File editing protocol
+## File Editing Protocol
 
-1. Use the native `Edit` tool first for localized changes.
-2. Only if it fails on complex whitespace or quoting, use a precise
-   `python3 - <<'EOF'` replacement through Bash, after stating the error.
+1. **Primary Choice**: ALWAYS attempt to use the native `Edit` tool first for
+   surgical, localized line changes. This saves output tokens and maintains
+   file history.
+2. **Fallback Choice**: If (and ONLY if) an edit fails due to complex
+   multi-line formatting, matching errors, or fragile whitespace/quotes, you
+   are permitted to use a precise `python3 - <<'EOF'` script via the Bash
+   tool to perform the replacement.
+3. **Condition**: Before using the Python fallback, you must explicitly state
+   the error the native tool encountered.
 
 ## Milestones
 
@@ -102,10 +111,10 @@ and macOS.
       ping-pong fallback, status polling; jog, home, set origin, job origin
       modes (absolute, current position, user origin); framing,
       start/pause/stop, console. All simulator-tested.
-- [ ] M7 Images: grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki,
+- [x] M7 Images: grayscale, threshold, Floyd–Steinberg, Jarvis, Stucki,
       ordered/Bayer, halftone; brightness/contrast/gamma, negative; DPI/line interval.
-- [ ] M8 Material library (our format, our data), test grids (speed × power),
+- [x] M8 Material library (our format, our data), test grids (speed × power),
       per-device profiles.
-- [ ] M9 Camera overlay and alignment, rotary, print-and-cut (later, optional).
-- [ ] M10 Parity checklist (`cargo xtask parity`) against the public docs;
+- [x] M9 Camera overlay and alignment, rotary, print-and-cut.
+- [x] M10 Parity checklist (`cargo xtask parity`) against the public docs;
       Flatpak, AppImage, .msi and .dmg release builds.

@@ -27,8 +27,10 @@ Milestone: M4. Crate: `lasercraft-plan`. G-code export (M5) and streaming
 
 ## Machine parameters
 
-`Machine` describes what the planner needs from the device until device
-profiles arrive (M8). Defaults are our own conservative guesses for a hobby
+`Machine` describes what the planner needs from the device. From M8 it
+comes from the project's device profile (`docs/spec/devices.md`:
+`max_speed`, `acceleration`, `max_power`); without one the defaults below
+apply. Defaults are our own conservative guesses for a hobby
 GRBL laser, not read from any device:
 
 | Field | Meaning | Default | Valid |
@@ -51,7 +53,8 @@ them itself) but timed at `max_speed`, with a warning per layer.
 - Power: every `burn` move carries the layer's `max_power`, clamped to
   0–100 and to the machine's `max_power`. Nothing in the plan can exceed
   either limit (`docs/spec/safety.md` rule 6). `min_power` only matters for
-  grayscale images (M7) and is not used here.
+  grayscale images, whose planning is in `docs/spec/images.md` (M7): a
+  layer's images are planned after its vector shapes, as rows of dots.
 
 ## Line mode
 

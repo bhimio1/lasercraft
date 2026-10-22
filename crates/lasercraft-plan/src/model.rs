@@ -83,6 +83,22 @@ pub struct LayerSummary {
     pub power: f64,
     /// Overscan distance per line end, mm (0 when off or in line mode).
     pub overscan: f64,
+    /// The layer has vector shapes (planned in `mode`).
+    pub vectors: bool,
+    /// The layer has images (planned as rows of dots).
+    pub images: bool,
+}
+
+impl LayerSummary {
+    /// What the layer runs: its mode, `image`, or both.
+    #[must_use]
+    pub fn kind(&self) -> String {
+        match (self.vectors, self.images) {
+            (true, true) => format!("{} + image", self.mode),
+            (false, true) => "image".to_owned(),
+            _ => self.mode.to_string(),
+        }
+    }
 }
 
 /// Something the user should know about the plan.

@@ -91,8 +91,9 @@ impl fmt::Display for OutOfBounds {
 
 impl std::error::Error for OutOfBounds {}
 
-/// How far `p` lies past each edge, the worst one first.
-fn excess(p: Point, area: &WorkArea) -> Option<(Edge, f64)> {
+/// How far `p` lies past each edge, the worst one first; with `x_only`,
+/// the left and right edges only.
+fn excess(p: Point, area: &WorkArea, x_only: bool) -> Option<(Edge, f64)> {
     [
         (Edge::Left, -p.x),
         (Edge::Right, p.x - area.width_mm),
@@ -100,17 +101,17 @@ fn excess(p: Point, area: &WorkArea) -> Option<(Edge, f64)> {
         (Edge::Bottom, p.y - area.height_mm),
     ]
     .into_iter()
-    .filter(|(_, d)| *d > SLACK)
+    .filter(|(e, d)| *d > SLACK && (!x_only || e.axis() == 'x'))
     .fold(None, |best: Option<(Edge, f64)>, (e, d)| match best {
         Some((_, bd)) if bd >= d => best,
         _ => Some((e, d)),
     })
 }
 
-fn worst(m: &Move, area: &WorkArea) -> Option<OutOfBounds> {
+fn worst(m: &Move, area: &WorkArea, x_only: bool) -> Option<OutOfBounds> {
     [m.from, m.to]
         .into_iter()
-        .filter_map(|p| excess(p, area).map(|(edge, distance)| (p, edge, distance)))
+        .filter_map(|p| excess(p, area, x_only).map(|(edge, distance)| (p, edge, distance)))
         .fold(
             None,
             |best: Option<OutOfBounds>, (point, edge, distance)| match best {
@@ -136,14 +137,29 @@ impl Plan {
     /// layer. On a tie the first cutting (burn or unlit) move wins over the
     /// travel move that leads to it, then the earliest move.
     pub fn check_bounds(&self, area: &WorkArea) -> Result<(), OutOfBounds> {
+        self.check_bounds_on(area, false)
+    }
+
+    /// As [`Plan::check_bounds`], the left and right edges only: on a rotary
+    /// Y is a rotation (`docs/spec/rotary.md`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Plan::check_bounds`].
+    pub fn check_bounds_x(&self, area: &WorkArea) -> Result<(), OutOfBounds> {
+        self.check_bounds_on(area, true)
+    }
+
+    fn check_bounds_on(&self, area: &WorkArea, x_only: bool) -> Result<(), OutOfBounds> {
         let rank = |o: &OutOfBounds| (o.distance, o.kind != MoveKind::Travel);
-        let found = self.moves.iter().filter_map(|m| worst(m, area)).fold(
-            None,
-            |best: Option<OutOfBounds>, o| match best {
+        let found = self
+            .moves
+            .iter()
+            .filter_map(|m| worst(m, area, x_only))
+            .fold(None, |best: Option<OutOfBounds>, o| match best {
                 Some(b) if rank(&b) >= rank(&o) => Some(b),
                 _ => Some(o),
-            },
-        );
+            });
         found.map_or(Ok(()), Err)
     }
 }

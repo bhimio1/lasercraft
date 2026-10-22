@@ -12,5 +12,6 @@ workspace = true
 
 [dependencies]
 lasercraft-geom.workspace = true
+lasercraft-raster.workspace = true
 serde.workspace = true
 serde_json.workspace = true

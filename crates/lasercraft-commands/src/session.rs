@@ -1,6 +1,8 @@
 use lasercraft_project::Project;
 
-use crate::{CommandError, Invocation, Outcome, Registry};
+use lasercraft_workshop::Workshop;
+
+use crate::{CommandError, Context, Invocation, Outcome, Registry};
 
 /// Reserved command name handled by [`Session`]: undo the last undoable command.
 pub const UNDO: &str = "edit.undo";
@@ -34,6 +36,7 @@ struct HistoryEntry {
 /// A project together with its command registry and undo/redo history.
 pub struct Session {
     project: Project,
+    workshop: Workshop,
     registry: Registry,
     undo_stack: Vec<HistoryEntry>,
     redo_stack: Vec<HistoryEntry>,
@@ -44,8 +47,15 @@ impl Session {
     /// Creates a session with empty history.
     #[must_use]
     pub fn new(project: Project, registry: Registry) -> Self {
+        Self::with_workshop(project, registry, Workshop::in_memory())
+    }
+
+    /// Creates a session with empty history and the given user data.
+    #[must_use]
+    pub fn with_workshop(project: Project, registry: Registry, workshop: Workshop) -> Self {
         Self {
             project,
+            workshop,
             registry,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -57,6 +67,18 @@ impl Session {
     #[must_use]
     pub fn project(&self) -> &Project {
         &self.project
+    }
+
+    /// The user's device profiles, libraries and presets.
+    #[must_use]
+    pub fn workshop(&self) -> &Workshop {
+        &self.workshop
+    }
+
+    /// Takes the message about user data that could not be written, if the
+    /// last change could not be saved.
+    pub fn take_workshop_warning(&mut self) -> Option<String> {
+        self.workshop.take_warning()
     }
 
     /// The registry in use.
@@ -183,7 +205,11 @@ impl Session {
         if invocation.name == BATCH {
             self.execute_batch(&invocation.args)
         } else {
-            self.registry.execute(&mut self.project, invocation)
+            let mut cx = Context {
+                project: &mut self.project,
+                workshop: &mut self.workshop,
+            };
+            self.registry.execute(&mut cx, invocation)
         }
     }
 
@@ -429,6 +455,12 @@ mod tests {
             r#"project.set_notes "cut at 80%""#,
             "project.set_work_area 610 305",
             "project.set_origin rear-right",
+            "project.set_device Shop keep_area",
+            // M8: the starter library is open in a fresh session.
+            "material.apply 2 8",
+            "material.follow 1 9",
+            "material.unfollow 9",
+            "material.follow 3 9",
             r#"edit.batch "project.rename Batched" "project.set_work_area 300 200""#,
             "shape.add_rect 0 0 20 10",
             "shape.add_ellipse 50 50 10 5",
@@ -466,6 +498,75 @@ mod tests {
         .map(str::to_owned)
         .to_vec();
         script.extend(m3_round_trip_lines());
+        // M7: an image, its adjustments and the image layer settings.
+        let image = lasercraft_project::Geometry::Image(lasercraft_project::Image::new(
+            3.0,
+            2.0,
+            lasercraft_project::raster::Gray::new(3, 2, vec![0, 60, 120, 180, 240, 255]).unwrap(),
+        ));
+        let image_shape = format!(
+            r#"{{"id":500,"layer":4,"geometry":{},"transform":[1.0,0.0,0.0,1.0,5.0,5.0]}}"#,
+            serde_json::to_string(&image).unwrap()
+        );
+        script.extend([
+            Invocation::new("shape.insert", ["0".to_owned(), image_shape]).to_string(),
+            "image.adjust 500 brightness=5 contrast=-10 gamma=1.25".to_owned(),
+            "layer.set 4 image.dither halftone".to_owned(),
+            "layer.set 4 image.halftone_cells 40".to_owned(),
+            "layer.set 4 image.dot_correction 0.02".to_owned(),
+            "shape.rotate 30 500".to_owned(),
+        ]);
+        // M9: rotary and print registration.
+        let rect = |id: u32, x: f64| {
+            format!(
+                r#"{{"id":{id},"geometry":{{"kind":"rect","width":4.0,"height":4.0}},"transform":[1.0,0.0,0.0,1.0,{x},8.0]}}"#
+            )
+        };
+        script.extend([
+            Invocation::new("shape.insert", ["0".to_owned(), rect(501, 8.0)]).to_string(),
+            Invocation::new("shape.insert", ["0".to_owned(), rect(502, 108.0)]).to_string(),
+            "rotary.set enabled on kind=chuck object_diameter=70".to_owned(),
+            "rotary.set mirror on".to_owned(),
+            "rotary.clear".to_owned(),
+            "registration.set_target 1 501 head=10,390".to_owned(),
+            "registration.set_target 2 502 head=112,389".to_owned(),
+            "registration.fit rigid".to_owned(),
+            "registration.fit scaled".to_owned(),
+            "registration.clear".to_owned(),
+            "registration.restore 1 501 10,10 11,390".to_owned(),
+            "shape.taper top 80 100 60 501 502".to_owned(),
+            Invocation::new(
+                "image.insert_picture",
+                [
+                    concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../examples/fixtures/m7-tile.jpg"
+                    ),
+                    "20",
+                    "30",
+                    "60",
+                    "40",
+                ],
+            )
+            .to_string(),
+            Invocation::new(
+                "image.trace_picture",
+                [
+                    concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../examples/fixtures/m7-tile.jpg"
+                    ),
+                    "20",
+                    "30",
+                    "60",
+                    "40",
+                    r#"{"to": 100, "speck": 20, "reduction": 1}"#,
+                ],
+            )
+            .to_string(),
+            Invocation::new("image.trace", ["500", r#"{"to": 130, "speck": 0}"#, "@6"]).to_string(),
+            Invocation::new("image.trace", ["500", r#"{"delete": true, "to": 130}"#]).to_string(),
+        ]);
         script
     }
 
@@ -568,6 +669,18 @@ mod tests {
     }
 
     #[test]
+    fn every_undoable_command_has_an_action_name() {
+        for line in round_trip_script() {
+            let inv = Invocation::parse(&line).unwrap();
+            let name = crate::action_name(&inv);
+            assert!(
+                name != "changes" && !name.contains('.') && !name.contains('_'),
+                "`{line}` reads \"{name}\""
+            );
+        }
+    }
+
+    #[test]
     fn every_builtin_undoable_command_is_in_the_round_trip() {
         // Keep `round_trip_script` complete: every command is either covered
         // there or listed as not undoable here.
@@ -579,6 +692,8 @@ mod tests {
             "edit.copy",
             "project.export_gcode",
             "layer.select",
+            // A machine move (M9).
+            "registration.expected",
         ];
         // Device commands never change the project (`docs/spec/laser.md`).
         for command in Registry::with_builtin().iter() {
@@ -590,7 +705,25 @@ mod tests {
                 covered
                     || not_undoable.contains(&name)
                     || name.starts_with("select.")
-                    || name.starts_with("device."),
+                    || name.starts_with("device.")
+                    // User data (M8) is not undoable (`docs/spec/commands.md`).
+                    || name.starts_with("profile.")
+                    || name.starts_with("library.")
+                    || name.starts_with("test.")
+                    // Cameras are user data too (M9).
+                    || name.starts_with("camera.")
+                    // Library edits; their project part is tested in
+                    // `cmds::material`.
+                    || matches!(
+                        name,
+                        "material.add"
+                            | "material.update"
+                            | "material.set"
+                            | "material.describe"
+                            | "material.duplicate"
+                            | "material.delete"
+                            | "material.list"
+                    ),
                 "add `{name}` to the round-trip script or list it as not undoable"
             );
         }
