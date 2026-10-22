@@ -55,7 +55,8 @@ settings later.
   0.1 mm).
 - `min_power` matters on GRBL only for grayscale images (lightest shade gets
   `min_power`, darkest `max_power`); line and fill use `max_power` with GRBL's
-  dynamic power mode (`docs/spec/safety.md`).
+  dynamic power mode (`docs/spec/safety.md`). The editor therefore shows
+  Min power (%) only in the image section, enabled for Grayscale.
 - Setting `max_power` below `min_power` fails; lower `min_power` first.
 - Power is clamped again to the device maximum at export (M5).
 - Hidden layers' shapes are not drawn and cannot be clicked. Layers with

@@ -53,16 +53,32 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   Del, Esc, Alt+⏴; Cmd and Option on macOS; `docs/spec/keymap.md`).
 - Left: the drawing tools (Select, Line, Rectangle, Ellipse, Text, Edit
   nodes); the active tool is highlighted.
-- Right: the layers panel. It lists the layers that have shapes in output
-  order (swatch, name, mode, speed and power, output and show switches);
-  clicking a name opens it in the editor below, Shift+click selects its
-  shapes. Move up / Move down / Delete shapes act on the edited layer. The
-  editor shows the layer's settings (fill settings only in fill mode; image
-  settings in a collapsed section). A dragged value is committed as one
-  command when the drag ends; typed values when entered.
-- Bottom: the palette strip of 30 colors; the current color for new shapes is
-  outlined. Clicking a color with shapes selected moves them to that layer,
-  otherwise it becomes the current color.
+- Right: the dock (see M6 additions). Its Layers panel lists the layers that
+  have shapes in output order under a header row (Color, Name, Mode, Speed,
+  power, Output, Show); a color with vectors and images has two rows, the
+  image row reading "Image". Rows are one line: numbered swatch (hollow when
+  hidden, faded when not output), name, a Line / Fill dropdown, "‹speed› /
+  ‹power›%" with an "M3" tag for constant power, and Output and Show
+  switches. Clicking anywhere on a row edits that layer; Shift+click
+  selects its shapes; when every selected shape is on one layer, that layer
+  is edited. ⏶ / ⏷ beside the list move the edited layer; Delete shapes,
+  Copy settings and Paste settings (`layer.copy_settings`) sit below it.
+  The editor starts with the layer's swatch and Name (Enter or leaving the
+  field commits, Esc restores, an empty name is refused), then two
+  label/field pairs per line with units in the labels and no suffixes:
+  Mode | Speed (mm/s), Passes | Max power (%), Air assist | Constant power
+  (M3) (with a warning band while on), then the line or fill settings.
+  "Images on this layer" holds Method (readable names: Grayscale,
+  Threshold, Floyd–Steinberg, Jarvis, Stucki, Atkinson, Ordered (Bayer),
+  Halftone) | Interval (mm), Negative | Min power (%) (Grayscale only),
+  Beam compensation (mm), Halftone frequency (lpi) | Halftone angle (°). A
+  dragged value is committed as one command when the drag ends; typed
+  values when entered.
+- Bottom: the palette strip, one line of 30 square swatches numbered 00–29
+  (black or white digits, whichever contrasts more); swatches that do not
+  fit fold into a "»" More button. The current color has a heavy outline.
+  Clicking a color with shapes selected moves them to that layer, otherwise
+  it becomes the current color; the tooltip says which.
 - F12 or View → Side panels hides and shows the tool palette and the layers
   panel. File → Project notes… (Ctrl+Alt+N) edits the notes.
 - View → Job preview… (Alt+P) opens the job preview window
