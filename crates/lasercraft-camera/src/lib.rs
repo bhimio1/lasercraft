@@ -6,6 +6,7 @@
 
 pub mod align;
 pub mod calibrate;
+pub mod controls;
 pub mod dots;
 pub mod homography;
 pub mod lens;

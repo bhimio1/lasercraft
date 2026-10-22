@@ -497,7 +497,9 @@ impl eframe::App for App {
         let cams = self.profile_cameras();
         let area = *self.session.project().work_area();
         self.cameras.sync(&cams, &area, self.shell.cameras_live());
-        self.cameras.poll();
+        for notice in self.cameras.poll() {
+            self.shell.log(notice);
+        }
         let camera_view = self.cameras.view(&cams);
         let undo = self.session.undo_label().cloned();
         let view = ShellView {

@@ -53,6 +53,12 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             set,
         ),
         ccmd(
+            "camera.set_control",
+            "camera.set_control <name> <control> <value|default>",
+            "Store a picture setting of a camera (brightness, contrast, exposure, focus, …).",
+            set_control,
+        ),
+        ccmd(
             "camera.pattern",
             "camera.pattern <path.svg>",
             "Write the calibration sheet as SVG.",
@@ -222,6 +228,38 @@ fn set(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
     Ok(saved(
         cx,
         format!("camera \"{}\" {key} = {value}", name.trim()),
+    ))
+}
+
+fn set_control(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    args.expect(3, 3)?;
+    let p = profile(cx, args)?;
+    let (name, key, raw) = (args.str(0)?, args.str(1)?, args.str(2)?.trim());
+    let value = if raw == "default" {
+        None
+    } else {
+        Some(
+            raw.parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .ok_or_else(|| args.invalid(format!("`{raw}` is not a number or `default`")))?,
+        )
+    };
+    cx.workshop
+        .edit_camera(&p, name, |c| c.set_control(key, value))
+        .map_err(ws(args))?;
+    let title = lasercraft_camera::controls::known(key)
+        .map_or_else(String::new, lasercraft_camera::controls::title);
+    Ok(saved(
+        cx,
+        match value {
+            Some(v) => format!(
+                "camera \"{}\" {title}: {}",
+                name.trim(),
+                lasercraft_plan::num(v)
+            ),
+            None => format!("camera \"{}\" {title}: the camera's default", name.trim()),
+        },
     ))
 }
 
@@ -637,7 +675,7 @@ fn pattern_project(
         let (g, t) = dot(c);
         p.add_shape(g, t)?;
     }
-    let (g, t) = dot(Point::new(area.width_mm / 2.0, area.height_mm / 2.0));
+    let (g, t) = dot(pattern.center(area.width_mm, area.height_mm));
     p.add_shape(g, t)?;
     Ok(p)
 }

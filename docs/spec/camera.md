@@ -26,6 +26,7 @@ gains `cameras`, a list of:
 | `opacity` | Overlay opacity, 0–100 % (default 70) |
 | `fit` | `{"width": %, "height": %, "dx": mm, "dy": mm}`, fine adjustment of the overlay (default 100, 100, 0, 0) |
 | `skip` | Pictures to drop after the source starts (default 3) |
+| `controls` | Picture settings the user chose: `{"<control key>": number}` (default empty; "Picture settings" below) |
 
 Profiles without `cameras` read as an empty list. A camera file for
 exchange (`.lccam`) holds one camera: `{"format": "lasercraft-camera",
@@ -105,7 +106,11 @@ the picture size was not known (then the size of each picture is used).
    traced, so they are thick enough for the camera to see. The rectangle
    is centered on the bed and is 70 % of the bed by default (Pattern width
    (mm), Pattern height (mm), Mark size (mm), default 12; the pattern must
-   be at least three marks wide and high and fit the bed).
+   be at least three marks wide and high and fit the bed, marks included).
+   Dragging the pattern on the bed drawing of the place page moves it (to
+   keep clear of clamps or a honeycomb seam); it is stored as `dx`, `dy`,
+   the offset of its center from the bed's center (default 0), and stays
+   inside the bed. Center puts it back.
    The burn is a job like any other: Absolute coordinates, the bounds
    check, power clamped to the device maximum, line mode, default speed
    and power from a "Camera alignment" entry of the open material library
@@ -158,9 +163,8 @@ Run in the app on a thread per camera; the UI only gets pictures.
 
 - **USB**: through the operating system's camera interface (Video4Linux2
   on Linux, Media Foundation on Windows, AVFoundation on macOS). The
-  device list gives names and formats; the camera's own controls
-  (exposure, focus, white balance, brightness, contrast, hue, backlight
-  compensation) are shown when it reports them.
+  device list gives names and formats; the camera's own controls are
+  shown when it reports them (below).
 - **Network**: an `http://` or `https://` URL that returns either one JPEG
   picture per request (polled at `rate`) or a motion-JPEG stream
   (`multipart/x-mixed-replace`).
@@ -173,6 +177,30 @@ Run in the app on a thread per camera; the UI only gets pictures.
   every 5 seconds while the camera is shown.
 
 Pictures never leave the computer.
+
+### Picture settings (camera controls)
+
+A camera may offer controls; LaserCraft knows these, by our own keys:
+`brightness`, `contrast`, `hue`, `saturation`, `sharpness`, `gamma`,
+`white_balance`, `backlight`, `gain`, `pan`, `tilt`, `zoom`, `exposure`,
+`iris`, `focus`. Each control the camera reports has a range (minimum,
+maximum, step, default and current value) or is a switch (0 or 1);
+controls the camera reports as read-only or disabled are left out.
+
+- The camera's `controls` key (a map from control key to number, default
+  empty) keeps the values the user chose. When the source opens, each
+  stored value is applied (clamped to the reported range and rounded to
+  its step); controls not stored keep the camera's own value. A value the
+  camera refuses is reported once as "‹Control›: the camera refused ‹v›"
+  and the picture keeps coming.
+- Picture settings in the Camera panel and in Camera setup lists the
+  reported controls in the order above, each with a slider (or a check
+  box for a switch), its value and Default (removes the stored value and
+  sets the camera's default). With no reported controls it says "This
+  camera has no adjustable controls."
+- Network cameras report none. The simulated camera reports `brightness`
+  (−100…100, default 0) and `contrast` (−100…100, default 0) and applies
+  them to its pictures, so the path is testable without hardware.
 
 ## Commands
 
@@ -187,6 +215,7 @@ panel first."
 | `camera.remove <name>` | Remove it with its correction and alignments. |
 | `camera.rename <old> <new>` | |
 | `camera.set <name> <key> <value>` | `use`, `opacity`, `fit_width`, `fit_height`, `fit_dx`, `fit_dy`, `skip`, `device`, `index`, `format`, `url`, `rate`. |
+| `camera.set_control <name> <control> <value\|default>` | Store a picture setting (`default` removes it); the value must be finite. The running source applies it. |
 | `camera.pattern <path.svg>` | Write the calibration sheet. |
 | `camera.calibrate <name> <standard\|wide\|fisheye> <picture> …` | Find the sheet in each picture file (PNG or JPEG), fit the model and store the lens correction. The outcome names the fit and how many dots each picture gave. |
 | `camera.set_lens <name> <json\|path.lccam\|none>` | Store a lens correction (the wizard's choice, or the one in a camera file) or remove it. |
@@ -196,7 +225,7 @@ panel first."
 | `camera.import <path>` / `camera.export <name> <path>` | `.lccam` files; a clashing name gets " (2)", … |
 | `camera.overlay <name> <picture> <out.png>` | Write the overlay of one picture (headless check). |
 | `camera.list` | One line per camera with its source, correction and alignment state. |
-| `device.camera_pattern [json] [speed=<mm/s>] [power=<%>]` | Burn the alignment pattern on the connected laser (a job; Absolute coordinates). `json`: `{"width", "height", "mark"}` mm. |
+| `device.camera_pattern [json] [speed=<mm/s>] [power=<%>]` | Burn the alignment pattern on the connected laser (a job; Absolute coordinates). `json`: `{"width", "height", "mark", "dx", "dy"}` mm (`dx`, `dy` optional). |
 | `device.camera_pattern_frame [json]` | Frame it with the laser off. |
 | `image.insert_picture <path> <x> <y> <w> <h>` | Add a picture file as an image shape covering that bed rectangle (used by "Insert picture"); undoable. |
 
@@ -231,10 +260,6 @@ As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 - AprilTag-style automatic marks; our marks are found by shape only.
 - Alignments interpolated between material heights.
 - Tracing the overlay into shapes (needs Trace to vectors).
-- USB camera controls: the app does not read them yet, so Picture settings
-  says the camera has no adjustable controls.
-- Moving the alignment pattern by dragging it on the bed drawing (today
-  only its size is set; it stays centered).
 
 ## Sources
 

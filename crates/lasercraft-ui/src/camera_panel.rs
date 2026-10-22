@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use lasercraft_camera::Picture;
+use lasercraft_camera::controls::{self, Control, Kind};
 use lasercraft_camera::lens::Lens;
 use lasercraft_camera::overlay::Overlay;
 use lasercraft_commands::Invocation;
@@ -48,6 +49,8 @@ pub struct CameraLive {
     pub picture: Option<Arc<Picture>>,
     /// Changes with every new picture.
     pub revision: u64,
+    /// The controls the camera offers (Picture settings).
+    pub controls: Vec<Control>,
 }
 
 /// One picture taken for the lens correction.
@@ -210,6 +213,69 @@ pub(crate) fn picture(
         }
     }
     (response, rect, scale)
+}
+
+/// The controls a camera offers: a slider (or check box) each, its value
+/// and Default. A slider sends its command when released, so dragging does
+/// not save the profile on every frame.
+pub(crate) fn picture_settings(
+    ui: &mut egui::Ui,
+    camera: &Camera,
+    live: &CameraLive,
+    actions: &mut Vec<Action>,
+) {
+    let t = Tokens::of(ui.ctx());
+    if live.controls.is_empty() {
+        ui.label(
+            egui::RichText::new("This camera has no adjustable controls.").color(t.text_muted),
+        );
+        return;
+    }
+    let set = |key: &str, value: String| {
+        Action::Run(Invocation::new(
+            "camera.set_control",
+            [camera.name.clone(), key.to_owned(), value],
+        ))
+    };
+    egui::Grid::new(("picture-settings-grid", &camera.name))
+        .num_columns(3)
+        .show(ui, |ui| {
+            for c in &live.controls {
+                let stored = camera.controls.get(c.key).copied();
+                ui.label(controls::title(c.key));
+                match c.kind {
+                    Kind::Switch => {
+                        let mut on = stored.unwrap_or(c.value) >= 0.5;
+                        if ui.checkbox(&mut on, "").changed() {
+                            actions.push(set(c.key, if on { "1" } else { "0" }.to_owned()));
+                        }
+                    }
+                    Kind::Range { min, max, step } => {
+                        let id = ui.scope_id().with(("control", &camera.name, c.key));
+                        let held = ui.data(|d| d.get_temp::<f64>(id));
+                        let mut v = held.unwrap_or_else(|| stored.unwrap_or(c.value));
+                        let mut slider = egui::Slider::new(&mut v, min..=max);
+                        if step > 0.0 {
+                            slider = slider.step_by(step);
+                        }
+                        let r = ui.add(slider);
+                        if r.dragged() {
+                            ui.data_mut(|d| d.insert_temp(id, v));
+                        } else if r.drag_stopped() || r.changed() {
+                            ui.data_mut(|d| d.remove::<f64>(id));
+                            actions.push(set(c.key, c.fit(v).to_string()));
+                        }
+                    }
+                }
+                if ui
+                    .add_enabled(stored.is_some(), egui::Button::new("Default"))
+                    .clicked()
+                {
+                    actions.push(set(c.key, "default".to_owned()));
+                }
+                ui.end_row();
+            }
+        });
 }
 
 /// UI state of the Camera panel.
@@ -520,12 +586,7 @@ impl CameraPanel {
                 egui::CollapsingHeader::new("Picture settings")
                     .id_salt(("picture-settings", &camera.name))
                     .default_open(false)
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new("This camera has no adjustable controls.")
-                                .color(t.text_muted),
-                        );
-                    });
+                    .show(ui, |ui| picture_settings(ui, camera, &live, actions));
                 egui::CollapsingHeader::new("Advanced")
                     .id_salt(("camera-advanced", &camera.name))
                     .default_open(false)

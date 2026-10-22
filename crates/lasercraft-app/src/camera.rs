@@ -14,7 +14,7 @@ use eframe::egui;
 use lasercraft_camera::lens::{Lens, Model};
 use lasercraft_camera::overlay::Overlay;
 use lasercraft_camera::synth::{Pose, Renderer};
-use lasercraft_camera::{Picture, sheet};
+use lasercraft_camera::{Picture, controls, sheet};
 use lasercraft_geom::{Point, Rect};
 use lasercraft_project::WorkArea;
 use lasercraft_ui::{CameraLive, CameraStatus, CameraView, LensCapture};
@@ -26,11 +26,17 @@ const RETRY: Duration = Duration::from_secs(5);
 enum Control {
     Stop,
     Rate(f64),
+    /// The stored picture settings changed.
+    Settings(BTreeMap<String, f64>),
 }
 
 enum Message {
     Picture(Picture),
     Failed(String),
+    /// The controls the source offers, with their current values.
+    Controls(Vec<controls::Control>),
+    /// Something to tell the user once.
+    Notice(String),
 }
 
 struct Worker {
@@ -40,6 +46,8 @@ struct Worker {
     status: CameraStatus,
     latest: Option<Arc<Picture>>,
     revision: u64,
+    settings: BTreeMap<String, f64>,
+    offered: Vec<controls::Control>,
 }
 
 /// What the simulated camera sees: the bed, everything burned on it, and
@@ -197,16 +205,25 @@ pub fn sheet_positions(area: &WorkArea) -> [(Point, f64); 5] {
     ]
 }
 
+/// Applies the stored settings and reports the controls with their values.
+fn apply_settings(grabber: &mut dyn Grab, settings: &BTreeMap<String, f64>, tx: &Sender<Message>) {
+    for notice in grabber.apply(settings) {
+        let _ = tx.send(Message::Notice(notice));
+    }
+    let _ = tx.send(Message::Controls(grabber.controls()));
+}
+
 fn spawn(
-    source: &Source,
-    skip: u32,
+    camera: &Camera,
     rate: f64,
     scene: &Arc<Mutex<SimScene>>,
     repaint: &egui::Context,
 ) -> (Sender<Control>, Receiver<Message>) {
     let (ctl_tx, ctl_rx) = channel();
     let (msg_tx, msg_rx) = channel();
-    let source = source.clone();
+    let source = camera.source.clone();
+    let skip = camera.skip;
+    let mut settings = camera.controls.clone();
     let scene = Arc::clone(scene);
     let ctx = repaint.clone();
     thread::spawn(move || {
@@ -218,6 +235,20 @@ fn spawn(
             match ctl_rx.try_recv() {
                 Ok(Control::Stop) | Err(TryRecvError::Disconnected) => return,
                 Ok(Control::Rate(r)) => rate = r,
+                Ok(Control::Settings(s)) => {
+                    // A removed setting goes back to the camera's default.
+                    let mut wanted = s.clone();
+                    if let Some(g) = grabber.as_mut() {
+                        for c in g.controls() {
+                            if settings.contains_key(c.key) && !s.contains_key(c.key) {
+                                wanted.insert(c.key.to_owned(), c.default);
+                            }
+                        }
+                        apply_settings(g.as_mut(), &wanted, &msg_tx);
+                        ctx.request_repaint();
+                    }
+                    settings = s;
+                }
                 Err(TryRecvError::Empty) => {}
             }
             if failed_at.is_some_and(|t| t.elapsed() < RETRY) {
@@ -226,7 +257,8 @@ fn spawn(
             }
             if grabber.is_none() {
                 match open(&source, &scene) {
-                    Ok(g) => {
+                    Ok(mut g) => {
+                        apply_settings(g.as_mut(), &settings, &msg_tx);
                         grabber = Some(g);
                         skipped = 0;
                     }
@@ -270,6 +302,17 @@ fn spawn(
 /// A picture provider on its worker thread.
 trait Grab {
     fn grab(&mut self) -> Result<Picture, String>;
+
+    /// The controls the source offers, current values included.
+    fn controls(&mut self) -> Vec<controls::Control> {
+        Vec::new()
+    }
+
+    /// Applies stored settings to the controls it offers; returns what the
+    /// source refused, in words for the user.
+    fn apply(&mut self, _settings: &BTreeMap<String, f64>) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 fn open(source: &Source, scene: &Arc<Mutex<SimScene>>) -> Result<Box<dyn Grab>, String> {
@@ -283,6 +326,8 @@ fn open(source: &Source, scene: &Arc<Mutex<SimScene>>) -> Result<Box<dyn Grab>, 
 struct Simulated {
     scene: Arc<Mutex<SimScene>>,
     renderer: Option<(WorkArea, Renderer)>,
+    brightness: f64,
+    contrast: f64,
 }
 
 impl Simulated {
@@ -290,6 +335,8 @@ impl Simulated {
         Self {
             scene,
             renderer: None,
+            brightness: 0.0,
+            contrast: 0.0,
         }
     }
 }
@@ -306,7 +353,23 @@ impl Grab for Simulated {
             self.renderer = Some((scene.area, Renderer::new(&lens, &pose)));
         }
         let (_, renderer) = self.renderer.as_ref().ok_or("no renderer")?;
-        Ok(renderer.render([70, 70, 74], |p| scene.color(p)))
+        let picture = renderer.render([70, 70, 74], |p| scene.color(p));
+        Ok(controls::adjust(&picture, self.brightness, self.contrast))
+    }
+
+    fn controls(&mut self) -> Vec<controls::Control> {
+        controls::simulated(self.brightness, self.contrast)
+    }
+
+    fn apply(&mut self, settings: &BTreeMap<String, f64>) -> Vec<String> {
+        for c in controls::simulated(0.0, 0.0) {
+            let v = c.fit(settings.get(c.key).copied().unwrap_or(c.default));
+            match c.key {
+                "brightness" => self.brightness = v,
+                _ => self.contrast = v,
+            }
+        }
+        Vec::new()
     }
 }
 
@@ -390,10 +453,15 @@ mod usb {
     //! USB cameras through `nokhwa` (Video4Linux2, Media Foundation,
     //! AVFoundation).
 
+    use std::collections::BTreeMap;
+
     use lasercraft_camera::Picture;
+    use lasercraft_camera::controls::{self, Kind};
     use nokhwa::pixel_format::RgbFormat;
     use nokhwa::utils::{
-        CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+        CameraControl, CameraIndex, ControlValueDescription, ControlValueSetter, FrameFormat,
+        KnownCameraControl, KnownCameraControlFlag, RequestedFormat, RequestedFormatType,
+        Resolution,
     };
 
     use super::Grab;
@@ -420,6 +488,107 @@ mod usb {
         Ok(Box::new(Usb { camera }))
     }
 
+    /// Our key of a control nokhwa knows.
+    fn key(control: KnownCameraControl) -> Option<&'static str> {
+        use KnownCameraControl as K;
+        Some(match control {
+            K::Brightness => "brightness",
+            K::Contrast => "contrast",
+            K::Hue => "hue",
+            K::Saturation => "saturation",
+            K::Sharpness => "sharpness",
+            K::Gamma => "gamma",
+            K::WhiteBalance => "white_balance",
+            K::BacklightComp => "backlight",
+            K::Gain => "gain",
+            K::Pan => "pan",
+            K::Tilt => "tilt",
+            K::Zoom => "zoom",
+            K::Exposure => "exposure",
+            K::Iris => "iris",
+            K::Focus => "focus",
+            K::Other(_) => return None,
+        })
+    }
+
+    /// A control the camera reports, as ours; `None` when LaserCraft does
+    /// not offer it (unknown, read-only, disabled or not a number).
+    fn offered(c: &CameraControl) -> Option<(controls::Control, bool)> {
+        if c.flag().iter().any(|f| {
+            matches!(
+                f,
+                KnownCameraControlFlag::ReadOnly | KnownCameraControlFlag::Disabled
+            )
+        }) {
+            return None;
+        }
+        let key = key(c.control())?;
+        let (kind, default, value, float) = match c.description() {
+            ControlValueDescription::IntegerRange {
+                min,
+                max,
+                value,
+                step,
+                default,
+            } => (
+                Kind::Range {
+                    min: *min as f64,
+                    max: *max as f64,
+                    step: *step as f64,
+                },
+                *default as f64,
+                *value as f64,
+                false,
+            ),
+            ControlValueDescription::FloatRange {
+                min,
+                max,
+                value,
+                step,
+                default,
+            } => (
+                Kind::Range {
+                    min: *min,
+                    max: *max,
+                    step: *step,
+                },
+                *default,
+                *value,
+                true,
+            ),
+            ControlValueDescription::Boolean { value, default } => (
+                Kind::Switch,
+                f64::from(u8::from(*default)),
+                f64::from(u8::from(*value)),
+                false,
+            ),
+            _ => return None,
+        };
+        Some((
+            controls::Control {
+                key,
+                kind,
+                default,
+                value,
+            },
+            float,
+        ))
+    }
+
+    impl Usb {
+        fn reported(&self) -> Vec<(KnownCameraControl, controls::Control, bool)> {
+            let mut out: Vec<_> = self
+                .camera
+                .camera_controls()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|c| offered(c).map(|(o, float)| (c.control(), o, float)))
+                .collect();
+            out.sort_by_key(|(_, c, _)| controls::KEYS.iter().position(|k| *k == c.key));
+            out
+        }
+    }
+
     impl Grab for Usb {
         fn grab(&mut self) -> Result<Picture, String> {
             let frame = self.camera.frame().map_err(|e| e.to_string())?;
@@ -430,6 +599,33 @@ mod usb {
                 res.height(),
                 frame.buffer(),
             )
+        }
+
+        fn controls(&mut self) -> Vec<controls::Control> {
+            self.reported().into_iter().map(|(_, c, _)| c).collect()
+        }
+
+        fn apply(&mut self, settings: &BTreeMap<String, f64>) -> Vec<String> {
+            let mut refused = Vec::new();
+            for (id, c, float) in self.reported() {
+                let Some(wanted) = settings.get(c.key) else {
+                    continue;
+                };
+                let v = c.fit(*wanted);
+                let setter = match (c.kind, float) {
+                    (Kind::Switch, _) => ControlValueSetter::Boolean(v >= 0.5),
+                    (_, true) => ControlValueSetter::Float(v),
+                    (_, false) => ControlValueSetter::Integer(v.round() as i64),
+                };
+                if self.camera.set_camera_control(id, setter).is_err() {
+                    refused.push(format!(
+                        "{}: the camera refused {}",
+                        controls::title(c.key),
+                        lasercraft_plan::num(v)
+                    ));
+                }
+            }
+            refused
         }
     }
 
@@ -582,11 +778,14 @@ impl Cameras {
             keep
         });
         for c in wanted {
-            if self.workers.contains_key(&c.name) {
+            if let Some(w) = self.workers.get_mut(&c.name) {
+                if w.settings != c.controls {
+                    w.settings.clone_from(&c.controls);
+                    let _ = w.control.send(Control::Settings(c.controls.clone()));
+                }
                 continue;
             }
-            let (control, messages) =
-                spawn(&c.source, c.skip, self.rate, &self.scene, &self.repaint);
+            let (control, messages) = spawn(c, self.rate, &self.scene, &self.repaint);
             self.workers.insert(
                 c.name.clone(),
                 Worker {
@@ -596,14 +795,18 @@ impl Cameras {
                     status: CameraStatus::Connecting,
                     latest: None,
                     revision: 0,
+                    settings: c.controls.clone(),
+                    offered: Vec::new(),
                 },
             );
         }
     }
 
-    /// Collects the workers' pictures and failures.
-    pub fn poll(&mut self) {
-        for w in self.workers.values_mut() {
+    /// Collects the workers' pictures and failures; returns notices for
+    /// the log.
+    pub fn poll(&mut self) -> Vec<String> {
+        let mut notices = Vec::new();
+        for (name, w) in &mut self.workers {
             while let Ok(m) = w.messages.try_recv() {
                 match m {
                     Message::Picture(p) => {
@@ -615,9 +818,12 @@ impl Cameras {
                         w.revision += 1;
                     }
                     Message::Failed(e) => w.status = CameraStatus::Failed(e),
+                    Message::Controls(c) => w.offered = c,
+                    Message::Notice(n) => notices.push(format!("camera \"{name}\": {n}")),
                 }
             }
         }
+        notices
     }
 
     /// Changes the preview rate of every camera.
@@ -723,6 +929,7 @@ impl Cameras {
                         status: w.map_or(CameraStatus::Off, |w| w.status.clone()),
                         picture: w.and_then(|w| w.latest.clone()),
                         revision: w.map_or(0, |w| w.revision),
+                        controls: w.map_or_else(Vec::new, |w| w.offered.clone()),
                     }
                 })
                 .collect(),
@@ -792,5 +999,21 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(cut, b"\xFF\xD8abc\xFF\xD9");
+    }
+
+    #[test]
+    fn the_simulated_camera_offers_and_applies_picture_settings() {
+        let scene = Arc::new(Mutex::new(SimScene::new(WorkArea::default())));
+        let mut camera = Simulated::new(scene);
+        let plain = camera.grab().unwrap();
+        let keys: Vec<&str> = camera.controls().iter().map(|c| c.key).collect();
+        assert_eq!(keys, ["brightness", "contrast"]);
+        let settings = BTreeMap::from([("brightness".to_owned(), 250.0)]);
+        assert!(camera.apply(&settings).is_empty());
+        assert_eq!(camera.controls()[0].value, 100.0, "clamped to the range");
+        let bright = camera.grab().unwrap();
+        assert!(bright.get(5, 5)[0] > plain.get(5, 5)[0]);
+        camera.apply(&BTreeMap::new());
+        assert_eq!(camera.grab().unwrap(), plain, "back to the defaults");
     }
 }

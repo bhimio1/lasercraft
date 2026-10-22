@@ -52,6 +52,21 @@ fn cameras_need_a_device_profile_and_check_their_settings() {
     s.run_line("camera.add Lid network url=http://cam.local/still.jpg rate=1")
         .unwrap();
     s.run_line("camera.set Top opacity 55").unwrap();
+    let out = s
+        .run_line("camera.set_control Top \"White balance\" 4600")
+        .unwrap();
+    assert!(
+        out.message.contains("White balance: 4600"),
+        "{}",
+        out.message
+    );
+    s.run_line("camera.set_control Top focus 40").unwrap();
+    s.run_line("camera.set_control Top focus default").unwrap();
+    assert!(s.run_line("camera.set_control Top aperture 2").is_err());
+    assert!(s.run_line("camera.set_control Top gain loud").is_err());
+    let controls = &s.workshop().camera("Shop", "Top").unwrap().controls;
+    assert_eq!(controls.len(), 1);
+    assert_eq!(controls["white_balance"], 4600.0);
     assert!(s.run_line("camera.set Top url http://x/y").is_err());
     s.run_line("camera.rename Lid \"Lid camera\"").unwrap();
     let list = s.run_line("camera.list").unwrap().message;
@@ -288,5 +303,17 @@ fn the_pattern_burns_as_an_absolute_fill_job_and_frames_laser_off() {
         s.run_line(r#"device.camera_pattern "{\"width\": 500, \"height\": 100, \"mark\": 10}""#)
             .is_err()
     );
+    let moved = r#"device.camera_pattern_frame "{\"width\": 210, \"height\": 140, \"mark\": 12, \"dx\": 30, \"dy\": 20}""#;
+    match s.run_line(moved).unwrap().device {
+        Some(Request::Stream { gcode, .. }) => {
+            // The frame's left edge moves from 39 to 69 mm.
+            assert!(gcode.contains("X69"), "{gcode}");
+        }
+        other => panic!("{other:?}"),
+    }
+    let past =
+        r#"device.camera_pattern "{\"width\": 210, \"height\": 140, \"mark\": 12, \"dx\": 60}""#;
+    let err = s.run_line(past).unwrap_err();
+    assert!(err.to_string().contains("past the bed's edge"), "{err}");
     let _ = std::fs::remove_file(svg);
 }

@@ -11,7 +11,7 @@ use lasercraft_geom::Point;
 use lasercraft_project::Project;
 use lasercraft_workshop::{Camera, Source, Workshop};
 
-use crate::camera_panel::{CameraAction, CameraView, PictureTextures, picture};
+use crate::camera_panel::{CameraAction, CameraView, PictureTextures, picture, picture_settings};
 use crate::keymap::Keymap;
 use crate::laser_panel::{self, Enabled, LaserView};
 use crate::shell::{Action, PromptKind};
@@ -837,6 +837,9 @@ impl CameraWindows {
                 } else {
                     self.live_picture(ui, view, &camera, width);
                 }
+                group(ui, "Picture settings", |ui| {
+                    picture_settings(ui, &cam, &live, actions);
+                });
             });
         });
         self.host = Some(Host::Setup {
@@ -1219,11 +1222,28 @@ impl CameraWindows {
                                     ui.add(egui::DragValue::new(&mut pattern.height).range(10.0..=area.height_mm));
                                     ui.end_row();
                                 });
-                                if ui.button("Default size").clicked() {
-                                    pattern = Pattern::default_for(area.width_mm, area.height_mm);
-                                }
+                                ui.horizontal(|ui| {
+                                    if ui.button("Default size").clicked() {
+                                        pattern = Pattern {
+                                            dx: pattern.dx,
+                                            dy: pattern.dy,
+                                            ..Pattern::default_for(area.width_mm, area.height_mm)
+                                        };
+                                    }
+                                    if ui
+                                        .add_enabled(pattern.dx != 0.0 || pattern.dy != 0.0, egui::Button::new("Center"))
+                                        .clicked()
+                                    {
+                                        pattern.dx = 0.0;
+                                        pattern.dy = 0.0;
+                                    }
+                                });
+                                ui.label(egui::RichText::new("Drag the pattern on the bed to move it.").small().color(t.text_muted));
                             });
-                            bed_drawing(ui, &pattern, area.width_mm, area.height_mm, &t);
+                            let (x, y) = bed_drawing(ui, &pattern, area.width_mm, area.height_mm, &t)
+                                .unwrap_or((pattern.dx, pattern.dy));
+                            // Keeps it on the bed after any size change too.
+                            pattern = pattern.moved(x - pattern.dx, y - pattern.dy, area.width_mm, area.height_mm);
                         });
                         let problem = pattern.validate(area.width_mm, area.height_mm).err();
                         if let Some(p) = &problem {
@@ -1578,11 +1598,39 @@ fn source_box(ui: &mut egui::Ui, camera: &Camera, view: &CameraView, actions: &m
 }
 
 /// The bed with the pattern on it (`bed` fill, grid, marks).
-fn bed_drawing(ui: &mut egui::Ui, pattern: &Pattern, w: f64, h: f64, t: &Tokens) {
+/// Draws the bed with the pattern; while dragged, returns the offset the
+/// pattern should have (`dx`, `dy`, mm).
+fn bed_drawing(
+    ui: &mut egui::Ui,
+    pattern: &Pattern,
+    w: f64,
+    h: f64,
+    t: &Tokens,
+) -> Option<(f64, f64)> {
     let width = ui.available_width().clamp(200.0, 420.0);
     let scale = width / w as f32;
-    let (rect, _) =
-        ui.allocate_exact_size(egui::vec2(width, h as f32 * scale), egui::Sense::hover());
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width, h as f32 * scale), egui::Sense::drag());
+    let response = response.on_hover_cursor(egui::CursorIcon::Grab);
+    // Measured from where the press began, not summed per frame: a pointer
+    // that jumps to the press (touch, pen) must not move the pattern.
+    if response.drag_started() {
+        ui.data_mut(|d| d.insert_temp(response.id, (pattern.dx, pattern.dy)));
+    }
+    let start = ui.data(|d| d.get_temp::<(f64, f64)>(response.id));
+    let origin = ui.input(|i| i.pointer.press_origin());
+    let moved = match (
+        response.dragged(),
+        start,
+        origin,
+        response.interact_pointer_pos(),
+    ) {
+        (true, Some((x, y)), Some(o), Some(now)) => {
+            let d = (now - o) / scale;
+            Some((x + f64::from(d.x), y + f64::from(d.y)))
+        }
+        _ => None,
+    };
     let p = ui.painter();
     p.rect_filled(rect, 0.0, t.bed);
     p.rect_stroke(
@@ -1594,7 +1642,8 @@ fn bed_drawing(ui: &mut egui::Ui, pattern: &Pattern, w: f64, h: f64, t: &Tokens)
     let at = |q: Point| rect.min + egui::vec2(q.x as f32 * scale, q.y as f32 * scale);
     let centers = pattern.centers(w, h);
     let sheet = egui::Rect::from_two_pos(at(centers[0]), at(centers[2]))
-        .expand(pattern.mark as f32 * scale);
+        .expand(pattern.mark as f32 * scale)
+        .intersect(rect);
     p.rect_filled(sheet, 2.0, egui::Color32::WHITE);
     let stroke = egui::Stroke::new(weight::NORMAL, t.text);
     for (i, c) in centers.iter().enumerate() {
@@ -1610,5 +1659,6 @@ fn bed_drawing(ui: &mut egui::Ui, pattern: &Pattern, w: f64, h: f64, t: &Tokens)
             t.text,
         );
     }
-    p.circle_filled(at(Point::new(w / 2.0, h / 2.0)), 2.0, t.text);
+    p.circle_filled(at(pattern.center(w, h)), 2.0, t.text);
+    moved
 }

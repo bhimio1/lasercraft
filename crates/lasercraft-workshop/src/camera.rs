@@ -1,6 +1,9 @@
 //! Cameras of a device profile (`docs/spec/camera.md`, "Camera data").
 
+use std::collections::BTreeMap;
+
 use lasercraft_camera::align::Alignment;
+use lasercraft_camera::controls;
 use lasercraft_camera::lens::{Lens, Model};
 use lasercraft_camera::overlay::Fit;
 use serde::{Deserialize, Serialize};
@@ -101,6 +104,9 @@ pub struct Camera {
     /// Pictures dropped after the source starts.
     #[serde(default = "default_skip")]
     pub skip: u32,
+    /// Picture settings the user chose, by control key.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub controls: BTreeMap<String, f64>,
 }
 
 fn yes() -> bool {
@@ -178,7 +184,33 @@ impl Camera {
             opacity: default_opacity(),
             fit: Fit::default(),
             skip: default_skip(),
+            controls: BTreeMap::new(),
         })
+    }
+
+    /// Stores a picture setting, or removes it with `None`.
+    ///
+    /// # Errors
+    ///
+    /// An unknown control or a value that is not a finite number.
+    pub fn set_control(&mut self, key: &str, value: Option<f64>) -> Result<(), WorkshopError> {
+        let key = controls::known(key).ok_or_else(|| {
+            WorkshopError::new(format!(
+                "`{}` is not a picture setting ({})",
+                key.trim(),
+                controls::KEYS.join(", ")
+            ))
+        })?;
+        match value {
+            Some(v) if v.is_finite() => {
+                self.controls.insert(key.to_owned(), v);
+            }
+            Some(_) => return Err(WorkshopError::new(format!("{key} must be a number"))),
+            None => {
+                self.controls.remove(key);
+            }
+        }
+        Ok(())
     }
 
     /// The lens correction, or, when the picture is used as it is, a lens
@@ -283,6 +315,14 @@ impl Camera {
         if let Some(lens) = &self.lens {
             lens.validate()
                 .map_err(|e| WorkshopError::new(format!("camera \"{}\": {e}", self.name)))?;
+        }
+        for (key, value) in &self.controls {
+            if controls::known(key) != Some(key.as_str()) || !value.is_finite() {
+                return Err(WorkshopError::new(format!(
+                    "camera \"{}\": bad picture setting `{key}`",
+                    self.name
+                )));
+            }
         }
         Ok(())
     }
