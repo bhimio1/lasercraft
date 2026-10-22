@@ -1,0 +1,3 @@
+[alias]
+# `cargo xtask parity`: the parity checklist (docs/spec/parity.md).
+xtask = "run --quiet --package xtask --"
