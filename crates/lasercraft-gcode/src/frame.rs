@@ -167,14 +167,32 @@ pub fn frame_plan(
     if let Some(h) = head {
         moves.push(edge(MoveKind::Travel, at, to_document(area, h)));
     }
-    let path = Plan {
+    let mut path = Plan {
         start,
         layers: Vec::new(),
         stats: Stats::of(&moves),
         moves,
         warnings: Vec::new(),
     };
-    path.check_bounds(area).map_err(ExportError::OutOfBounds)?;
+    let rotary = project.rotary_on().then(|| project.rotary());
+    if let Some(r) = &rotary {
+        // Only the outline turns; the head's own position stays where it is.
+        let about = crate::rotary::about_y(&planned, area, placement);
+        let ends = (path.moves.first().map(|m| m.from), head.is_some());
+        crate::rotary::apply(&mut path, r, about);
+        if let (Some(from), true) = ends {
+            if let Some(m) = path.moves.first_mut() {
+                m.from = from;
+            }
+            if let (Some(m), Some(h)) = (path.moves.last_mut(), head) {
+                m.to = to_document(area, h);
+            }
+        }
+        path.check_bounds_x(area)
+    } else {
+        path.check_bounds(area)
+    }
+    .map_err(ExportError::OutOfBounds)?;
 
     let mut out = String::from("(LaserCraft frame: laser off)\nG90 G21\nM5 S0\n");
     let xy = |p: Point| {
@@ -194,6 +212,7 @@ pub fn frame_plan(
         width: area.width_mm,
         height: area.height_mm,
         s_ceiling: 0.0,
+        y_free: rotary.is_some(),
     };
     let report = verify(&out, &limits).map_err(ExportError::Verify)?;
     if report.burn_length > 0.0 {

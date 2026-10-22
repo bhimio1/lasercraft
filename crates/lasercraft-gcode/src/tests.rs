@@ -337,6 +337,7 @@ fn frames_are_laser_off_and_traced_at_the_given_speed() {
         width: 100.0,
         height: 80.0,
         s_ceiling: 0.0,
+        y_free: false,
     };
     let report = verify(&text, &limits).unwrap();
     assert_eq!(report.burn_length, 0.0);
@@ -381,6 +382,7 @@ fn outline_frames_follow_the_convex_hull() {
         width: 100.0,
         height: 100.0,
         s_ceiling: 0.0,
+        y_free: false,
     };
     let b = verify(&boxed, &limits).unwrap().unlit_length;
     let h = verify(&hull, &limits).unwrap().unlit_length;

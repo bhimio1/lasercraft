@@ -10,6 +10,7 @@ mod file;
 mod image;
 pub mod layer;
 mod layers;
+mod setups;
 mod shape;
 mod shapes;
 mod work_area;
@@ -19,6 +20,7 @@ pub use file::{FORMAT, FORMAT_VERSION};
 pub use image::Image;
 pub use lasercraft_raster as raster;
 pub use layer::{Color, Dither, Follows, ImageSettings, LAYER_COUNT, Layer, Mode};
+pub use setups::{Fit, ROTARY_KEYS, Registration, Rotary, RotaryKind, Target, fit_transform};
 pub use shape::{
     Geometry, MAX_COORD_MM, MAX_POINTS, Shape, snap_points, validate_groups, validate_transform,
 };
@@ -48,6 +50,12 @@ pub struct Project {
     /// The device profile the project is for (M8, `docs/spec/devices.md`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     device: Option<String>,
+    /// Rotary attachment settings (M9, `docs/spec/rotary.md`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rotary: Option<Rotary>,
+    /// Print registration (M9, `docs/spec/registration.md`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    registration: Option<Registration>,
     next_id: u32,
     /// Settings for all 30 layers, in output order.
     #[serde(default)]
@@ -69,6 +77,8 @@ impl Default for Project {
             notes: String::new(),
             work_area: WorkArea::default(),
             device: None,
+            rotary: None,
+            registration: None,
             next_id: 1,
             layers: layer::LayerTable::default(),
             shapes: Vec::new(),
@@ -187,6 +197,78 @@ impl Project {
         Ok(())
     }
 
+    /// The rotary settings (defaults when none are stored).
+    #[must_use]
+    pub fn rotary(&self) -> Rotary {
+        self.rotary.clone().unwrap_or_default()
+    }
+
+    /// Whether rotary output is on.
+    #[must_use]
+    pub fn rotary_on(&self) -> bool {
+        self.rotary.as_ref().is_some_and(|r| r.enabled)
+    }
+
+    /// Stores rotary settings; the defaults are stored as none.
+    ///
+    /// # Errors
+    ///
+    /// A value out of range.
+    pub fn set_rotary(&mut self, rotary: Rotary) -> Result<(), ProjectError> {
+        rotary.validate()?;
+        self.rotary = (rotary != Rotary::default()).then_some(rotary);
+        Ok(())
+    }
+
+    /// Print registration targets and fit.
+    #[must_use]
+    pub fn registration(&self) -> Registration {
+        self.registration.clone().unwrap_or_default()
+    }
+
+    /// Stores print registration; no targets is stored as none.
+    ///
+    /// # Errors
+    ///
+    /// More than two targets, a bad point, or a fit without two targets.
+    pub fn set_registration(&mut self, registration: Registration) -> Result<(), ProjectError> {
+        registration.validate()?;
+        self.registration = (!registration.targets.is_empty()).then_some(registration);
+        Ok(())
+    }
+
+    /// The print registration transform in effect: a fit is set and both
+    /// target objects still exist.
+    #[must_use]
+    pub fn registration_transform(&self) -> Option<lasercraft_geom::Affine> {
+        let reg = self.registration.as_ref()?;
+        let exists = |id: u32| {
+            self.shapes
+                .iter()
+                .any(|s| s.id() == id || s.groups().first() == Some(&id))
+        };
+        if !reg.targets.iter().all(|t| exists(t.object)) {
+            return None;
+        }
+        reg.transform(&self.work_area)
+    }
+
+    /// The project as a job runs it: with print registration's transform
+    /// applied to every shape (`docs/spec/registration.md`).
+    #[must_use]
+    pub fn as_run(&self) -> std::borrow::Cow<'_, Self> {
+        let Some(t) = self.registration_transform() else {
+            return std::borrow::Cow::Borrowed(self);
+        };
+        let mut copy = self.clone();
+        for shape in &mut copy.shapes {
+            let moved = t * *shape.transform();
+            // A fitted transform is a similarity, so it stays valid.
+            shape.set_transform(moved);
+        }
+        std::borrow::Cow::Owned(copy)
+    }
+
     /// The identifier the next created object will get.
     #[must_use]
     pub fn next_id(&self) -> u32 {
@@ -212,6 +294,12 @@ impl Project {
         copy.set_name(&self.name)?;
         copy.set_notes(&self.notes)?;
         copy.set_device(self.device.as_deref())?;
+        if let Some(r) = &self.rotary {
+            r.validate()?;
+        }
+        if let Some(r) = &self.registration {
+            r.validate()?;
+        }
         WorkArea::new(
             self.work_area.width_mm,
             self.work_area.height_mm,

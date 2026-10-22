@@ -1,0 +1,21 @@
+layer 9 name = Targets
+layer 9 output = off
+added rect 1
+added rect 2
+added rect 3
+target 1 set: object 1 at X12 Y389
+target 2 set: object 2 at X191.9 Y392
+job placed on the targets (moved and turned)
+exported m9-registered.gcode: 13 lines, burn 320.0 mm, max S 200, estimated 35.2 s
+print registration cleared
+rotary on: chuck, 100 mm per turn, circumference 200.0 mm
+GRBL's soft limits ($20=1) may stop rotary jobs with alarm 2; turn them off while the rotary is in use.
+taper correction on 1 shape(s): 12.9% narrower at the narrow end
+exported m9-rotary.gcode: 131 lines, burn 248.5 mm, max S 200, estimated 33.9 s
+saved m9-setups.lcproj
+project "Untitled": work area 400 × 400 mm, origin front-left, 3 shape(s), rotary chuck (100 mm per turn)
+  layer  1 "Layer 01": line 10 mm/s, power 0–20%, 1 pass(es)
+  layer  9 "Targets": line 10 mm/s, power 0–20%, 1 pass(es), output off
+     1 @9  rect     (5, 5) – (15, 15)
+     2 @9  rect     (185, 5) – (195, 15)
+     3 @1  path     (40, 40) – (140, 100)

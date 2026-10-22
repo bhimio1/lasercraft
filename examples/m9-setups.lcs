@@ -1,0 +1,19 @@
+# LaserCraft M9: print registration, rotary output and taper correction,
+# headless. Run from the repository root:
+#   lasercraft-cli script examples/m9-setups.lcs
+# It writes m9-registered.gcode, m9-rotary.gcode and m9-setups.lcproj to the
+# current folder. head=X,Y stands in for the machine's reported position.
+layer.set 9 name Targets
+layer.set 9 output off
+shape.add_rect 5 5 10 10 @9                       # target 1, printed mark
+shape.add_rect 185 5 10 10 @9                     # target 2
+shape.add_rect 40 40 100 60 @1                    # the part to cut
+registration.set_target 1 1 head=12,389
+registration.set_target 2 2 head=191.9,392
+registration.fit rigid
+project.export_gcode m9-registered.gcode
+registration.clear
+rotary.set enabled on kind=chuck mm_per_turn=100 object_diameter=63.662
+shape.taper top 70 100 55 3
+project.export_gcode m9-rotary.gcode
+project.save m9-setups.lcproj

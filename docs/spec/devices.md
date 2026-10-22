@@ -20,6 +20,7 @@ GRBL profile.
 | `max_power` | Device power ceiling, % (safety rule 6) | 100 | 0–100 |
 | `s_max` | Full-power S value, must equal GRBL's `$30` | 1000 | 1–100 000 |
 | `air` | Air assist code, `m7` or `m8` | `m8` | |
+| `cameras` | M9: the machine's cameras (`docs/spec/camera.md`) | none | |
 
 - One profile may be the **default**: it is chosen for new projects.
 - Z axis, pointer offset, start/end G-code, scan shift correction, the

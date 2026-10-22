@@ -42,6 +42,19 @@ Milestone: M0.
   in undo history.
 - A failing command leaves the project and the workshop as they were.
 
+## M9 commands
+
+- `rotary.*` (`docs/spec/rotary.md`), `registration.*`
+  (`docs/spec/registration.md`) and `shape.taper` (`docs/spec/taper.md`)
+  change the project and are undoable.
+- `camera.*` (`docs/spec/camera.md`) change the device profile's cameras
+  (workshop data, saved at once, not undoable); `camera.pattern`,
+  `camera.overlay` and `camera.list` change nothing.
+- `device.rotary_test`, `device.camera_pattern`,
+  `device.camera_pattern_frame` and `registration.expected` are device
+  commands. `registration.set_target` reads the head position (`head=`)
+  that the front end adds, as for framing.
+
 ## Undo and redo
 
 - Undoable commands return an inverse invocation that restores the previous

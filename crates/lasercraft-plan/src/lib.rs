@@ -206,6 +206,9 @@ pub(crate) fn plan_layer(
 /// Fails only for machine parameters out of range.
 pub fn plan(project: &Project, machine: &Machine) -> Result<Plan, PlanError> {
     machine.validate()?;
+    // Print registration moves the whole job (`docs/spec/registration.md`).
+    let fitted = project.as_run();
+    let project: &Project = &fitted;
     let start = origin_point(project.work_area());
     let mut out = Emitter::new(start, machine.max_speed);
     let mut layers = Vec::new();

@@ -12,7 +12,31 @@ use lasercraft_workshop::Workshop;
 pub fn build(project: &Project, workshop: &Workshop) -> Preview {
     let (machine, _, _) = job_settings(project, workshop);
     match lasercraft_plan::plan(project, &machine) {
-        Ok(plan) => from_plan(project, &plan),
+        Ok(plan) => {
+            let mut preview = from_plan(project, &plan);
+            if project.rotary_on() {
+                let height = plan.stats.bounds.map_or(0.0, |b| b.height());
+                preview.lines.insert(
+                    2,
+                    format!(
+                        "Rotary: Y turns {}° for the design's height",
+                        num((project.rotary().degrees(height) * 10.0).round() / 10.0)
+                    ),
+                );
+                // Y is a rotation: only X is checked (docs/spec/rotary.md).
+                preview.error = plan
+                    .check_bounds_x(project.work_area())
+                    .err()
+                    .map(|e| e.to_string());
+            }
+            if project.registration_transform().is_some() {
+                preview.lines.insert(
+                    2,
+                    "Print registration: the job is fitted to its targets".to_owned(),
+                );
+            }
+            preview
+        }
         Err(e) => Preview {
             error: Some(e.to_string()),
             ..Preview::default()

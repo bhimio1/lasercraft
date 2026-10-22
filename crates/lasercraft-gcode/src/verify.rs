@@ -19,6 +19,8 @@ pub struct Limits {
     pub height: f64,
     /// Highest `S` allowed anywhere.
     pub s_ceiling: f64,
+    /// Y is a rotary axis: no Y limits (`docs/spec/rotary.md`).
+    pub y_free: bool,
 }
 
 /// A rule the program breaks, with its 1-based line number.
@@ -198,7 +200,8 @@ pub fn verify(text: &str, limits: &Limits) -> Result<Report, Violation> {
             return Err(fail(n, "G1 before any F"));
         }
         let (x, y) = target;
-        if x < -SLACK || y < -SLACK || x > limits.width + SLACK || y > limits.height + SLACK {
+        let y_out = !limits.y_free && (y < -SLACK || y > limits.height + SLACK);
+        if x < -SLACK || x > limits.width + SLACK || y_out {
             return Err(fail(
                 n,
                 format!(
@@ -241,6 +244,7 @@ mod tests {
         width: 100.0,
         height: 50.0,
         s_ceiling: 1000.0,
+        y_free: false,
     };
 
     fn check(text: &str) -> Result<Report, Violation> {

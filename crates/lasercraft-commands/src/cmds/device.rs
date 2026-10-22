@@ -165,8 +165,10 @@ pub fn with_context(invocation: &Invocation, ctx: &DeviceContext) -> Invocation 
     {
         out.args.push(format!("s_max={}", fmt(s_max)));
     }
-    if matches!(name, "device.frame" | "device.test_frame" | "device.jog")
-        && !has_key(invocation, "head")
+    if matches!(
+        name,
+        "device.frame" | "device.test_frame" | "device.jog" | "registration.set_target"
+    ) && !has_key(invocation, "head")
         && let Some(head) = ctx.head
     {
         out.args.push(point_arg("head", head));
@@ -197,14 +199,14 @@ fn connect(_: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
 }
 
 /// `X,Y` in machine mm.
-fn xy(args: &Args<'_>, key: &str, value: &str) -> Result<Point, CommandError> {
+pub(super) fn xy(args: &Args<'_>, key: &str, value: &str) -> Result<Point, CommandError> {
     let (x, y) = value
         .split_once(',')
         .ok_or_else(|| args.invalid(format!("{key} needs X,Y, not `{value}`")))?;
     Ok(Point::new(number(args, key, x)?, number(args, key, y)?))
 }
 
-fn speed(args: &Args<'_>, value: &str) -> Result<f64, CommandError> {
+pub(super) fn speed(args: &Args<'_>, value: &str) -> Result<f64, CommandError> {
     let v = number(args, "speed", value)?;
     if v > 0.0 && v <= MAX_SPEED {
         Ok(v)
@@ -315,13 +317,34 @@ fn fmt(v: f64) -> String {
     lasercraft_plan::num(v)
 }
 
+/// Print registration places the job by its targets
+/// (`docs/spec/registration.md`): any other placement is replaced.
+fn registered(cx: &Context<'_>, job: &mut JobArgs) -> String {
+    if cx.project.registration_transform().is_none() {
+        return String::new();
+    }
+    let moved = job.options.placement != Placement::Absolute;
+    job.options.placement = Placement::Absolute;
+    if moved {
+        "\nPrint registration places the job by its targets.".to_owned()
+    } else {
+        String::new()
+    }
+}
+
 fn start(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(cx, args, false, 0)?;
+    let mut job = job_args(cx, args, false, 0)?;
+    let note = registered(cx, &mut job);
     let out =
         export(cx.project, &job.machine, &job.options).map_err(|e| args.invalid(e.to_string()))?;
+    let mut warnings = String::new();
+    for w in &out.plan.warnings {
+        warnings.push_str("\nWarning: ");
+        warnings.push_str(&w.message);
+    }
     Ok(Outcome::device(
         format!(
-            "starting the job ({}): {} lines, burn {:.1} mm, estimated {}",
+            "starting the job ({}): {} lines, burn {:.1} mm, estimated {}{note}{warnings}",
             placement_text(&job.options),
             out.report.lines,
             out.report.burn_length,
@@ -335,7 +358,8 @@ fn start(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError>
 }
 
 fn frame_job(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    let job = job_args(cx, args, true, 0)?;
+    let mut job = job_args(cx, args, true, 0)?;
+    let note = registered(cx, &mut job);
     let shape = if job.outline {
         FrameShape::Outline
     } else {
@@ -353,7 +377,7 @@ fn frame_job(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandEr
     .map_err(|e| args.invalid(e.to_string()))?;
     Ok(Outcome::device(
         format!(
-            "framing the job's {} ({}) at {} mm/s, laser off",
+            "framing the job's {} ({}) at {} mm/s, laser off{note}",
             if job.outline { "outline" } else { "box" },
             placement_text(&job.options),
             fmt(speed)

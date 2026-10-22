@@ -17,6 +17,7 @@ mod point;
 pub mod polyline;
 mod rect;
 pub mod snap;
+pub mod taper;
 
 pub use affine::Affine;
 pub use path::{Path, Segment, SubPath};

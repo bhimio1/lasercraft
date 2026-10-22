@@ -6,6 +6,7 @@
 
 mod frame;
 mod place;
+pub mod rotary;
 mod verify;
 mod write;
 
@@ -163,14 +164,23 @@ pub fn export_plan(
     options: &Options,
 ) -> Result<Exported, ExportError> {
     options.validate()?;
-    let plan = place(
+    let mut plan = place(
         planned,
         project.work_area(),
         options.placement,
         machine.max_speed,
     );
-    plan.check_bounds(project.work_area())
-        .map_err(ExportError::OutOfBounds)?;
+    let rotary = project.rotary_on().then(|| project.rotary());
+    if let Some(r) = &rotary {
+        let about = rotary::about_y(&plan, project.work_area(), options.placement);
+        plan.warnings
+            .extend(rotary::warnings(&plan, r, options.placement));
+        rotary::apply(&mut plan, r, about);
+        plan.check_bounds_x(project.work_area())
+    } else {
+        plan.check_bounds(project.work_area())
+    }
+    .map_err(ExportError::OutOfBounds)?;
     if !plan.moves.iter().any(|m| m.kind == MoveKind::Burn) {
         return Err(ExportError::Nothing);
     }
@@ -180,6 +190,7 @@ pub fn export_plan(
         width: area.width_mm,
         height: area.height_mm,
         s_ceiling: options.s_max * machine.max_power.clamp(0.0, 100.0) / 100.0,
+        y_free: rotary.is_some(),
     };
     let report = verify(&gcode, &limits).map_err(ExportError::Verify)?;
     Ok(Exported {

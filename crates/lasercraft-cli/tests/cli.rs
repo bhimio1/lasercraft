@@ -485,3 +485,46 @@ fn config_folder_keeps_profiles_between_runs_and_pattern_prints_a_plan() {
     assert_eq!(out.status.code(), Some(1));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn m9_setups_script_and_gcode_match_golden() {
+    let dir = temp_dir("setups");
+    let source = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    let out = cli_in(&dir, &["script", &format!("{source}/m9-setups.lcs")]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+    let files = [
+        ("m9-setups.out", stdout(&out)),
+        (
+            "m9-registered.gcode",
+            std::fs::read_to_string(dir.join("m9-registered.gcode")).unwrap(),
+        ),
+        (
+            "m9-rotary.gcode",
+            std::fs::read_to_string(dir.join("m9-rotary.gcode")).unwrap(),
+        ),
+    ];
+    for (name, text) in &files {
+        let path = format!("{golden}/{name}");
+        if std::env::var_os("LASERCRAFT_UPDATE_GOLDEN").is_some() {
+            std::fs::write(&path, text).unwrap();
+        }
+        assert_eq!(
+            text,
+            &std::fs::read_to_string(&path).unwrap_or_default(),
+            "{name}"
+        );
+    }
+    // The registered job is turned: its first cut is not axis-aligned.
+    let registered = &files[1].1;
+    assert!(registered.contains("G1 X42.459 Y359.504"), "{registered}");
+    // Rotary halves Y (100 mm per turn on a 200 mm circumference) and the
+    // feeds of vertical moves with it.
+    let rotary = &files[2].1;
+    assert!(rotary.contains("Y330..360"), "{rotary}");
+    // The preview names the rotary and checks X only.
+    let preview = cli_in(&dir, &["preview", "m9-setups.lcproj"]);
+    let text = stdout(&preview);
+    assert!(text.contains("rotary: Y turns 108°"), "{text}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

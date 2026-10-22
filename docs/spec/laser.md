@@ -29,6 +29,8 @@ Placement arguments: `from=absolute|current|user` (default absolute),
 absolute) and `anchor=<name>` (default `bottom-left`). The app fills in `at`
 (from the last status report or the stored user origin), `head` and `s_max`
 (from `$30`) when the user did not give them. Default speed: 50 mm/s.
+`device.start` lists the planner's warnings after its summary (M9), one
+"Warning: …" line each.
 
 ## Coordinates
 

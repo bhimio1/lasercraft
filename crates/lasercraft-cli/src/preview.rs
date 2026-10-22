@@ -75,6 +75,27 @@ fn options(args: &[String]) -> Result<Options, CliError> {
     })
 }
 
+/// The rotary and print registration line of a preview, if either is on
+/// (`docs/spec/rotary.md`, `docs/spec/registration.md`).
+#[must_use]
+pub fn setups_line(project: &Project, plan: &lasercraft_plan::Plan) -> Option<String> {
+    let mut parts = Vec::new();
+    if project.rotary_on() {
+        let height = plan.stats.bounds.map_or(0.0, |b| b.height());
+        parts.push(format!(
+            "rotary: Y turns {}° for the design's height; Y is not checked against the bed",
+            num((project.rotary().degrees(height) * 10.0).round() / 10.0)
+        ));
+    }
+    if project.registration_transform().is_some() {
+        parts.push(format!(
+            "print registration: job fitted to the targets ({})",
+            project.registration().fit.as_str()
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join("\n"))
+}
+
 /// Runs `preview <project.lcproj> [--svg out.svg] [--moves] [machine flags]`.
 pub(crate) fn preview(args: &[String]) -> Result<String, CliError> {
     let o = options(args)?;
@@ -94,7 +115,15 @@ pub(crate) fn preview(args: &[String]) -> Result<String, CliError> {
         out.push_str(&plan.summary());
     }
     let area = project.work_area();
-    match plan.check_bounds(area) {
+    if let Some(line) = setups_line(&project, &plan) {
+        let _ = writeln!(out, "{line}");
+    }
+    let check = if project.rotary_on() {
+        plan.check_bounds_x(area)
+    } else {
+        plan.check_bounds(area)
+    };
+    match check {
         Ok(()) => {
             let _ = writeln!(
                 out,

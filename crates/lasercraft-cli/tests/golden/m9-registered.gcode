@@ -1,0 +1,13 @@
+(LaserCraft G-code for GRBL laser mode)
+(Job: Untitled)
+(Bounds: X42.459..143.445 Y299.512..361.171 mm)
+(Estimated time: 35.2 s)
+G90 G21
+M5 S0
+M4 S0
+G0 X43.459 Y299.512
+G1 X42.459 Y359.504 S200 F600
+G1 X142.445 Y361.171
+G1 X143.445 Y301.179
+G1 X43.459 Y299.512
+M5 S0

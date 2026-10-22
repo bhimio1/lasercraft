@@ -301,6 +301,24 @@ pub fn summary(project: &Project) -> String {
     if let Some(device) = project.device() {
         let _ = write!(out, ", device \"{device}\"");
     }
+    if project.rotary_on() {
+        let r = project.rotary();
+        let _ = write!(
+            out,
+            ", rotary {} ({} mm per turn)",
+            r.kind,
+            lasercraft_plan::num(r.mm_per_turn)
+        );
+    }
+    let reg = project.registration();
+    if !reg.targets.is_empty() {
+        let _ = write!(
+            out,
+            ", {} registration target(s), fit {}",
+            reg.targets.len(),
+            reg.fit.as_str()
+        );
+    }
     for color in project.used_layers() {
         if let Ok(l) = project.layer(color) {
             let on_layer = || project.shapes().iter().filter(move |s| s.layer() == color);

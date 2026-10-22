@@ -516,6 +516,26 @@ mod tests {
             "layer.set 4 image.dot_correction 0.02".to_owned(),
             "shape.rotate 30 500".to_owned(),
         ]);
+        // M9: rotary and print registration.
+        let rect = |id: u32, x: f64| {
+            format!(
+                r#"{{"id":{id},"geometry":{{"kind":"rect","width":4.0,"height":4.0}},"transform":[1.0,0.0,0.0,1.0,{x},8.0]}}"#
+            )
+        };
+        script.extend([
+            Invocation::new("shape.insert", ["0".to_owned(), rect(501, 8.0)]).to_string(),
+            Invocation::new("shape.insert", ["0".to_owned(), rect(502, 108.0)]).to_string(),
+            "rotary.set enabled on kind=chuck object_diameter=70".to_owned(),
+            "rotary.set mirror on".to_owned(),
+            "rotary.clear".to_owned(),
+            "registration.set_target 1 501 head=10,390".to_owned(),
+            "registration.set_target 2 502 head=112,389".to_owned(),
+            "registration.fit rigid".to_owned(),
+            "registration.fit scaled".to_owned(),
+            "registration.clear".to_owned(),
+            "registration.restore 1 501 10,10 11,390".to_owned(),
+            "shape.taper top 80 100 60 501 502".to_owned(),
+        ]);
         script
     }
 
@@ -641,6 +661,8 @@ mod tests {
             "edit.copy",
             "project.export_gcode",
             "layer.select",
+            // A machine move (M9).
+            "registration.expected",
         ];
         // Device commands never change the project (`docs/spec/laser.md`).
         for command in Registry::with_builtin().iter() {
