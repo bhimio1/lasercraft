@@ -25,6 +25,8 @@ lasercraft-app ──► lasercraft-plan (M4)
 lasercraft-commands ──► lasercraft-gcode ──► lasercraft-plan (M5: project.export_gcode)
 lasercraft-commands ──► lasercraft-device (M6: device.* commands return a Request)
 lasercraft-app ──► lasercraft-device (M6: the device thread)
+lasercraft-commands ──► lasercraft-workshop ──► lasercraft-project (M8: device profiles, material libraries, test presets)
+lasercraft-app, lasercraft-cli ──► lasercraft-workshop (M8: the configuration folder)
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
 lasercraft-cli ──► lasercraft-device (M6: simulate)
@@ -49,13 +51,18 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-plan` | Layers to ordered toolpaths, fills, kerf, tabs, time estimates. Pure, golden-tested (`docs/spec/planning.md`). | M4: `plan(&Project, &Machine) -> Plan` (burn/unlit/travel moves), inner-first nearest-neighbour order, kerf, automatic tabs, even-odd fill with overscan and crosshatch, trapezoidal time estimate, `Plan::check_bounds`, text dump |
 | `lasercraft-gcode` | GRBL-dialect output (`docs/spec/gcode.md`): refuses off-bed and empty jobs, writes `M4`/`M3` laser-mode G-code, and checks every program with an independent verifier that replays GRBL laser rules. | M5; M6: job placement (Start From, nine-point job origin), laser-off framing (box, convex hull) |
 | `lasercraft-device` | Serial connection, GRBL streaming, status polling, simulated GRBL (`docs/spec/device.md`). | M6: reply parser, I/O-free `Controller` (character counting with send-response fallback, polling, stalls, hold-then-reset stop, spindle stop on pausing `M3` jobs, laser-mode check), simulated GRBL with a laser-on log, `Bench`, device thread (serial and simulator) |
+| `lasercraft-workshop` | The user's data outside projects: device profiles, material libraries (`.lcmat`), test presets, the starter library, their JSON formats and the configuration folder (`docs/spec/devices.md`, `docs/spec/materials.md`, `docs/spec/test-patterns.md`). | M8 |
 | `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags); M5: `export`; M6: `simulate` |
 | `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window |
 | `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin |
 
 ## Command registry
 
-- `Command` trait: `name`, `summary`, `usage`, `execute(&mut Project, &[String])`.
+- `Command` trait: `name`, `summary`, `usage`, `execute(&mut Context, &[String])`
+  where `Context` holds the project and the user's workshop (M8; before M8
+  commands saw only the project). Table commands that need only the project
+  keep their `fn(&mut Project, &Args)` body; workshop commands use
+  `fn(&mut Context, &Args)`.
 - An `Invocation` is a command name plus string arguments. A shortcut, menu
   item, CLI line, script line and MCP tool call all become one. Its text form
   supports quoting, so paths and JSON can be arguments.
@@ -155,4 +162,5 @@ M3 notes: node editing, joining and splitting live in `lasercraft-geom`
 - File dialogs: M0 asks for a path in a text field. A native dialog crate
   (e.g. `rfd`) needs a portal on Flatpak; decide in M1.
 - Whether the MCP server is a separate crate (as in MusicCraft).
-- Where device profiles live (M8): project file, user config, or both.
+- Device profiles (decided in M8): in the user configuration folder
+  (`devices.json`); a project names its profile (`docs/spec/devices.md`).

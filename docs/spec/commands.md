@@ -27,6 +27,21 @@ Milestone: M0.
   not undoable. Their outcome carries a device request (`Outcome::device`)
   that the front end delivers to the device thread or the simulator.
 
+## User data commands (M8)
+
+- Besides the project, a session holds the user's **workshop**: device
+  profiles (`docs/spec/devices.md`), open material libraries
+  (`docs/spec/materials.md`) and test presets (`docs/spec/test-patterns.md`).
+  Commands run with both; most only touch the project.
+- `profile.*`, `library.*`, `test.preset_*` and the library half of
+  `material.*` change the workshop. Workshop changes are not undoable. When
+  the workshop has a folder, profile and preset changes are written to it
+  at once; libraries are written by `library.save`.
+- A command that changes both (for example `material.update`, which also
+  updates the layers that follow the entry) records only the project part
+  in undo history.
+- A failing command leaves the project and the workshop as they were.
+
 ## Undo and redo
 
 - Undoable commands return an inverse invocation that restores the previous

@@ -27,8 +27,10 @@ Milestone: M4. Crate: `lasercraft-plan`. G-code export (M5) and streaming
 
 ## Machine parameters
 
-`Machine` describes what the planner needs from the device until device
-profiles arrive (M8). Defaults are our own conservative guesses for a hobby
+`Machine` describes what the planner needs from the device. From M8 it
+comes from the project's device profile (`docs/spec/devices.md`:
+`max_speed`, `acceleration`, `max_power`); without one the defaults below
+apply. Defaults are our own conservative guesses for a hobby
 GRBL laser, not read from any device:
 
 | Field | Meaning | Default | Valid |
