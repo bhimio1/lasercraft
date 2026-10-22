@@ -6,9 +6,9 @@ is already in the machine. Before it can do that, each camera's **lens
 correction** (how its lens bends straight lines) and its **bed alignment**
 (where the picture lies on the bed) must be known.
 
-Scope of M9: cameras fixed **above the bed**, USB or network, one or more
-per device profile. Cameras mounted on the laser head (stitched captures)
-are later (Open questions).
+Scope: cameras fixed **above the bed** or riding **on the laser head**
+(their pictures are placed by where the head is, and a scan stitches
+several), USB or network, one or more per device profile.
 
 ## Camera data
 
@@ -19,7 +19,7 @@ gains `cameras`, a list of:
 | --- | --- |
 | `name` | Unique within the profile; 1–60 characters |
 | `source` | `{"kind": "usb", "device": <name>, "index": <n>, "format": "<w>x<h>"}`, `{"kind": "network", "url": <http(s) URL>, "rate": <pictures per second>}` or `{"kind": "simulated"}` |
-| `mount` | `bed` (above the bed); `head` is refused until head-mounted cameras exist |
+| `mount` | `bed` (fixed above the bed, default) or `head` (moves with the laser head; "Cameras on the laser head") |
 | `lens` | The lens correction or `null` (below) |
 | `alignments` | List of bed alignments (below); the first is in use |
 | `use` | Included in the overlay (default true) |
@@ -157,6 +157,40 @@ one is marked "made with another lens correction" and still used.
   last moved (a jog, frame or job) is marked stale (the head may hide
   part of the bed).
 
+## Cameras on the laser head
+
+A head camera sees a small part of the bed around the head, so each
+picture is placed by where the head was when it was taken.
+
+- **Alignment** works as for a bed camera, with a smaller default
+  pattern (30 × 20 mm, 6 mm marks, centered on the bed: 36 × 26 mm in
+  all, so it fits a small view). After the burn
+  the user jogs the head until the four marks are in the picture; the
+  alignment then also stores `head`, the head's position (document mm)
+  when the picture was taken. `camera.align` and `camera.align_find` take
+  `head=X,Y` in machine mm, as the laser reports it (the app adds it, as
+  for print registration targets); a head camera without it is refused: "A head camera's alignment needs the head's
+  position: connect the laser."
+- **Placement**: a picture taken with the head at `H` is placed with the
+  alignment shifted by `H − head`. Capture camera image paints each head
+  camera's latest picture at the head's current reported position; with
+  no reported position it says "Connect the laser: a head camera's
+  picture is placed by where the head is." A head camera's picture is not
+  stale after the head moves (it moved with it).
+- **Scan bed** (Camera panel, for head cameras, while connected and idle):
+  the app visits a grid of head positions covering the work area, moving
+  with the laser off (`device.move_to`, inside the work area), and at
+  each stop waits until the machine is idle, half a second more and the
+  camera's `skip` pictures, then paints the picture into the overlay.
+  The grid step is 80 % of the picture's footprint on the bed (from the
+  alignment), so neighbouring pictures overlap. The panel shows "Scanning
+  ‹n› of ‹m›" and Stop scan; Stop scan, an alarm or a disconnect ends the
+  scan (the move under way finishes). Stop (the job bar, the Machine panel
+  or its shortcut) stops the machine and ends the scan too.
+- The **simulated camera** mounted on the head looks straight down from
+  60 mm above the bed, 15 mm to the right of the nozzle, through a lens
+  with a 50 × 37 mm view, and follows the simulated laser's head.
+
 ## Sources (picture providers)
 
 Run in the app on a thread per camera; the UI only gets pictures.
@@ -211,16 +245,16 @@ panel first."
 
 | Command | Effect |
 | --- | --- |
-| `camera.add <name> <usb\|network\|simulated> [device=… index=… format=WxH \| url=… rate=…]` | Add a camera. |
+| `camera.add <name> <usb\|network\|simulated> [device=… index=… format=WxH \| url=… rate=…] [mount=bed\|head]` | Add a camera. |
 | `camera.remove <name>` | Remove it with its correction and alignments. |
 | `camera.rename <old> <new>` | |
-| `camera.set <name> <key> <value>` | `use`, `opacity`, `fit_width`, `fit_height`, `fit_dx`, `fit_dy`, `skip`, `device`, `index`, `format`, `url`, `rate`. |
+| `camera.set <name> <key> <value>` | `mount` (`bed` or `head`), `use`, `opacity`, `fit_width`, `fit_height`, `fit_dx`, `fit_dy`, `skip`, `device`, `index`, `format`, `url`, `rate`. |
 | `camera.set_control <name> <control> <value\|default>` | Store a picture setting (`default` removes it); the value must be finite. The running source applies it. |
 | `camera.pattern <path.svg>` | Write the calibration sheet. |
 | `camera.calibrate <name> <standard\|wide\|fisheye> <picture> …` | Find the sheet in each picture file (PNG or JPEG), fit the model and store the lens correction. The outcome names the fit and how many dots each picture gave. |
 | `camera.set_lens <name> <json\|path.lccam\|none>` | Store a lens correction (the wizard's choice, or the one in a camera file) or remove it. |
-| `camera.align <name> <json>` | Store an alignment from `{"picture": [[u, v] ×4], "bed": [[x, y] ×4], "height": h}`, picture points raw (the lens correction is applied). |
-| `camera.align_find <name> <picture> [pattern json]` | Find the four marks automatically in a picture file and store the alignment. |
+| `camera.align <name> <json> [head=X,Y]` | Store an alignment from `{"picture": [[u, v] ×4], "bed": [[x, y] ×4], "height": h}`, picture points raw (the lens correction is applied). `head`: where the head was (head cameras). |
+| `camera.align_find <name> <picture> [pattern json] [height=…] [head=X,Y]` | Find the four marks automatically in a picture file and store the alignment. |
 | `camera.use_alignment <name> <alignment name>` / `camera.remove_alignment <name> <alignment name>` | |
 | `camera.import <path>` / `camera.export <name> <path>` | `.lccam` files; a clashing name gets " (2)", … |
 | `camera.overlay <name> <picture> <out.png>` | Write the overlay of one picture (headless check). |
@@ -238,15 +272,16 @@ The CLI gains `camera pattern <out.svg>`, `camera calibrate <model>
 As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 
 - Camera panel (upper dock group, after Console; Window → Panels lists
-  it): Capture camera image, Trace camera image… (disabled: "Tracing
-  comes later."), Overlay opacity (%), Overlay fit, picture age, one block
+  it): Capture camera image, Trace camera image… (`docs/spec/trace.md`;
+  disabled until a picture was captured), Scan bed / Stop scan (when a
+  head camera exists), Overlay opacity (%), Overlay fit, picture age, one block
   per camera (header with streaming dot, capture, use, name and the three
   badges; live picture; Picture settings when the camera reports
   controls; Advanced with Preview rate and Insert picture Corrected / As
   captured), Add camera…, Import camera….
 - Camera list (Machine → Camera list…), Add camera (wizard: kind, source
-  with live view, mounting (Above the bed only; On the laser head
-  disabled with "Later"), lens correction, the lens and alignment pages,
+  with live view, mounting (Above the bed or On the laser head), lens
+  correction, the lens and alignment pages,
   name), Camera setup (four groups and the live view with a 10 mm grid),
   the lens calibration and camera alignment pages as the style guide
   draws them. The alignment burn page follows "Jobs started from these
@@ -256,10 +291,8 @@ As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 
 ## Open questions
 
-- Head-mounted cameras (stitching several pictures while jogging).
 - AprilTag-style automatic marks; our marks are found by shape only.
 - Alignments interpolated between material heights.
-- Tracing the overlay into shapes (needs Trace to vectors).
 
 ## Sources
 
@@ -289,4 +322,5 @@ As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 - Own design: the calibration sheet and its dot finding, the ring-and-dot
   alignment marks and their finding, the weak priors that settle the
   focal length when every picture looks straight down at a flat sheet, the fit score, the data formats, the simulated
-  camera, the command set.
+  camera, the command set, head cameras (placement by the head's
+  position, the scan grid) and picture settings by our own keys.

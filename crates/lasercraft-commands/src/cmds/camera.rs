@@ -16,7 +16,7 @@ use lasercraft_device::{Request, StreamKind};
 use lasercraft_gcode::{FrameShape, Placement, export_plan, frame_plan};
 use lasercraft_geom::{Affine, Path as GeomPath, Point};
 use lasercraft_project::{Geometry, Mode, Project};
-use lasercraft_workshop::{Camera, Source};
+use lasercraft_workshop::{Camera, Mount, Source};
 use serde::Deserialize;
 
 use super::device::{DEFAULT_SPEED, speed, xy};
@@ -30,7 +30,7 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
     vec![
         ccmd(
             "camera.add",
-            "camera.add <name> <usb|network|simulated> [device=… index=… format=WxH | url=… rate=…]",
+            "camera.add <name> <usb|network|simulated> [device=… index=… format=WxH | url=… rate=…] [mount=bed|head]",
             "Add a camera to the project's device profile.",
             add,
         ),
@@ -48,7 +48,7 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
         ),
         ccmd(
             "camera.set",
-            "camera.set <name> <use|opacity|fit_width|fit_height|fit_dx|fit_dy|skip|device|index|format|url|rate> <value>",
+            "camera.set <name> <mount|use|opacity|fit_width|fit_height|fit_dx|fit_dy|skip|device|index|format|url|rate> <value>",
             "Change one camera setting.",
             set,
         ),
@@ -78,13 +78,13 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
         ),
         ccmd(
             "camera.align",
-            "camera.align <name> <json>",
+            "camera.align <name> <json> [head=X,Y]",
             "Store a bed alignment from four picture points and their bed points.",
             align_cmd,
         ),
         ccmd(
             "camera.align_find",
-            "camera.align_find <name> <picture> [pattern json] [height=<mm>]",
+            "camera.align_find <name> <picture> [pattern json] [height=<mm>] [head=X,Y]",
             "Find the burned alignment marks in a picture and store the bed alignment.",
             align_find,
         ),
@@ -382,6 +382,14 @@ struct AlignInput {
     height: f64,
 }
 
+/// The material height an alignment picture was taken at, and where the
+/// head was (`head=X,Y`, machine mm).
+#[derive(Debug, Clone, Copy, Default)]
+struct Taken {
+    height: f64,
+    head: Option<Point>,
+}
+
 fn store_alignment(
     cx: &mut Context<'_>,
     args: &Args<'_>,
@@ -389,15 +397,23 @@ fn store_alignment(
     name: &str,
     raw: [Point; 4],
     bed: [Point; 4],
-    height: f64,
+    taken: Taken,
 ) -> Result<String, CommandError> {
+    let camera = cx.workshop.camera(profile, name).map_err(ws(args))?;
+    // A bed camera ignores the head position the app adds.
+    let head = match (camera.mount, taken.head) {
+        (Mount::Head, None) => {
+            return Err(args.invalid(
+                "A head camera's alignment needs the head's position: connect the laser.",
+            ));
+        }
+        (Mount::Head, head) => head.map(|h| cx.project.work_area().to_document(h)),
+        (Mount::Bed, _) => None,
+    };
     // Without a lens correction the size is unknown here; 0 means "the size
     // of the picture" (`Camera::lens_or_plain`).
-    let lens = cx
-        .workshop
-        .camera(profile, name)
-        .map_err(ws(args))?
-        .lens_or_plain(0, 0);
+    let lens = camera.lens_or_plain(0, 0);
+    let height = taken.height;
     let matrix = align::fit(&lens, &raw, &bed).map_err(|e| args.invalid(e.0))?;
     let label = if height > 0.0 {
         format!("{} mm", lasercraft_plan::num(height))
@@ -412,6 +428,7 @@ fn store_alignment(
         width: lens.width,
         height_px: lens.height,
         created: lasercraft_camera::timestamp_now(),
+        head,
     };
     cx.workshop
         .edit_camera(profile, name, |c| {
@@ -423,11 +440,19 @@ fn store_alignment(
 }
 
 fn align_cmd(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    args.expect(2, 2)?;
+    args.expect(2, 3)?;
     let p = profile(cx, args)?;
     let name = args.str(0)?;
     let input: AlignInput = serde_json::from_str(args.str(1)?)
         .map_err(|e| args.invalid(format!("alignment points are not valid JSON: {e}")))?;
+    let mut head = None;
+    if args.len() > 2 {
+        let (key, value) = key_value(args, args.str(2)?)?;
+        if key != "head" {
+            return Err(args.invalid(format!("unknown option `{key}`")));
+        }
+        head = Some(xy(args, key, value)?);
+    }
     let pt = |v: [f64; 2]| Point::new(v[0], v[1]);
     let label = store_alignment(
         cx,
@@ -436,7 +461,10 @@ fn align_cmd(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandEr
         name,
         input.picture.map(pt),
         input.bed.map(pt),
-        input.height,
+        Taken {
+            height: input.height,
+            head,
+        },
     )?;
     Ok(saved(
         cx,
@@ -468,21 +496,24 @@ fn align_find(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandE
     let p = profile(cx, args)?;
     let name = args.str(0)?;
     let pic = picture(args, args.str(1)?)?;
-    let (mut json, mut height) = (None, 0.0);
+    let (mut json, mut taken) = (None, Taken::default());
     for i in 2..args.len() {
         let raw = args.str(i)?;
         if raw.trim_start().starts_with('{') {
             json = Some(raw);
-        } else {
-            let (key, value) = key_value(args, raw)?;
-            if key != "height" {
-                return Err(args.invalid(format!("unknown option `{key}`")));
+            continue;
+        }
+        let (key, value) = key_value(args, raw)?;
+        match key {
+            "height" => {
+                taken.height = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|h| (0.0..=500.0).contains(h))
+                    .ok_or_else(|| args.invalid("height must be 0–500 mm"))?;
             }
-            height = value
-                .parse::<f64>()
-                .ok()
-                .filter(|h| (0.0..=500.0).contains(h))
-                .ok_or_else(|| args.invalid("height must be 0–500 mm"))?;
+            "head" => taken.head = Some(xy(args, key, value)?),
+            _ => return Err(args.invalid(format!("unknown option `{key}`"))),
         }
     }
     let pattern = pattern_arg(cx, args, json)?;
@@ -501,7 +532,7 @@ fn align_find(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandE
         name,
         raw,
         pattern.centers(area.width_mm, area.height_mm),
-        height,
+        taken,
     )?;
     Ok(saved(
         cx,

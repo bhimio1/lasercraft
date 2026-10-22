@@ -14,6 +14,7 @@ mod linalg;
 pub mod marks;
 pub mod overlay;
 pub mod picture;
+pub mod scan;
 pub mod sheet;
 pub mod synth;
 

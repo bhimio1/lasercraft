@@ -13,7 +13,7 @@ use lasercraft_camera::overlay::Overlay;
 use lasercraft_commands::Invocation;
 use lasercraft_geom::{Point, Rect};
 use lasercraft_project::Project;
-use lasercraft_workshop::{Camera, Workshop};
+use lasercraft_workshop::{Camera, Mount, Workshop};
 
 use crate::shell::Action;
 use crate::theme::{Tokens, size, weight};
@@ -87,6 +87,10 @@ pub struct CameraView {
     pub fits: Vec<Result<Lens, String>>,
     /// Marks found automatically: raw pixels, or why not.
     pub marks: Option<Result<[Point; 4], String>>,
+    /// Where the head is (document mm), when the laser reports it.
+    pub head: Option<Point>,
+    /// A bed scan in progress: the stop under way and the stops in all.
+    pub scan: Option<(usize, usize)>,
 }
 
 impl CameraView {
@@ -125,6 +129,8 @@ pub enum CameraAction {
         /// Lens-corrected and aligned on the bed, or as captured.
         corrected: bool,
     },
+    /// Start (`true`) or stop a scan of the bed with a head camera.
+    Scan(bool),
     /// Trace the overlay into paths (Trace to vectors on the camera).
     Trace {
         /// The trace settings, JSON.
@@ -174,7 +180,7 @@ pub(crate) fn picture(
     ui: &mut egui::Ui,
     texture: &egui::TextureHandle,
     width: f32,
-    grid: Option<(&Camera, &Project)>,
+    grid: Option<(&Camera, &Project, Option<Point>)>,
 ) -> (egui::Response, egui::Rect, f32) {
     let [w, h] = texture.size();
     let scale = width / w as f32;
@@ -186,9 +192,16 @@ pub(crate) fn picture(
         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
         egui::Color32::WHITE,
     );
-    if let Some((camera, project)) = grid
-        && let Some(alignment) = camera.alignment()
-    {
+    // A head camera's grid follows the head; without its position, none.
+    let aligned = grid.and_then(|(camera, project, head)| {
+        let a = camera.alignment()?;
+        let a = match camera.mount {
+            Mount::Bed => a.clone(),
+            Mount::Head => a.at_head(head?),
+        };
+        Some((camera, project, a))
+    });
+    if let Some((camera, project, alignment)) = aligned {
         let lens = &camera.lens_or_plain(w as u32, h as u32);
         let t = Tokens::of(ui.ctx());
         let area = project.work_area();
@@ -376,6 +389,27 @@ impl CameraPanel {
                 self.wants = Some(PanelWish::Trace);
             }
         });
+        if cameras.iter().any(|c| c.mount == Mount::Head) {
+            ui.horizontal(|ui| match view.scan {
+                Some((at, of)) => {
+                    if ui.button("Stop scan").clicked() {
+                        actions.push(Action::Camera(CameraAction::Scan(false)));
+                    }
+                    ui.label(format!("Scanning {at} of {of}"));
+                }
+                None => {
+                    if ui
+                        .button("Scan bed")
+                        .on_hover_text(
+                            "Move the head over the bed with the laser off and stitch the pictures of the head camera",
+                        )
+                        .clicked()
+                    {
+                        actions.push(Action::Camera(CameraAction::Scan(true)));
+                    }
+                }
+            });
+        }
         let first = &cameras[0];
         let mut opacity = first.opacity;
         ui.horizontal(|ui| {
@@ -591,7 +625,7 @@ impl CameraPanel {
                     widgets::band(ui, Band::Error, &format!("No picture source: {e}"));
                 }
                 if let Some(texture) = self.textures.get(ui.ctx(), &live) {
-                    let grid = Some((camera, project));
+                    let grid = Some((camera, project, view.head));
                     let (response, ..) = picture(ui, &texture, ui.available_width(), grid);
                     response.context_menu(|ui| {
                         if ui.button("Edit…").clicked() {

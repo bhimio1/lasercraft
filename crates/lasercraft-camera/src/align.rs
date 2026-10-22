@@ -29,6 +29,10 @@ pub struct Alignment {
     /// When it was made (RFC 3339).
     #[serde(default)]
     pub created: String,
+    /// Where the head was when the picture was taken (head cameras),
+    /// document mm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<Point>,
 }
 
 /// Twice the signed area of a polygon (positive: clockwise on screen).
@@ -83,6 +87,25 @@ impl Alignment {
         let inverse = self.matrix.inverse()?;
         Some(lens.uncorrect(inverse.apply(bed)?))
     }
+
+    /// The alignment for a picture taken with the head at `head`: shifted
+    /// by `head` minus where the head was for the alignment. Unchanged for
+    /// an alignment without a head position.
+    #[must_use]
+    pub fn at_head(&self, head: Point) -> Self {
+        let Some(from) = self.head else {
+            return self.clone();
+        };
+        let (dx, dy) = (head.x - from.x, head.y - from.y);
+        let shift = Homography {
+            m: [1.0, 0.0, dx, 0.0, 1.0, dy, 0.0, 0.0, 1.0],
+        };
+        Self {
+            matrix: shift.then(&self.matrix),
+            head: Some(head),
+            ..self.clone()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -112,6 +135,7 @@ mod tests {
             width: 640,
             height_px: 480,
             created: String::new(),
+            head: None,
         };
         // Any bed point, mapped through the picture and back.
         for p in [
@@ -125,5 +149,20 @@ mod tests {
         }
         let swapped = [raw[1], raw[0], raw[2], raw[3]];
         assert!(fit(&lens, &swapped, &bed).is_err());
+        // A head camera's picture moves with the head.
+        assert_eq!(
+            a.at_head(Point::new(9.0, 9.0)),
+            a,
+            "no head position: unchanged"
+        );
+        let made = Alignment {
+            head: Some(Point::new(100.0, 50.0)),
+            ..a
+        };
+        let moved = made.at_head(Point::new(130.0, 40.0));
+        let px = lens.project(pose.ray(Point::new(150.0, 100.0)).unwrap());
+        let seen = moved.to_bed(&lens, px).unwrap();
+        assert!(seen.distance(Point::new(180.0, 90.0)) < 1e-6, "{seen:?}");
+        assert_eq!(moved.head, Some(Point::new(130.0, 40.0)));
     }
 }

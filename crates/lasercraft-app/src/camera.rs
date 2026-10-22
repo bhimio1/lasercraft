@@ -18,7 +18,7 @@ use lasercraft_camera::{Picture, controls, sheet};
 use lasercraft_geom::{Point, Rect};
 use lasercraft_project::WorkArea;
 use lasercraft_ui::{CameraLive, CameraStatus, CameraView, LensCapture};
-use lasercraft_workshop::{Camera, Source};
+use lasercraft_workshop::{Camera, Mount, Source};
 
 /// Seconds between retries of a failed source.
 const RETRY: Duration = Duration::from_secs(5);
@@ -41,6 +41,7 @@ enum Message {
 
 struct Worker {
     source: Source,
+    mount: Mount,
     control: Sender<Control>,
     messages: Receiver<Message>,
     status: CameraStatus,
@@ -59,6 +60,9 @@ pub struct SimScene {
     burned: Vec<bool>,
     /// The sheet's top-left dot on the bed and its turn, while shown.
     pub sheet: Option<(Point, f64)>,
+    /// Where the simulated laser's head is (document mm), for a simulated
+    /// camera on the head.
+    pub head: Point,
 }
 
 /// Simulated bed resolution, mm per pixel.
@@ -71,6 +75,7 @@ impl SimScene {
             area,
             burned: vec![false; w * h],
             sheet: None,
+            head: Point::ZERO,
         }
     }
 
@@ -160,6 +165,16 @@ impl SimScene {
     }
 }
 
+/// The simulated head camera's lens and pose relative to the head: 60 mm
+/// above the bed, 15 mm right of the nozzle, a 50 × 37 mm view.
+#[must_use]
+pub fn simulated_head_camera() -> (Lens, Pose) {
+    (
+        Lens::ideal(Model::Standard, 640, 480, 768.0),
+        Pose::overhead(15.0, 0.0, 60.0, [0.0, 0.0, 0.0]),
+    )
+}
+
 /// The simulated camera's own lens and where it hangs over a bed.
 #[must_use]
 pub fn simulated_camera(area: &WorkArea) -> (Lens, Pose) {
@@ -222,6 +237,7 @@ fn spawn(
     let (ctl_tx, ctl_rx) = channel();
     let (msg_tx, msg_rx) = channel();
     let source = camera.source.clone();
+    let on_head = camera.mount == Mount::Head;
     let skip = camera.skip;
     let mut settings = camera.controls.clone();
     let scene = Arc::clone(scene);
@@ -256,7 +272,7 @@ fn spawn(
                 continue;
             }
             if grabber.is_none() {
-                match open(&source, &scene) {
+                match open(&source, on_head, &scene) {
                     Ok(mut g) => {
                         apply_settings(g.as_mut(), &settings, &msg_tx);
                         grabber = Some(g);
@@ -315,9 +331,13 @@ trait Grab {
     }
 }
 
-fn open(source: &Source, scene: &Arc<Mutex<SimScene>>) -> Result<Box<dyn Grab>, String> {
+fn open(
+    source: &Source,
+    on_head: bool,
+    scene: &Arc<Mutex<SimScene>>,
+) -> Result<Box<dyn Grab>, String> {
     match source {
-        Source::Simulated => Ok(Box::new(Simulated::new(Arc::clone(scene)))),
+        Source::Simulated => Ok(Box::new(Simulated::new(Arc::clone(scene), on_head))),
         Source::Network { url, .. } => Ok(Box::new(Network::new(url))),
         Source::Usb { index, format, .. } => usb::open(*index, format),
     }
@@ -326,15 +346,18 @@ fn open(source: &Source, scene: &Arc<Mutex<SimScene>>) -> Result<Box<dyn Grab>, 
 struct Simulated {
     scene: Arc<Mutex<SimScene>>,
     renderer: Option<(WorkArea, Renderer)>,
+    /// Rides on the head instead of hanging over the bed.
+    on_head: bool,
     brightness: f64,
     contrast: f64,
 }
 
 impl Simulated {
-    fn new(scene: Arc<Mutex<SimScene>>) -> Self {
+    fn new(scene: Arc<Mutex<SimScene>>, on_head: bool) -> Self {
         Self {
             scene,
             renderer: None,
+            on_head,
             brightness: 0.0,
             contrast: 0.0,
         }
@@ -349,11 +372,21 @@ impl Grab for Simulated {
             .map_err(|_| "the simulated camera stopped".to_owned())?
             .clone();
         if self.renderer.as_ref().is_none_or(|(a, _)| *a != scene.area) {
-            let (lens, pose) = simulated_camera(&scene.area);
+            let (lens, pose) = if self.on_head {
+                simulated_head_camera()
+            } else {
+                simulated_camera(&scene.area)
+            };
             self.renderer = Some((scene.area, Renderer::new(&lens, &pose)));
         }
         let (_, renderer) = self.renderer.as_ref().ok_or("no renderer")?;
-        let picture = renderer.render([70, 70, 74], |p| scene.color(p));
+        // A head camera's pose is relative to the head.
+        let shift = if self.on_head {
+            scene.head
+        } else {
+            Point::ZERO
+        };
+        let picture = renderer.render([70, 70, 74], |p| scene.color(p + shift));
         Ok(controls::adjust(&picture, self.brightness, self.contrast))
     }
 
@@ -718,6 +751,8 @@ pub struct Cameras {
     overlay_revision: u64,
     taken: Option<Instant>,
     head_moved: bool,
+    /// Where the head is (document mm), when known.
+    head: Option<Point>,
     usb: Vec<(u32, String)>,
     /// Pictures per second while a camera is shown.
     rate: f64,
@@ -741,6 +776,7 @@ impl Cameras {
             overlay_revision: 0,
             taken: None,
             head_moved: false,
+            head: None,
             usb: Vec::new(),
             rate: 2.0,
             repaint: ctx.clone(),
@@ -771,7 +807,7 @@ impl Cameras {
         self.workers.retain(|name, w| {
             let keep = wanted
                 .iter()
-                .any(|c| &c.name == name && c.source == w.source);
+                .any(|c| &c.name == name && c.source == w.source && c.mount == w.mount);
             if !keep {
                 let _ = w.control.send(Control::Stop);
             }
@@ -790,6 +826,7 @@ impl Cameras {
                 c.name.clone(),
                 Worker {
                     source: c.source.clone(),
+                    mount: c.mount,
                     control,
                     messages,
                     status: CameraStatus::Connecting,
@@ -852,21 +889,48 @@ impl Cameras {
         area: &WorkArea,
         region: Option<Rect>,
     ) -> Result<(), String> {
-        let mut overlay = match (&self.overlay, region) {
-            (Some(o), Some(_)) => (**o).clone(),
+        let used: Vec<&Camera> = cameras.iter().filter(|c| c.used).collect();
+        self.paint(&used, area, region)
+    }
+
+    /// Paints one camera's latest picture into the overlay (a scan stop).
+    pub fn capture_one(&mut self, camera: &Camera, area: &WorkArea) -> Result<(), String> {
+        self.paint(&[camera], area, None)
+    }
+
+    fn paint(
+        &mut self,
+        cameras: &[&Camera],
+        area: &WorkArea,
+        region: Option<Rect>,
+    ) -> Result<(), String> {
+        // Head cameras add to what earlier pictures painted.
+        let keep = region.is_some() || cameras.iter().any(|c| c.mount == Mount::Head);
+        let mut overlay = match (&self.overlay, keep) {
+            (Some(o), true) => (**o).clone(),
             _ => Overlay::empty(area.width_mm, area.height_mm),
         };
-        let mut used = 0;
-        for c in cameras.iter().filter(|c| c.used) {
+        let (mut used, mut problem) = (0, None);
+        for c in cameras {
             let Some(alignment) = c.alignment() else {
                 continue;
+            };
+            let alignment = match (c.mount, self.head) {
+                (Mount::Bed, _) => alignment.clone(),
+                (Mount::Head, Some(head)) => alignment.at_head(head),
+                (Mount::Head, None) => {
+                    problem = Some(
+                        "Connect the laser: a head camera's picture is placed by where the head is.",
+                    );
+                    continue;
+                }
             };
             let Some(picture) = self.picture(&c.name) else {
                 continue;
             };
             let lens = c.lens_or_plain(picture.width(), picture.height());
             let mut one = Overlay::empty(area.width_mm, area.height_mm);
-            one.paint(&picture, &lens, alignment, &c.fit, region);
+            one.paint(&picture, &lens, &alignment, &c.fit, region);
             // Opacity per camera, then laid over the cameras before it.
             let alpha = (c.opacity / 100.0 * 255.0).round() as u8;
             for (dst, src) in overlay.rgba.chunks_mut(4).zip(one.rgba.chunks(4)) {
@@ -877,10 +941,11 @@ impl Cameras {
             used += 1;
         }
         if used == 0 {
-            return Err(
-                "No camera picture to show: a camera needs a picture and a bed alignment."
-                    .to_owned(),
-            );
+            return Err(problem
+                .unwrap_or(
+                    "No camera picture to show: a camera needs a picture and a bed alignment.",
+                )
+                .to_owned());
         }
         self.overlay = Some(Arc::new(overlay));
         self.overlay_revision += 1;
@@ -896,9 +961,30 @@ impl Cameras {
         self.taken = None;
     }
 
-    /// The head moved (a jog, frame or job): the picture may be stale.
+    /// The head moved (a jog, frame or job): the picture may be stale,
+    /// unless every camera rides on the head.
     pub fn head_moved(&mut self) {
-        self.head_moved = true;
+        if self.workers.values().any(|w| w.mount == Mount::Bed) {
+            self.head_moved = true;
+        }
+    }
+
+    /// Where the head is now (document mm), when the laser reports it.
+    pub fn set_head(&mut self, head: Option<Point>) {
+        self.head = head;
+        if let (Some(h), Ok(mut scene)) = (head, self.scene.lock()) {
+            scene.head = h;
+        }
+    }
+
+    /// Where the head is (document mm), when known.
+    pub fn head(&self) -> Option<Point> {
+        self.head
+    }
+
+    /// How many pictures a camera has delivered.
+    pub fn revision(&self, name: &str) -> u64 {
+        self.workers.get(name).map_or(0, |w| w.revision)
     }
 
     /// A program streamed to the simulated laser: the simulated camera
@@ -947,6 +1033,8 @@ impl Cameras {
             captures: self.captures.clone(),
             fits: self.fits.clone(),
             marks: self.marks.clone(),
+            head: self.head,
+            scan: None,
         }
     }
 }
@@ -1009,7 +1097,7 @@ mod tests {
     #[test]
     fn the_simulated_camera_offers_and_applies_picture_settings() {
         let scene = Arc::new(Mutex::new(SimScene::new(WorkArea::default())));
-        let mut camera = Simulated::new(scene);
+        let mut camera = Simulated::new(Arc::clone(&scene), false);
         let plain = camera.grab().unwrap();
         let keys: Vec<&str> = camera.controls().iter().map(|c| c.key).collect();
         assert_eq!(keys, ["brightness", "contrast"]);
@@ -1020,5 +1108,25 @@ mod tests {
         assert!(bright.get(5, 5)[0] > plain.get(5, 5)[0]);
         camera.apply(&BTreeMap::new());
         assert_eq!(camera.grab().unwrap(), plain, "back to the defaults");
+        // On the head it looks down 15 mm right of the head.
+        if let Ok(mut s) = scene.lock() {
+            s.burn(Point::new(140.0, 100.0), Point::new(160.0, 100.0));
+            s.head = Point::new(135.0, 100.0);
+        }
+        let mut head = Simulated::new(Arc::clone(&scene), true);
+        let seen = head.grab().unwrap();
+        assert_eq!(
+            seen.get(320, 240),
+            [45, 32, 20],
+            "the burn under the camera"
+        );
+        if let Ok(mut s) = scene.lock() {
+            s.head = Point::new(135.0, 150.0);
+        }
+        assert_ne!(
+            head.grab().unwrap().get(320, 240),
+            [45, 32, 20],
+            "moved away"
+        );
     }
 }

@@ -9,7 +9,7 @@ use lasercraft_camera::marks::Pattern;
 use lasercraft_commands::Invocation;
 use lasercraft_geom::Point;
 use lasercraft_project::Project;
-use lasercraft_workshop::{Camera, Source, Workshop};
+use lasercraft_workshop::{Camera, Mount, Source, Workshop};
 
 use crate::camera_panel::{CameraAction, CameraView, PictureTextures, picture, picture_settings};
 use crate::keymap::Keymap;
@@ -160,18 +160,9 @@ impl CameraWindows {
         });
     }
 
-    pub(crate) fn open_align(&mut self, project: &Project, camera: &str) {
+    pub(crate) fn open_align(&mut self, project: &Project, camera: &str, on_head: bool) {
         self.open_setup(camera);
-        let area = project.work_area();
-        self.flow = Some(Flow::Align {
-            page: 0,
-            manual: false,
-            pattern: Pattern::default_for(area.width_mm, area.height_mm),
-            speed: 100.0,
-            power: 20.0,
-            clicked: Vec::new(),
-            zoom: 1.0,
-        });
+        self.flow = Some(align_flow(project, on_head));
     }
 
     pub(crate) fn import(&mut self) {
@@ -552,21 +543,32 @@ impl CameraWindows {
             }
             2 => {
                 heading(ui, "Where is the camera mounted?");
-                card(
+                let on_head = cam.is_some_and(|c| c.mount == Mount::Head);
+                if card(
                     ui,
-                    true,
+                    !on_head,
                     true,
                     "Above the bed",
                     "Fixed over the work area; sees the whole bed",
-                );
+                ) {
+                    actions.push(run(
+                        "camera.set",
+                        [name.clone(), "mount".into(), "bed".into()],
+                    ));
+                }
                 ui.add_space(size::GAP_TIGHT);
-                card(
+                if card(
                     ui,
-                    false,
-                    false,
-                    "On the laser head (later)",
-                    "Moves with the head; sees a small area",
-                );
+                    on_head,
+                    true,
+                    "On the laser head",
+                    "Moves with the head; sees a small area. Scan bed stitches the pictures.",
+                ) {
+                    actions.push(run(
+                        "camera.set",
+                        [name.clone(), "mount".into(), "head".into()],
+                    ));
+                }
                 let (back, next, cancel) = Self::footer(ui, true, Some(("Next", true, "")));
                 if back {
                     set_page = Some(1);
@@ -618,7 +620,7 @@ impl CameraWindows {
                     "The picture is used as it is (not recommended)",
                 ) {
                     actions.push(run("camera.set_lens", [name.clone(), "none".to_owned()]));
-                    self.open_align_inside(project);
+                    self.open_align_inside(project, cam.is_some_and(|c| c.mount == Mount::Head));
                 }
                 if cam.is_some_and(|c| c.lens.is_some()) {
                     widgets::band(
@@ -641,7 +643,7 @@ impl CameraWindows {
                     set_page = Some(2);
                 }
                 if next {
-                    self.open_align_inside(project);
+                    self.open_align_inside(project, cam.is_some_and(|c| c.mount == Mount::Head));
                 }
                 if cancel {
                     actions.push(run("camera.remove", [name.clone()]));
@@ -698,17 +700,8 @@ impl CameraWindows {
         }
     }
 
-    fn open_align_inside(&mut self, project: &Project) {
-        let area = project.work_area();
-        self.flow = Some(Flow::Align {
-            page: 0,
-            manual: false,
-            pattern: Pattern::default_for(area.width_mm, area.height_mm),
-            speed: 100.0,
-            power: 20.0,
-            clicked: Vec::new(),
-            zoom: 1.0,
-        });
+    fn open_align_inside(&mut self, project: &Project, on_head: bool) {
+        self.flow = Some(align_flow(project, on_head));
     }
 
     fn setup_ui(
@@ -744,7 +737,11 @@ impl CameraWindows {
                         ui.text_edit_singleline(&mut new_name);
                     });
                     ui.label(egui::RichText::new(format!("Kind: {} camera", cam.source.kind())).color(t.text_muted));
-                    ui.label(egui::RichText::new("Mounted: above the bed").color(t.text_muted));
+                    let mount = match cam.mount {
+                        Mount::Bed => "Mounted: above the bed",
+                        Mount::Head => "Mounted: on the laser head",
+                    };
+                    ui.label(egui::RichText::new(mount).color(t.text_muted));
                     if ui.button("Export…").clicked() {
                         self.prompt = Some(PromptKind::Run {
                             title: "Export camera",
@@ -815,7 +812,7 @@ impl CameraWindows {
                             .button("Align to bed…")
                             .clicked()
                         {
-                            self.open_align_inside(project);
+                            self.open_align_inside(project, cam.mount == Mount::Head);
                         }
                         if ui.add_enabled(cam.alignment().is_some(), egui::Button::new("Remove")).clicked()
                             && let Some(a) = cam.alignment()
@@ -830,7 +827,7 @@ impl CameraWindows {
                 let live = view.live(&camera).cloned().unwrap_or_default();
                 let width = ui.available_width().min(480.0);
                 if let Some(texture) = self.textures.get(ui.ctx(), &live) {
-                    picture(ui, &texture, width, Some((&cam, project)));
+                    picture(ui, &texture, width, Some((&cam, project, view.head)));
                     if cam.alignment().is_some() {
                         ui.label(egui::RichText::new("grid 10 mm").small().color(t.text_muted));
                     }
@@ -1347,6 +1344,13 @@ impl CameraWindows {
                     }
                     4 => {
                         heading(ui, "Find the marks");
+                        if cam.as_ref().is_some_and(|c| c.mount == Mount::Head) {
+                            widgets::band(
+                                ui,
+                                Band::Hint,
+                                "Jog the head until the four marks are in the picture, then click Look again. Where the head is gets stored with the alignment.",
+                            );
+                        }
                         let points: Vec<Point> = if manual {
                             clicked.clone()
                         } else {
@@ -1448,7 +1452,7 @@ impl CameraWindows {
                             let live = view.live(camera).cloned().unwrap_or_default();
                             if let Some(texture) = self.textures.get(ui.ctx(), &live) {
                                 let width = ui.available_width().min(560.0);
-                                picture(ui, &texture, width, Some((c, project)));
+                                picture(ui, &texture, width, Some((c, project, view.head)));
                             }
                         }
                         ui.label("If the grid lines up with the burned marks, click Finish.");
@@ -1598,6 +1602,24 @@ fn source_box(ui: &mut egui::Ui, camera: &Camera, view: &CameraView, actions: &m
 }
 
 /// The bed with the pattern on it (`bed` fill, grid, marks).
+/// The alignment flow's first page, with the pattern for the mount.
+fn align_flow(project: &Project, on_head: bool) -> Flow {
+    let area = project.work_area();
+    Flow::Align {
+        page: 0,
+        manual: false,
+        pattern: if on_head {
+            Pattern::for_head()
+        } else {
+            Pattern::default_for(area.width_mm, area.height_mm)
+        },
+        speed: 100.0,
+        power: 20.0,
+        clicked: Vec::new(),
+        zoom: 1.0,
+    }
+}
+
 /// Draws the bed with the pattern; while dragged, returns the offset the
 /// pattern should have (`dx`, `dy`, mm).
 fn bed_drawing(

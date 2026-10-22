@@ -15,6 +15,7 @@ use lasercraft_workshop::Workshop;
 mod camera;
 mod laser;
 mod preview;
+mod scan;
 mod trace;
 
 struct Options {
@@ -67,6 +68,8 @@ struct App {
     laser: laser::Laser,
     /// Camera pictures and the overlay (M9).
     cameras: camera::Cameras,
+    /// A bed scan with a head camera, while it runs.
+    scan: Option<scan::Scan>,
 }
 
 impl App {
@@ -88,6 +91,7 @@ impl App {
             previewed: None,
             laser: laser::Laser::new(ctx),
             cameras: camera::Cameras::new(ctx),
+            scan: None,
         };
         for line in messages {
             app.shell.log(line);
@@ -111,6 +115,14 @@ impl App {
     /// in, and their request goes to the device thread.
     fn run(&mut self, invocation: &Invocation) -> bool {
         let invocation = &with_context(invocation, &self.laser.context());
+        // Stop means stop: no further scan moves either.
+        if matches!(
+            invocation.name.as_str(),
+            "device.stop" | "device.disconnect"
+        ) && self.scan.take().is_some()
+        {
+            self.shell.log("Scan stopped.");
+        }
         match self.session.run(invocation) {
             Ok(outcome) => {
                 self.shell
@@ -269,6 +281,110 @@ impl App {
                 self.insert_picture(&cams, &area, &camera, corrected)
             }
             A::Trace { settings, color } => self.trace_camera(&settings, color),
+            A::Scan(true) => self.start_scan(&cams, &area),
+            A::Scan(false) => {
+                if self.scan.take().is_some() {
+                    self.shell.log("Scan stopped; the move under way finishes.");
+                }
+            }
+        }
+    }
+
+    /// Starts a bed scan with the first used, aligned head camera.
+    fn start_scan(
+        &mut self,
+        cams: &[lasercraft_workshop::Camera],
+        area: &lasercraft_project::WorkArea,
+    ) {
+        use lasercraft_ui::MachineWord;
+        let camera = cams.iter().find(|c| {
+            c.used && c.mount == lasercraft_workshop::Mount::Head && c.alignment().is_some()
+        });
+        let Some(camera) = camera else {
+            self.shell
+                .log("Scan bed needs an aligned camera on the head.");
+            return;
+        };
+        let laser = self.laser.view();
+        if laser.port.is_none() || laser.word != MachineWord::Ready {
+            self.shell
+                .log("Connect the laser and wait until it is ready to scan.");
+            return;
+        }
+        let Some(picture) = self.cameras.picture(&camera.name) else {
+            self.shell
+                .log("No picture yet: wait until the camera shows one.");
+            return;
+        };
+        let lens = camera.lens_or_plain(picture.width(), picture.height());
+        let stops = camera
+            .alignment()
+            .and_then(|a| lasercraft_camera::scan::footprint(a, &lens))
+            .and_then(|f| lasercraft_camera::scan::stops(f, area.width_mm, area.height_mm));
+        let Some(stops) = stops else {
+            self.shell
+                .log("The head camera sees too little of the bed to scan it.");
+            return;
+        };
+        let scan = scan::Scan::new(
+            camera.name.clone(),
+            stops,
+            camera.skip,
+            std::time::Instant::now(),
+        );
+        let first = scan.first();
+        self.scan = Some(scan);
+        if let Some(p) = first {
+            self.move_head(area, p);
+        }
+    }
+
+    /// Moves the head, laser off, to a document point.
+    fn move_head(&mut self, area: &lasercraft_project::WorkArea, p: lasercraft_geom::Point) {
+        let m = area.to_machine(p);
+        let n = |v: f64| lasercraft_plan::num((v * 1000.0).round() / 1000.0);
+        if !self.run(&Invocation::new("device.move_to", [n(m.x), n(m.y)])) {
+            self.scan = None;
+        }
+    }
+
+    /// Advances a running scan.
+    fn step_scan(
+        &mut self,
+        cams: &[lasercraft_workshop::Camera],
+        area: &lasercraft_project::WorkArea,
+        ctx: &egui::Context,
+    ) {
+        let Some(scan) = &mut self.scan else {
+            return;
+        };
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        let now = std::time::Instant::now();
+        let head = self.cameras.head();
+        let pictures = self.cameras.revision(&scan.camera);
+        let mut step = scan.step(self.laser.view(), head, pictures, now);
+        if step == scan::Step::Capture {
+            let name = scan.camera.clone();
+            let painted = cams
+                .iter()
+                .find(|c| c.name == name)
+                .map(|c| self.cameras.capture_one(c, area));
+            step = match painted {
+                Some(Ok(())) => self
+                    .scan
+                    .as_mut()
+                    .map_or(scan::Step::Wait, |s| s.captured(now)),
+                Some(Err(e)) => scan::Step::Failed(format!("Scan stopped: {e}")),
+                None => scan::Step::Failed("Scan stopped: the camera was removed.".to_owned()),
+            };
+        }
+        match step {
+            scan::Step::Wait | scan::Step::Capture => {}
+            scan::Step::MoveTo(p) => self.move_head(area, p),
+            scan::Step::Done(message) | scan::Step::Failed(message) => {
+                self.scan = None;
+                self.shell.log(message);
+            }
         }
     }
 
@@ -532,11 +648,23 @@ impl eframe::App for App {
         }
         let cams = self.profile_cameras();
         let area = *self.session.project().work_area();
-        self.cameras.sync(&cams, &area, self.shell.cameras_live());
+        let head = self
+            .laser
+            .view()
+            .position
+            .map(|[x, y]| area.to_document(lasercraft_geom::Point::new(x, y)));
+        self.cameras.set_head(head);
+        self.cameras.sync(
+            &cams,
+            &area,
+            self.shell.cameras_live() || self.scan.is_some(),
+        );
         for notice in self.cameras.poll() {
             self.shell.log(notice);
         }
-        let camera_view = self.cameras.view(&cams);
+        self.step_scan(&cams, &area, &ctx);
+        let mut camera_view = self.cameras.view(&cams);
+        camera_view.scan = self.scan.as_ref().map(scan::Scan::progress);
         let undo = self.session.undo_label().cloned();
         let view = ShellView {
             project: self.session.project(),

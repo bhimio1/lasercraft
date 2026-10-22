@@ -20,8 +20,10 @@ our own conservative values is built in), and run speed and power or line
 interval test patterns to find settings for a new material.
 Engrave round objects on a roller or chuck rotary, correct for tapered
 cups, and cut printed sheets with print registration. Put a USB or network
-camera above the bed: correct its lens, align it by burning and finding
-four marks, and place designs on the live camera picture.
+camera above the bed or on the laser head: correct its lens, align it by
+burning and finding four marks, scan the bed with a head camera, and place
+designs on the live camera picture. Trace images and camera pictures into
+vector shapes.
 Every device feature is tested against a simulated GRBL controller, which
 the app also offers as a port. Everything works headlessly from the CLI.
 See the milestone list in `CLAUDE.md`.

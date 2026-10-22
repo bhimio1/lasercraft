@@ -482,7 +482,14 @@ impl Shell {
             Some(PanelWish::Import) => self.camera_windows.import(),
             Some(PanelWish::Setup(c)) => self.camera_windows.open_setup(&c),
             Some(PanelWish::Lens(c)) => self.camera_windows.open_lens(&c),
-            Some(PanelWish::Align(c)) => self.camera_windows.open_align(view.project, &c),
+            Some(PanelWish::Align(c)) => {
+                let on_head = view
+                    .project
+                    .device()
+                    .and_then(|d| view.workshop.camera(d, &c).ok())
+                    .is_some_and(|cam| cam.mount == lasercraft_workshop::Mount::Head);
+                self.camera_windows.open_align(view.project, &c, on_head);
+            }
             Some(PanelWish::Trace) => self.trace = Some(TraceWindow::new(TraceSource::Camera)),
             None => {}
         }

@@ -73,6 +73,8 @@ pub enum Mount {
     /// Fixed above the bed.
     #[default]
     Bed,
+    /// Moves with the laser head.
+    Head,
 }
 
 /// One camera.
@@ -122,7 +124,8 @@ fn default_skip() -> u32 {
 }
 
 /// The keys `camera.set` accepts.
-pub const KEYS: [&str; 12] = [
+pub const KEYS: [&str; 13] = [
+    "mount",
     "use",
     "opacity",
     "fit_width",
@@ -254,6 +257,13 @@ impl Camera {
             _ => Err(WorkshopError::new(format!("{key} must be on or off"))),
         };
         match (key, &mut self.source) {
+            ("mount", _) => {
+                self.mount = match value.trim() {
+                    "bed" => Mount::Bed,
+                    "head" => Mount::Head,
+                    _ => return Err(WorkshopError::new("mount is bed or head")),
+                };
+            }
             ("use", _) => self.used = on(value)?,
             ("opacity", _) => self.opacity = number(key, value, (0.0, 100.0))?,
             ("fit_width", _) => self.fit.width = number(key, value, (10.0, 1000.0))?,
@@ -342,9 +352,14 @@ impl Camera {
             Some(a) => format!("aligned ({})", a.name),
         };
         format!(
-            "{}: {}; {lens}; {alignment}{}",
+            "{}: {}{}; {lens}; {alignment}{}",
             self.name,
             self.source.summary(),
+            if self.mount == Mount::Head {
+                ", on the laser head"
+            } else {
+                ""
+            },
             if self.used {
                 ""
             } else {
@@ -405,6 +420,7 @@ mod tests {
             width: 640,
             height_px: 480,
             created: String::new(),
+            head: None,
         };
         net.add_alignment(align(0.0, "flat"));
         net.add_alignment(align(3.0, "3 mm"));

@@ -317,3 +317,68 @@ fn the_pattern_burns_as_an_absolute_fill_job_and_frames_laser_off() {
     assert!(err.to_string().contains("past the bed's edge"), "{err}");
     let _ = std::fs::remove_file(svg);
 }
+
+#[test]
+fn a_head_camera_aligns_where_the_head_was_and_moves_with_it() {
+    let mut s = session();
+    s.run_line("camera.add Nozzle simulated mount=head")
+        .unwrap();
+    assert!(
+        s.run_line("camera.list")
+            .unwrap()
+            .message
+            .contains("on the laser head")
+    );
+    // 60 mm above the bed, 15 mm right of the head: a 50 × 37 mm view.
+    let lens = Lens::ideal(Model::Standard, 640, 480, 768.0);
+    let camera_at = |head: Point| {
+        Renderer::new(
+            &lens,
+            &Pose::overhead(head.x + 15.0, head.y, 60.0, [0.0, 0.0, 0.0]),
+        )
+    };
+    let pattern = Pattern::for_head();
+    let draw = |head: Point| {
+        camera_at(head).render([60, 60, 60], |p| {
+            Some(if burned(&pattern, 300.0, 200.0, p) {
+                [30, 20, 10]
+            } else {
+                [220, 200, 160]
+            })
+        })
+    };
+    // The pattern is centered on the bed; the head is 15 mm left of it.
+    let head = Point::new(135.0, 100.0);
+    let path = temp("head.png");
+    std::fs::write(&path, draw(head).encode_png()).unwrap();
+    let file = path.display().to_string();
+    let json = serde_json::to_string(&pattern).unwrap();
+    let err = run(
+        &mut s,
+        "camera.align_find",
+        &["Nozzle".into(), file.clone(), json.clone()],
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("connect the laser"), "{err}");
+    run(
+        &mut s,
+        "camera.align_find",
+        &["Nozzle".into(), file, json, "head=135,100".into()],
+    )
+    .unwrap();
+    let cam = s.workshop().camera("Shop", "Nozzle").unwrap().clone();
+    let alignment = cam.alignment().unwrap();
+    assert_eq!(alignment.head, Some(head));
+    // From another head position, a bed point is found where it is.
+    let elsewhere = Point::new(60.0, 40.0);
+    let plain = cam.lens_or_plain(640, 480);
+    let p = Point::new(80.0, 45.0);
+    let px = lens.project(
+        Pose::overhead(elsewhere.x + 15.0, elsewhere.y, 60.0, [0.0, 0.0, 0.0])
+            .ray(p)
+            .unwrap(),
+    );
+    let seen = alignment.at_head(elsewhere).to_bed(&plain, px).unwrap();
+    assert!(seen.distance(p) < 0.3, "{seen:?}");
+    let _ = std::fs::remove_file(path);
+}

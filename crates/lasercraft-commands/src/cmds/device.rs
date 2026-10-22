@@ -174,6 +174,8 @@ pub fn with_context(invocation: &Invocation, ctx: &DeviceContext) -> Invocation 
             | "device.jog"
             | "device.camera_pattern_frame"
             | "registration.set_target"
+            | "camera.align"
+            | "camera.align_find"
     ) && !has_key(invocation, "head")
         && let Some(head) = ctx.head
     {

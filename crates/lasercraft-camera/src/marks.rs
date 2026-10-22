@@ -46,6 +46,19 @@ impl Pattern {
         }
     }
 
+    /// For a camera on the head: 30 × 20 mm, 6 mm marks, centered; 36 ×
+    /// 26 mm in all, inside a small view.
+    #[must_use]
+    pub fn for_head() -> Self {
+        Self {
+            width: 30.0,
+            height: 20.0,
+            mark: 6.0,
+            dx: 0.0,
+            dy: 0.0,
+        }
+    }
+
     /// The pattern's center on a bed, document mm (the center dot).
     #[must_use]
     pub fn center(&self, bed_width: f64, bed_height: f64) -> Point {

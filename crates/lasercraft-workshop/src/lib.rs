@@ -16,7 +16,7 @@ pub mod presets;
 pub mod profile;
 pub mod starter;
 
-pub use camera::{Camera, Source};
+pub use camera::{Camera, Mount, Source};
 pub use library::{Key, Library, Material};
 pub use presets::Preset;
 pub use profile::DeviceProfile;

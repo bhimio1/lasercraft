@@ -68,5 +68,9 @@ The list grows with each milestone that touches the machine.
 | H32 | Lens wizard with the printed calibration sheet, five positions | Each picture finds the dots; the chosen model's fit is above 90% and straight edges look straight |
 | H33 | Alignment burn on scrap: Frame, then Start | Frame traces the pattern laser off; four ringed marks and a center dot burn inside the bed; Pause and Stop work |
 | H34 | Find the marks, Finish, then Capture camera image | All four marks found; the overlay's burned marks sit within 1 mm of the drawn pattern's marks |
+| H35 | USB camera: Picture settings, move Exposure and Focus, close and reopen the app | The picture changes when a slider is released; the values come back after restarting; Default restores the camera's own value |
+| H36 | Trace to vectors on a scanned sketch and on Trace camera image | Outlines follow the drawing; OK adds one group on the current layer; Undo removes it (and brings back the image when Delete image was on) |
+| H37 | Camera on the head: align with the small pattern, jog the head over the marks, Finish | Alignment stored; after jogging elsewhere, Capture places the picture where the head is, within 1 mm |
+| H38 | Scan bed with the head camera, then Stop in the job bar halfway | The head moves with the laser off over the bed and the overlay fills in; Stop halts the machine and ends the scan |
 
 Record results in the PR that touched the behavior, with the details above.

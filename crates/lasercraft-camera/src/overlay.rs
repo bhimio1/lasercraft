@@ -177,6 +177,7 @@ mod tests {
             width: 640,
             height_px: 480,
             created: String::new(),
+            head: None,
         };
         let mut overlay = Overlay::empty(bw, bh);
         overlay.paint(&picture, &lens, &alignment, &Fit::default(), None);

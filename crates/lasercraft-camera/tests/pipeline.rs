@@ -94,6 +94,7 @@ fn calibrate_align_and_overlay_end_to_end() {
         width: 640,
         height_px: 480,
         created: String::new(),
+        head: None,
     };
     // Every bed point inside the marks maps back to itself within 0.5 mm.
     let mut worst: f64 = 0.0;
