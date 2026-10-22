@@ -549,6 +549,23 @@ mod tests {
                 ],
             )
             .to_string(),
+            Invocation::new(
+                "image.trace_picture",
+                [
+                    concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../examples/fixtures/m7-tile.jpg"
+                    ),
+                    "20",
+                    "30",
+                    "60",
+                    "40",
+                    r#"{"to": 100, "speck": 20, "reduction": 1}"#,
+                ],
+            )
+            .to_string(),
+            Invocation::new("image.trace", ["500", r#"{"to": 130, "speck": 0}"#, "@6"]).to_string(),
+            Invocation::new("image.trace", ["500", r#"{"delete": true, "to": 130}"#]).to_string(),
         ]);
         script
     }

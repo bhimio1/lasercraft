@@ -8,6 +8,7 @@ mod bitmap;
 mod codec;
 mod dither;
 mod raster;
+pub mod trace;
 
 pub use adjust::Adjust;
 pub use bitmap::{Gray, MAX_PIXELS, MAX_SIDE, base64_decode, base64_encode};

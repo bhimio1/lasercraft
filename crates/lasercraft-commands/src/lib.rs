@@ -21,6 +21,7 @@ mod session;
 
 pub use action::action_name;
 pub use cmds::device::{DeviceContext, with_context};
+pub use cmds::trace::{MAX_NODES, TraceSettings, Traced, trace};
 pub use command::{Command, Context, Outcome};
 pub use error::CommandError;
 pub use invocation::Invocation;

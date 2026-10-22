@@ -25,6 +25,7 @@ mod test;
 // M9: rotary, print registration, taper, cameras.
 mod camera;
 mod setup;
+pub(crate) mod trace;
 
 use crate::{BATCH, Command, Invocation};
 
@@ -55,6 +56,7 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     all.extend(setup::commands());
     all.extend(setup::hidden());
     all.extend(camera::commands());
+    all.extend(trace::commands());
     all
 }
 

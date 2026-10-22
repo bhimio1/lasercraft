@@ -27,7 +27,7 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
         ),
         cmd(
             "image.insert_picture",
-            "image.insert_picture <path> <x> <y> <w> <h> [@layer]",
+            "image.insert_picture <path> <x> <y> <w> <h> [@color]",
             "Add a picture file as an image covering a bed rectangle (camera Insert picture).",
             insert_picture,
         ),
