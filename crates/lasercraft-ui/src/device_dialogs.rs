@@ -9,7 +9,7 @@ use lasercraft_workshop::{DeviceProfile, Workshop};
 
 use crate::shell::PromptKind;
 use crate::theme::{Tokens, size, weight};
-use crate::widgets::{self, Fill};
+use crate::widgets::{self, Bounded, Fill};
 
 /// The Device profile dialog's tabs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -243,6 +243,7 @@ impl DeviceWindows {
         egui::Window::new("Device profiles")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
@@ -387,6 +388,7 @@ impl DeviceWindows {
         egui::Window::new("Remove device profile?")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.set_max_width(340.0);
                 ui.label(format!(
@@ -431,6 +433,7 @@ impl DeviceWindows {
             .id(egui::Id::unique("device-profile-form"))
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name");

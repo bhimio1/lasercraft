@@ -7,6 +7,8 @@ use lasercraft_geom::Point;
 use lasercraft_project::Project;
 use lasercraft_workshop::Workshop;
 
+use crate::camera_panel::{CameraAction, CameraPanel, CameraView, PanelWish};
+use crate::camera_windows::CameraWindows;
 use crate::canvas::Canvas;
 use crate::device_dialogs::DeviceWindows;
 use crate::dialogs::Dialogs;
@@ -22,7 +24,8 @@ use crate::setup_windows::SetupWindows;
 use crate::test_windows::{TestInfo, TestKind, TestRequest, TestWindow};
 use crate::theme::{Tokens, size};
 use crate::tool_column::ToolColumn;
-use crate::widgets::Band;
+use crate::widgets::Bounded;
+use crate::widgets::{self, Band};
 
 /// The drawing tools: label, `ui.tool` argument.
 const TOOLS: [(&str, &str, Tool); 6] = [
@@ -56,10 +59,12 @@ pub struct ShellView<'a> {
     pub laser: &'a LaserView,
     /// Device profiles, material libraries and test presets (M8).
     pub workshop: &'a Workshop,
+    /// Cameras' pictures and the overlay (M9).
+    pub camera: &'a CameraView,
 }
 
 /// Something the user asked for. The app carries it out.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     /// Run a command through the session.
     Run(Invocation),
@@ -78,6 +83,8 @@ pub enum Action {
     Preview,
     /// Something the app remembers about the laser (`docs/spec/laser.md`).
     Laser(LaserAction),
+    /// Something only the app can do with cameras (`docs/spec/camera.md`).
+    Camera(CameraAction),
 }
 
 /// What a path prompt is for.
@@ -123,6 +130,12 @@ pub struct Shell {
     devices: DeviceWindows,
     /// Rotary, taper and print registration windows (M9).
     setups: SetupWindows,
+    /// The Camera panel (M9).
+    camera_panel: CameraPanel,
+    /// Camera list, Add camera and Camera setup (M9).
+    camera_windows: CameraWindows,
+    /// The Camera panel was shown for the profile that has cameras.
+    camera_shown_for: Option<String>,
     /// Open test pattern windows (M8).
     tests: Vec<TestWindow>,
     /// A test window to open (needs the workshop, which `show` has).
@@ -166,6 +179,9 @@ impl Shell {
             materials: MaterialsPanel::default(),
             devices: DeviceWindows::default(),
             setups: SetupWindows::default(),
+            camera_panel: CameraPanel::default(),
+            camera_windows: CameraWindows::default(),
+            camera_shown_for: None,
             tests: Vec::new(),
             open_test: None,
             pattern_preview: false,
@@ -290,6 +306,11 @@ impl Shell {
                 .response
                 .rect
         });
+        let mut bounds = ui.ctx().content_rect();
+        if let Some(bar) = job_bar {
+            bounds.min.y = bar.max.y;
+        }
+        widgets::set_window_bounds(ui.ctx(), bounds);
         if let Some(p) = self.canvas.pointer() {
             self.pointer = Some(p);
         }
@@ -339,6 +360,8 @@ impl Shell {
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 self.canvas.set_ghost(self.setups.ghost(view.project));
+                self.canvas
+                    .set_overlay(view.camera.overlay.clone(), view.camera.overlay_revision);
                 let drawn = self.canvas.show(ui, view.project);
                 actions.extend(drawn.into_iter().map(Action::Run));
             });
@@ -370,6 +393,7 @@ impl Shell {
         }
         self.setups
             .show(ui.ctx(), view.project, view.laser, &mut actions);
+        self.cameras(ui.ctx(), view, &mut actions);
         if std::mem::take(&mut self.edit_profile) {
             self.devices.open_current(view.project, view.workshop);
         }
@@ -393,6 +417,50 @@ impl Shell {
             self.show_panel(DockPanel::Console);
         }
         actions
+    }
+
+    /// Whether camera pictures are wanted now: the Camera panel is in
+    /// front or a camera window is open.
+    #[must_use]
+    pub fn cameras_live(&self) -> bool {
+        self.camera_windows.live()
+            || (self.panels && self.dock.front_of(true) == Some(DockPanel::Camera))
+    }
+
+    /// The camera windows, the panel's wishes, and showing the Camera panel
+    /// once a camera is set up.
+    fn cameras(&mut self, ctx: &egui::Context, view: &ShellView<'_>, actions: &mut Vec<Action>) {
+        let device = view.project.device().map(str::to_owned);
+        let has = device
+            .as_deref()
+            .and_then(|d| view.workshop.cameras(d).ok())
+            .is_some_and(|c| !c.is_empty());
+        if has && self.camera_shown_for != device {
+            self.camera_shown_for.clone_from(&device);
+            if !self.dock.is_shown(DockPanel::Camera) {
+                self.dock.show_tab(DockPanel::Camera);
+            }
+        }
+        match self.camera_panel.wants.take() {
+            Some(PanelWish::Add) => self.camera_windows.open_add(),
+            Some(PanelWish::Import) => self.camera_windows.import(),
+            Some(PanelWish::Setup(c)) => self.camera_windows.open_setup(&c),
+            Some(PanelWish::Lens(c)) => self.camera_windows.open_lens(&c),
+            Some(PanelWish::Align(c)) => self.camera_windows.open_align(view.project, &c),
+            None => {}
+        }
+        self.camera_windows.show(
+            ctx,
+            view.project,
+            view.workshop,
+            view.camera,
+            view.laser,
+            &self.keymap,
+            actions,
+        );
+        if let Some(kind) = self.camera_windows.prompt.take() {
+            self.prompt = Some((kind, String::new()));
+        }
     }
 
     /// Opens a requested test window and draws the open ones.
@@ -547,6 +615,19 @@ impl Shell {
                     });
                 actions.extend(run.into_iter().map(Action::Run));
             }
+            DockPanel::Camera => {
+                egui::ScrollArea::vertical()
+                    .id_salt("camera-scroll")
+                    .show(ui, |ui| {
+                        self.camera_panel.show(
+                            ui,
+                            view.project,
+                            view.workshop,
+                            view.camera,
+                            actions,
+                        );
+                    });
+            }
             DockPanel::Materials => {
                 egui::ScrollArea::vertical()
                     .id_salt("materials-scroll")
@@ -575,6 +656,7 @@ impl Shell {
         egui::Window::new("Project notes")
             .collapsible(false)
             .open(&mut open)
+            .bounded(ui.ctx())
             .show(ui.ctx(), |ui| {
                 ui.add(
                     egui::TextEdit::multiline(text)
@@ -706,6 +788,11 @@ impl Shell {
                 self.setups.open_registration();
                 return None;
             }
+            "ui.camera_list" => {
+                self.camera_windows.open_list();
+                return None;
+            }
+            "ui.camera_capture" => Action::Camera(CameraAction::Capture(None)),
             "ui.device_profiles" => {
                 self.devices.open_list();
                 return None;
@@ -1022,6 +1109,16 @@ impl Shell {
             );
         });
         ui.separator();
+        self.menu_line(ui, "Camera list…", "ui.camera_list", true, "", actions);
+        self.menu_line(
+            ui,
+            "Capture camera image",
+            "ui.camera_capture",
+            true,
+            "",
+            actions,
+        );
+        ui.separator();
         self.menu_line(ui, "Rotary attachment…", "ui.rotary", true, "", actions);
         let rotary = view.project.rotary_on();
         self.menu_line(
@@ -1234,6 +1331,7 @@ impl Shell {
         egui::Window::new(title)
             .collapsible(false)
             .open(&mut open)
+            .bounded(ui.ctx())
             .show(ui.ctx(), |ui| {
                 ui.label(what);
                 let field = ui.add(

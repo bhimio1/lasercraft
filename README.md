@@ -5,7 +5,7 @@ engravers, for Linux, Windows and macOS. Its workflow and default shortcuts aim
 to feel familiar to people coming from LightBurn. It is an independent project,
 not affiliated with or endorsed by LightBurn Software.
 
-**Status: milestones M0–M8.** Draw shapes or import SVG and DXF; add text
+**Status: milestones M0–M9.** Draw shapes or import SVG and DXF; add text
 from system fonts; edit nodes; combine shapes with booleans, weld and offset;
 group, align, distribute and array them; put them on color layers with line
 or fill settings, kerf and tabs; preview the planned job with travel moves
@@ -18,6 +18,10 @@ Keep device profiles for each machine (work area, port, power and speed
 limits), store layer settings in material libraries (a starter library of
 our own conservative values is built in), and run speed and power or line
 interval test patterns to find settings for a new material.
+Engrave round objects on a roller or chuck rotary, correct for tapered
+cups, and cut printed sheets with print registration. Put a USB or network
+camera above the bed: correct its lens, align it by burning and finding
+four marks, and place designs on the live camera picture.
 Every device feature is tested against a simulated GRBL controller, which
 the app also offers as a port. Everything works headlessly from the CLI.
 See the milestone list in `CLAUDE.md`.
@@ -53,6 +57,13 @@ The Speed and power test (Machine menu) with its job preview: a grid of
 boxes from least to most energy, with labels and a border.
 
 ![Speed and power test window and its job preview](docs/screenshots/test-pattern.png)
+
+The Camera panel and the camera overlay: after correcting the lens and
+burning and finding the four alignment marks, the camera picture lies on
+the bed under the design. Here the simulated camera sees what the
+simulated laser burned.
+
+![Camera overlay on the canvas with the Camera panel](docs/screenshots/camera.png)
 
 The screenshots show `examples/screenshot-demo.lcs`.
 

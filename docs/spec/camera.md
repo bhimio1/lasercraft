@@ -92,6 +92,11 @@ document millimetres on the bed, stored as `{"name": …, "height": <mm>,
 "matrix": [9 numbers], "lens": "<created of the lens correction used>",
 "width": w, "height_px": h, "created": …}`.
 
+A camera without a lens correction ("No lens correction" in the wizard)
+uses its pictures as they are: alignment and overlay treat it as a lens
+without distortion, `lens` is empty and `width`/`height_px` are 0 when
+the picture size was not known (then the size of each picture is used).
+
 1. LaserCraft burns the **alignment pattern** (own design): four marks,
    each a filled ring (outer diameter the mark size, inner diameter 60 %
    of it) with a filled dot (25 %) at its center, centered on the corners
@@ -184,7 +189,7 @@ panel first."
 | `camera.set <name> <key> <value>` | `use`, `opacity`, `fit_width`, `fit_height`, `fit_dx`, `fit_dy`, `skip`, `device`, `index`, `format`, `url`, `rate`. |
 | `camera.pattern <path.svg>` | Write the calibration sheet. |
 | `camera.calibrate <name> <standard\|wide\|fisheye> <picture> …` | Find the sheet in each picture file (PNG or JPEG), fit the model and store the lens correction. The outcome names the fit and how many dots each picture gave. |
-| `camera.set_lens <name> <json\|none>` | Store a lens correction (the wizard's choice) or remove it. |
+| `camera.set_lens <name> <json\|path.lccam\|none>` | Store a lens correction (the wizard's choice, or the one in a camera file) or remove it. |
 | `camera.align <name> <json>` | Store an alignment from `{"picture": [[u, v] ×4], "bed": [[x, y] ×4], "height": h}`, picture points raw (the lens correction is applied). |
 | `camera.align_find <name> <picture> [pattern json]` | Find the four marks automatically in a picture file and store the alignment. |
 | `camera.use_alignment <name> <alignment name>` / `camera.remove_alignment <name> <alignment name>` | |
@@ -226,6 +231,10 @@ As `docs/spec/style/later-windows.md`, "Camera (M9)", with these choices:
 - AprilTag-style automatic marks; our marks are found by shape only.
 - Alignments interpolated between material heights.
 - Tracing the overlay into shapes (needs Trace to vectors).
+- USB camera controls: the app does not read them yet, so Picture settings
+  says the camera has no adjustable controls.
+- Moving the alignment pattern by dragging it on the bed drawing (today
+  only its size is set; it stays centered).
 
 ## Sources
 

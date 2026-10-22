@@ -8,7 +8,7 @@ use lasercraft_geom::Point;
 use lasercraft_project::{Color, Project};
 
 use crate::theme::{Tokens, size, weight};
-use crate::widgets::{self, Fill};
+use crate::widgets::{self, Bounded, Fill};
 
 /// Corner styles offered for offsets: `path.offset` name, label.
 const CORNERS: [(&str, &str); 3] = [("round", "Round"), ("miter", "Miter"), ("bevel", "Bevel")];
@@ -152,6 +152,7 @@ impl Dialogs {
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 egui::Grid::new("dialog-form")
                     .num_columns(2)

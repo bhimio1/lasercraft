@@ -19,11 +19,14 @@ pub enum DockPanel {
     Machine,
     /// Material libraries (M8).
     Materials,
+    /// Cameras and the overlay (M9).
+    Camera,
 }
 
 impl DockPanel {
     /// Every panel, in Window → Panels order (alphabetical).
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
+        Self::Camera,
         Self::Console,
         Self::Jog,
         Self::Layers,
@@ -31,7 +34,7 @@ impl DockPanel {
         Self::Materials,
     ];
     /// The upper group's tabs, left to right.
-    pub const UPPER: [Self; 3] = [Self::Layers, Self::Jog, Self::Console];
+    pub const UPPER: [Self; 4] = [Self::Layers, Self::Jog, Self::Console, Self::Camera];
     /// The lower group's tabs, left to right.
     pub const LOWER: [Self; 2] = [Self::Machine, Self::Materials];
 
@@ -44,6 +47,7 @@ impl DockPanel {
             Self::Console => "Console",
             Self::Machine => "Machine",
             Self::Materials => "Materials",
+            Self::Camera => "Camera",
         }
     }
 
@@ -56,6 +60,7 @@ impl DockPanel {
             Self::Console => "Messages from GRBL and a line for raw commands",
             Self::Machine => "Laser connection and job control",
             Self::Materials => "Material libraries: stored layer settings",
+            Self::Camera => "Camera pictures on the bed",
         }
     }
 
@@ -72,7 +77,7 @@ impl DockPanel {
 /// other show/hide state of the main window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dock {
-    shown: [bool; 5],
+    shown: [bool; 6],
     front: [DockPanel; 2],
     /// The command line's log is open.
     pub log_open: bool,
@@ -85,7 +90,8 @@ pub struct Dock {
 impl Default for Dock {
     fn default() -> Self {
         Self {
-            shown: [true; 5],
+            // The Camera panel shows once a camera is set up.
+            shown: [true, true, true, true, true, false],
             front: [DockPanel::Layers, DockPanel::Machine],
             log_open: false,
             palette: true,
@@ -109,6 +115,11 @@ impl Dock {
     pub fn show(&mut self, panel: DockPanel) {
         self.shown[panel.index()] = true;
         self.front[Self::group(panel)] = panel;
+    }
+
+    /// Shows `panel` without bringing it to the front.
+    pub fn show_tab(&mut self, panel: DockPanel) {
+        self.shown[panel.index()] = true;
     }
 
     /// Hides `panel`; the next shown tab of its group comes to the front.

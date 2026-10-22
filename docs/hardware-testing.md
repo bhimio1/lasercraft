@@ -56,4 +56,17 @@ The list grows with each milestone that touches the machine.
 | H25 | Close a test window while its pattern runs, then Pause and Stop from the job bar | Pattern keeps running after closing; Pause and Stop work as for any job |
 | H26 | Follow a material entry, change the entry's speed, Start | The layer runs at the entry's new speed |
 
+### Added with M9
+
+| # | Check | Expected |
+| --- | --- | --- |
+| H27 | Rotary attachment set up, Test turn (laser off) | The object turns once about its axis; X does not move; nothing burns |
+| H28 | Rotary on, Start a ring of text on a cup | Text wraps once with correct proportions; Y never leaves the roller's travel; the bounds check covers X only |
+| H29 | Print registration: two targets on a printed sheet, set by jogging the head to each, then Start | The cut lands on the print within 0.5 mm; a sheet moved by 5 mm and re-registered still lines up |
+| H30 | USB camera: add, live view, close and reopen the app | Picture appears within a few seconds; the camera reopens by name; unplugging it shows the error band, not a hang |
+| H31 | Network camera: a still-JPEG URL and an MJPEG stream URL | Both show pictures at the preview rate; a wrong URL shows the error band |
+| H32 | Lens wizard with the printed calibration sheet, five positions | Each picture finds the dots; the chosen model's fit is above 90% and straight edges look straight |
+| H33 | Alignment burn on scrap: Frame, then Start | Frame traces the pattern laser off; four ringed marks and a center dot burn inside the bed; Pause and Stop work |
+| H34 | Find the marks, Finish, then Capture camera image | All four marks found; the overlay's burned marks sit within 1 mm of the drawn pattern's marks |
+
 Record results in the PR that touched the behavior, with the details above.

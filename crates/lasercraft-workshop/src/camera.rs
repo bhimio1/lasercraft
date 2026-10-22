@@ -1,7 +1,7 @@
 //! Cameras of a device profile (`docs/spec/camera.md`, "Camera data").
 
 use lasercraft_camera::align::Alignment;
-use lasercraft_camera::lens::Lens;
+use lasercraft_camera::lens::{Lens, Model};
 use lasercraft_camera::overlay::Fit;
 use serde::{Deserialize, Serialize};
 
@@ -178,6 +178,20 @@ impl Camera {
             opacity: default_opacity(),
             fit: Fit::default(),
             skip: default_skip(),
+        })
+    }
+
+    /// The lens correction, or, when the picture is used as it is, a lens
+    /// without distortion: the size the alignment in use was made at, else
+    /// the given picture size.
+    #[must_use]
+    pub fn lens_or_plain(&self, width: u32, height: u32) -> Lens {
+        self.lens.clone().unwrap_or_else(|| {
+            let (w, h) = match self.alignment() {
+                Some(a) if a.width > 0 && a.height_px > 0 => (a.width, a.height_px),
+                _ => (width, height),
+            };
+            Lens::ideal(Model::Standard, w, h, f64::from(w.max(h).max(1)))
         })
     }
 

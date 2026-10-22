@@ -18,6 +18,9 @@ lasercraft-project.workspace = true
 lasercraft-plan.workspace = true
 lasercraft-ui.workspace = true
 lasercraft-workshop.workspace = true
+lasercraft-camera.workspace = true
+nokhwa.workspace = true
+ureq.workspace = true
 eframe.workspace = true
 serde_json.workspace = true
 

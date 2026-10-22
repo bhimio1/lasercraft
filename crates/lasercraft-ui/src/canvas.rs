@@ -56,6 +56,12 @@ pub struct Canvas {
     textures: Textures,
     /// Outlines a tool window previews this frame, document mm (M9).
     ghost: Vec<(Vec<Point>, bool)>,
+    /// The camera overlay and its texture, by revision (M9).
+    overlay: Option<(
+        u64,
+        std::sync::Arc<lasercraft_camera::overlay::Overlay>,
+        Option<egui::TextureHandle>,
+    )>,
 }
 
 impl Canvas {
@@ -67,6 +73,22 @@ impl Canvas {
         }
         let p = self.interaction.pointer()?;
         project.shape_at(p, HIT_PX / view.scale())
+    }
+
+    /// The camera overlay to draw under the shapes.
+    pub fn set_overlay(
+        &mut self,
+        overlay: Option<std::sync::Arc<lasercraft_camera::overlay::Overlay>>,
+        revision: u64,
+    ) {
+        match overlay {
+            None => self.overlay = None,
+            Some(o) => {
+                if self.overlay.as_ref().is_none_or(|(r, ..)| *r != revision) {
+                    self.overlay = Some((revision, o, None));
+                }
+            }
+        }
     }
 
     /// Outlines to preview dashed this frame (a tool window's result).
@@ -141,6 +163,17 @@ impl Canvas {
     /// Draws the canvas and returns the commands the user's gestures produced.
     pub fn show(&mut self, ui: &mut egui::Ui, project: &Project) -> Vec<Invocation> {
         self.textures.update(ui.ctx(), project);
+        if let Some((_, overlay, texture @ None)) = &mut self.overlay {
+            let image = egui::ColorImage::from_rgba_unmultiplied(
+                [overlay.width as usize, overlay.height as usize],
+                &overlay.rgba,
+            );
+            *texture = Some(ui.ctx().load_texture(
+                "camera-overlay",
+                image,
+                egui::TextureOptions::LINEAR,
+            ));
+        }
         let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let screen = rect_of(response.rect);
         self.screen = Some(screen);
@@ -266,6 +299,22 @@ impl Canvas {
         let bed_screen =
             egui::Rect::from_two_pos(pos(view.to_screen(bed.min)), pos(view.to_screen(bed.max)));
         painter.rect_filled(bed_screen, 0.0, t.bed);
+        if let Some((_, overlay, Some(texture))) = &self.overlay {
+            let size = Point::new(
+                f64::from(overlay.width) * overlay.mm_per_px,
+                f64::from(overlay.height) * overlay.mm_per_px,
+            );
+            let r = egui::Rect::from_two_pos(
+                pos(view.to_screen(bed.min)),
+                pos(view.to_screen(bed.min + size)),
+            );
+            painter.image(
+                texture.id(),
+                r,
+                egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
         paint_grid(painter, view, bed, &t);
         painter.rect_stroke(
             bed_screen,

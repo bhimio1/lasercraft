@@ -186,12 +186,73 @@ fn calibrate_align_and_write_an_overlay_from_picture_files() {
         s.workshop().camera("Shop", "Top").unwrap().alignments.len(),
         1
     );
+    // Another camera takes the lens correction from an exported file.
+    let file = temp("top-lens.lccam");
+    run(
+        &mut s,
+        "camera.export",
+        &["Top".into(), file.display().to_string()],
+    )
+    .unwrap();
+    s.run_line("camera.add Spare simulated").unwrap();
+    run(
+        &mut s,
+        "camera.set_lens",
+        &["Spare".into(), file.display().to_string()],
+    )
+    .unwrap();
+    assert_eq!(
+        s.workshop().camera("Shop", "Spare").unwrap().lens,
+        s.workshop().camera("Shop", "Top").unwrap().lens
+    );
+    let _ = std::fs::remove_file(file);
     for p in pictures
         .iter()
         .chain([&marks.display().to_string(), &png.display().to_string()])
     {
         let _ = std::fs::remove_file(p);
     }
+}
+
+#[test]
+fn a_camera_without_lens_correction_aligns_on_the_picture_as_it_is() {
+    let mut s = session();
+    s.run_line("camera.add Plain simulated").unwrap();
+    let lens = Lens::ideal(Model::Standard, 400, 300, 330.0);
+    let pose = Pose::overhead(150.0, 100.0, 300.0, [0.0, 0.0, 0.0]);
+    let camera = Renderer::new(&lens, &pose);
+    let pattern = Pattern::default_for(300.0, 200.0);
+    let pic = camera.render([60, 60, 60], |p| {
+        (p.x >= 0.0 && p.y >= 0.0 && p.x <= 300.0 && p.y <= 200.0).then(|| {
+            if burned(&pattern, 300.0, 200.0, p) {
+                [30, 20, 10]
+            } else {
+                [220, 200, 160]
+            }
+        })
+    });
+    let path = temp("plain.png");
+    std::fs::write(&path, pic.encode_png()).unwrap();
+    let file = path.display().to_string();
+    run(&mut s, "camera.align_find", &["Plain".into(), file.clone()]).unwrap();
+    let cam = s.workshop().camera("Shop", "Plain").unwrap().clone();
+    assert!(cam.lens.is_none());
+    let plain = cam.lens_or_plain(400, 300);
+    let alignment = cam.alignment().unwrap();
+    let p = Point::new(200.0, 50.0);
+    let back = alignment
+        .to_bed(&plain, lens.project(pose.ray(p).unwrap()))
+        .unwrap();
+    assert!(back.distance(p) < 0.6, "{back:?}");
+    let png = temp("plain-overlay.png");
+    run(
+        &mut s,
+        "camera.overlay",
+        &["Plain".into(), file, png.display().to_string()],
+    )
+    .unwrap();
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(png);
 }
 
 #[test]

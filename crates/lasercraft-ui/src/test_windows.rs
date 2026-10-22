@@ -15,6 +15,7 @@ use crate::laser_panel::{self, Enabled, LaserPanel, LaserView};
 use crate::preview::Preview;
 use crate::shell::{Action, PromptKind};
 use crate::theme::{Tokens, size, weight};
+use crate::widgets::Bounded;
 use crate::widgets::{self, Band};
 
 /// Which test a window runs.
@@ -245,6 +246,7 @@ impl TestWindow {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.set_max_width(520.0);
                 if self.kind == TestKind::SpeedPower {
@@ -637,6 +639,7 @@ impl TestWindow {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 egui::Grid::new(("part-grid", part))
                     .num_columns(2)
@@ -703,6 +706,7 @@ impl TestWindow {
         egui::Window::new("Save preset")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name");

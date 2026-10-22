@@ -9,7 +9,7 @@ use lasercraft_workshop::{Material, OpenLibrary, Workshop};
 
 use crate::shell::PromptKind;
 use crate::theme::{Tokens, size, weight};
-use crate::widgets::{self, Band, Fill};
+use crate::widgets::{self, Band, Bounded, Fill};
 
 /// The entry form, in place of the button column.
 #[derive(Debug, Clone, PartialEq)]
@@ -681,6 +681,7 @@ impl MaterialsPanel {
         egui::Window::new(title)
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name");
@@ -747,6 +748,7 @@ impl MaterialsPanel {
         egui::Window::new(title)
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.set_max_width(360.0);
                 ui.label(body);
@@ -815,6 +817,7 @@ impl MaterialsPanel {
         egui::Window::new("Material settings")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 egui::Grid::new("material-settings")
                     .num_columns(2)

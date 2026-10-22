@@ -28,6 +28,7 @@ lasercraft-app ──► lasercraft-device (M6: the device thread)
 lasercraft-commands ──► lasercraft-workshop ──► lasercraft-project (M8: device profiles, material libraries, test presets)
 lasercraft-app, lasercraft-cli ──► lasercraft-workshop (M8: the configuration folder)
 lasercraft-camera ──► lasercraft-geom (M9: lens model, calibration, alignment, overlay)
+lasercraft-workshop, lasercraft-commands, lasercraft-cli, lasercraft-ui, lasercraft-app ──► lasercraft-camera (M9: cameras in device profiles, camera.* commands, `camera` subcommand, Camera panel and windows, picture sources)
 lasercraft-ui ──► lasercraft-workshop (M8: the Materials panel and device windows read profiles, libraries and presets; changes go through commands)
 
 lasercraft-cli ──► lasercraft-commands, lasercraft-project, lasercraft-plan (M4)
@@ -58,8 +59,8 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `lasercraft-camera` | Pictures, the lens model and its calibration from pictures of the calibration sheet, alignment marks and bed alignment, overlays, a synthetic camera for tests and the simulated camera (`docs/spec/camera.md`). Pure: capturing pictures is the app's. | M9 |
 | `lasercraft-workshop` | The user's data outside projects: device profiles, material libraries (`.lcmat`), test presets, the starter library, their JSON formats and the configuration folder (`docs/spec/devices.md`, `docs/spec/materials.md`, `docs/spec/test-patterns.md`). | M8 |
 | `lasercraft-cli` | Headless front end (`docs/spec/cli.md`). | M2: `new`, `run`, `script`, `show` (layers and shapes), `commands`; M4: `preview` (stats, `--moves`, `--svg`, machine flags); M5: `export`; M6: `simulate` |
-| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window; M8: Materials panel, Device row and device profile windows, test pattern windows (settings edited as JSON; `serde_json` for that), follow band in the layer editor |
-| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin; M8: loads the workshop from the configuration folder, answers test windows with planned patterns |
+| `lasercraft-ui` | egui views and the keymap. Turns input into `Action`s; no business logic (`docs/spec/ui-shell.md`). | M2: shell, canvas (zoom/pan, grid, tools, gestures as a testable state machine, layer colors), layers panel and editor, palette, keymap; M4: job preview window (draws `Preview` data), kerf and tab fields; M6: Laser panel (draws `LaserView` data), status-bar Stop/Pause, alarm window; M8: Materials panel, Device row and device profile windows, test pattern windows (settings edited as JSON; `serde_json` for that), follow band in the layer editor; M9: rotary, taper and print registration windows, Camera panel, camera list and setup windows (add, lens, alignment), overlay and registration targets on the canvas |
+| `lasercraft-app` | eframe entry point: owns the `Session`, runs actions, tracks the file path and unsaved changes. | M0; M6: owns the device thread's handle, builds `LaserView` from device events, keeps the user origin; M8: loads the workshop from the configuration folder, answers test windows with planned patterns; M9: camera threads (USB, network, simulated camera that sees the simulator's burns), lens fitting, mark finding and the overlay |
 
 ## Command registry
 
@@ -112,6 +113,11 @@ depends on `lasercraft-project`: it streams lines it is given.
   port and a clock; tests and `lasercraft-cli simulate` wrap it with the
   simulator on simulated time (`Bench`), which is how M6 is tested without
   hardware.
+- **Camera threads** (M9): the app runs one thread per camera in use. Each
+  owns its source (USB, network or the simulated camera), takes pictures at
+  the panel's preview rate and hands them to the UI through a channel; the
+  UI never waits for a camera. Lens fitting and overlays are pure functions
+  in `lasercraft-camera`.
 
 ## Testing strategy
 
@@ -146,6 +152,8 @@ depends on `lasercraft-project`: it streams lines it is given.
 | `png` | Reads and writes PNG for image import and the project file's embedded bitmaps (M7). Pure Rust; already in the tree through eframe. MIT OR Apache-2.0. |
 | `zune-jpeg` (`std` only, no SIMD features) | Decodes JPEG to grayscale for image import (M7). Pure Rust; already in the tree. MIT OR Apache-2.0 OR Zlib. |
 | `serialport` (no default features) | Opens and lists serial ports on Linux, Windows and macOS (M6). Without its `libudev` feature it lists Linux ports from sysfs, so no C library is needed. MPL-2.0. |
+| `nokhwa` (no default features; `input-native`) | Opens USB cameras through each platform's own API (V4L2, Media Foundation, AVFoundation) for the app only (M9). Its decoding features are off (they pull in a C JPEG library); the app converts frames itself with `zune-jpeg`. Apache-2.0. |
+| `ureq` 2 | Fetches still pictures and MJPEG streams from network cameras over HTTP(S) in the app (M9). Small, blocking, which suits one thread per camera; rustls, no C. MIT OR Apache-2.0. |
 
 DXF is read by our own small parser (`lasercraft-import/src/dxf.rs`): the
 available crates pull in large dependency trees for a format whose ASCII

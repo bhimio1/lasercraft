@@ -79,11 +79,17 @@ and macOS.
 - Keep functions small and crates focused.
 - Commit with clear messages, push to a branch, open a PR. Never push tags.
 
-## File editing protocol
+## File Editing Protocol
 
-1. Use the native `Edit` tool first for localized changes.
-2. Only if it fails on complex whitespace or quoting, use a precise
-   `python3 - <<'EOF'` replacement through Bash, after stating the error.
+1. **Primary Choice**: ALWAYS attempt to use the native `Edit` tool first for
+   surgical, localized line changes. This saves output tokens and maintains
+   file history.
+2. **Fallback Choice**: If (and ONLY if) an edit fails due to complex
+   multi-line formatting, matching errors, or fragile whitespace/quotes, you
+   are permitted to use a precise `python3 - <<'EOF'` script via the Bash
+   tool to perform the replacement.
+3. **Condition**: Before using the Python fallback, you must explicitly state
+   the error the native tool encountered.
 
 ## Milestones
 
@@ -107,6 +113,6 @@ and macOS.
       ordered/Bayer, halftone; brightness/contrast/gamma, negative; DPI/line interval.
 - [x] M8 Material library (our format, our data), test grids (speed × power),
       per-device profiles.
-- [ ] M9 Camera overlay and alignment, rotary, print-and-cut (later, optional).
+- [x] M9 Camera overlay and alignment, rotary, print-and-cut.
 - [ ] M10 Parity checklist (`cargo xtask parity`) against the public docs;
       Flatpak, AppImage, .msi and .dmg release builds.

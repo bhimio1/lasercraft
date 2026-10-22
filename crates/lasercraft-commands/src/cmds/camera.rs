@@ -66,7 +66,7 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
         ),
         ccmd(
             "camera.set_lens",
-            "camera.set_lens <name> <json|none>",
+            "camera.set_lens <name> <json|path.lccam|none>",
             "Store a lens correction, or remove it.",
             set_lens,
         ),
@@ -296,6 +296,21 @@ fn set_lens(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandErr
     let name = args.str(0)?;
     let lens: Option<Lens> = match args.str(1)? {
         "none" => None,
+        text if !text.trim_start().starts_with('{') => {
+            // A camera file: take its lens correction.
+            let file: serde_json::Value = std::fs::read_to_string(text)
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .ok_or_else(|| args.invalid(format!("cannot read the camera file {text}")))?;
+            let lens = file
+                .pointer("/camera/lens")
+                .filter(|v| !v.is_null())
+                .ok_or_else(|| args.invalid(format!("{text} holds no lens correction")))?;
+            let lens: Lens = serde_json::from_value(lens.clone())
+                .map_err(|e| args.invalid(format!("not a lens correction: {e}")))?;
+            lens.validate().map_err(|e| args.invalid(e.0))?;
+            Some(lens)
+        }
         text => {
             let lens: Lens = serde_json::from_str(text)
                 .map_err(|e| args.invalid(format!("not a lens correction: {e}")))?;
@@ -338,11 +353,13 @@ fn store_alignment(
     bed: [Point; 4],
     height: f64,
 ) -> Result<String, CommandError> {
-    let camera = cx.workshop.camera(profile, name).map_err(ws(args))?;
-    let lens = camera
-        .lens
-        .clone()
-        .ok_or_else(|| args.invalid("correct the lens first (camera.calibrate)"))?;
+    // Without a lens correction the size is unknown here; 0 means "the size
+    // of the picture" (`Camera::lens_or_plain`).
+    let lens = cx
+        .workshop
+        .camera(profile, name)
+        .map_err(ws(args))?
+        .lens_or_plain(0, 0);
     let matrix = align::fit(&lens, &raw, &bed).map_err(|e| args.invalid(e.0))?;
     let label = if height > 0.0 {
         format!("{} mm", lasercraft_plan::num(height))
@@ -436,9 +453,7 @@ fn align_find(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandE
         .workshop
         .camera(&p, name)
         .map_err(ws(args))?
-        .lens
-        .clone()
-        .ok_or_else(|| args.invalid("correct the lens first (camera.calibrate)"))?;
+        .lens_or_plain(pic.width(), pic.height());
     let scaled = pic.resized(lens.width, lens.height);
     let raw = find_marks(&scaled).map_err(|e| args.invalid(e.0))?;
     let label = store_alignment(
@@ -535,13 +550,14 @@ fn overlay(cx: &mut Context<'_>, args: &Args<'_>) -> Result<Outcome, CommandErro
     args.expect(3, 3)?;
     let p = profile(cx, args)?;
     let camera = cx.workshop.camera(&p, args.str(0)?).map_err(ws(args))?;
-    let (Some(lens), Some(alignment)) = (&camera.lens, camera.alignment()) else {
-        return Err(args.invalid("the camera needs a lens correction and a bed alignment first"));
+    let Some(alignment) = camera.alignment() else {
+        return Err(args.invalid("the camera needs a bed alignment first"));
     };
     let pic = picture(args, args.str(1)?)?;
+    let lens = camera.lens_or_plain(pic.width(), pic.height());
     let area = cx.project.work_area();
     let mut out = Overlay::empty(area.width_mm, area.height_mm);
-    out.paint(&pic, lens, alignment, &camera.fit, None);
+    out.paint(&pic, &lens, alignment, &camera.fit, None);
     let path = args.str(2)?;
     std::fs::write(path, out.encode_png())
         .map_err(|e| args.invalid(format!("cannot write {path}: {e}")))?;

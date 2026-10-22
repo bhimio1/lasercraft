@@ -12,6 +12,7 @@ use lasercraft_ui::keymap::Keymap;
 use lasercraft_ui::{Action, Shell, ShellView};
 use lasercraft_workshop::Workshop;
 
+mod camera;
 mod laser;
 mod preview;
 
@@ -63,6 +64,8 @@ struct App {
     previewed: Option<u64>,
     /// The laser connection (M6).
     laser: laser::Laser,
+    /// Camera pictures and the overlay (M9).
+    cameras: camera::Cameras,
 }
 
 impl App {
@@ -83,6 +86,7 @@ impl App {
             closing: false,
             previewed: None,
             laser: laser::Laser::new(ctx),
+            cameras: camera::Cameras::new(ctx),
         };
         for line in messages {
             app.shell.log(line);
@@ -117,6 +121,7 @@ impl App {
                     self.laser.act(&lasercraft_ui::LaserAction::DismissRefused);
                 }
                 if let Some(request) = outcome.device {
+                    self.watch_head(&request);
                     self.laser.send(request);
                 }
                 true
@@ -152,7 +157,11 @@ impl App {
         let discards = match &action {
             Action::New | Action::Open(_) | Action::Quit => true,
             Action::Run(inv) => inv.name == "project.new" || inv.name == "project.load",
-            Action::Save | Action::SaveAs(_) | Action::Preview | Action::Laser(_) => false,
+            Action::Save
+            | Action::SaveAs(_)
+            | Action::Preview
+            | Action::Laser(_)
+            | Action::Camera(_) => false,
         };
         if discards && self.modified() && self.pending.is_none() {
             self.pending = Some(action);
@@ -196,7 +205,199 @@ impl App {
                     self.shell.log(line);
                 }
             }
+            Action::Camera(action) => self.camera_action(action),
         }
+    }
+
+    /// A program or move for the laser: the camera picture may go stale,
+    /// and the simulated camera sees what the simulated laser burns.
+    fn watch_head(&mut self, request: &lasercraft_device::Request) {
+        use lasercraft_device::{Request, SIMULATOR_PORT, StreamKind};
+        match request {
+            Request::Stream { kind, gcode } => {
+                self.cameras.head_moved();
+                if *kind == StreamKind::Job
+                    && self.laser.view().port.as_deref() == Some(SIMULATOR_PORT)
+                {
+                    self.cameras.simulated_burn(gcode);
+                }
+            }
+            Request::Jog { .. } | Request::Home => self.cameras.head_moved(),
+            _ => {}
+        }
+    }
+
+    /// The project's device profile's cameras.
+    fn profile_cameras(&self) -> Vec<lasercraft_workshop::Camera> {
+        self.session
+            .project()
+            .device()
+            .and_then(|d| self.session.workshop().cameras(d).ok())
+            .map(<[_]>::to_vec)
+            .unwrap_or_default()
+    }
+
+    fn camera_action(&mut self, action: lasercraft_ui::CameraAction) {
+        use lasercraft_ui::CameraAction as A;
+        let area = *self.session.project().work_area();
+        let cams = self.profile_cameras();
+        match action {
+            A::Capture(region) => {
+                if let Err(e) = self.cameras.capture(&cams, &area, region) {
+                    self.shell.log(e);
+                }
+            }
+            A::Rate(r) => self.cameras.set_rate(r),
+            A::RefreshUsb => self.cameras.refresh_usb(),
+            A::KeepPicture(name) => self.keep_picture(&name),
+            A::DropPicture(i) => {
+                if i < self.cameras.captures.len() {
+                    self.cameras.captures.remove(i);
+                }
+            }
+            A::ClearPictures => {
+                self.cameras.captures.clear();
+                self.cameras.fits.clear();
+            }
+            A::FitLens(name) => self.fit_lens(&name),
+            A::FindMarks(name) => {
+                self.cameras.marks = Some(self.find_marks(&cams, &name));
+            }
+            A::SimulatedSheet(place) => self.cameras.simulated_sheet(place),
+            A::InsertPicture { camera, corrected } => {
+                self.insert_picture(&cams, &area, &camera, corrected)
+            }
+        }
+    }
+
+    /// Saves a camera's latest picture for the lens correction and looks
+    /// for the sheet in it.
+    fn keep_picture(&mut self, name: &str) {
+        let Some(picture) = self.cameras.picture(name) else {
+            self.shell
+                .log("No picture yet: wait until the camera shows one.");
+            return;
+        };
+        let n = self.cameras.captures.len() + 1;
+        let path = scratch(&format!("lens-{n}.png"));
+        if let Err(e) = std::fs::write(&path, picture.encode_png()) {
+            self.shell
+                .log(format!("error: cannot keep the picture: {e}"));
+            return;
+        }
+        let found = lasercraft_camera::dots::find_sheet(&picture);
+        self.cameras.captures.push(lasercraft_ui::LensCapture {
+            path: path.display().to_string(),
+            dots: found
+                .as_ref()
+                .map(|d| d.iter().map(|(_, p)| *p).collect())
+                .unwrap_or_default(),
+            error: found.err().map(|e| e.0),
+        });
+    }
+
+    /// Fits every model to the kept pictures.
+    fn fit_lens(&mut self, name: &str) {
+        let mut views = Vec::new();
+        let mut size = (1, 1);
+        for c in self.cameras.captures.iter().filter(|c| c.error.is_none()) {
+            let Ok(picture) = lasercraft_camera::Picture::load(std::path::Path::new(&c.path))
+            else {
+                continue;
+            };
+            size = (picture.width(), picture.height());
+            if let Ok(dots) = lasercraft_camera::dots::find_sheet(&picture) {
+                views.push(
+                    dots.into_iter()
+                        .map(|((i, j), p)| (lasercraft_camera::sheet::point(i, j), p))
+                        .collect(),
+                );
+            }
+        }
+        self.cameras.fits = lasercraft_camera::lens::Model::ALL
+            .iter()
+            .map(|m| {
+                lasercraft_camera::calibrate::calibrate(*m, size.0, size.1, &views)
+                    .map(|mut lens| {
+                        lens.created = lasercraft_camera::timestamp_now();
+                        lens
+                    })
+                    .map_err(|e| e.0)
+            })
+            .collect();
+        self.shell
+            .log(format!("fitted the lens models for \"{name}\""));
+    }
+
+    fn find_marks(
+        &self,
+        cams: &[lasercraft_workshop::Camera],
+        name: &str,
+    ) -> Result<[lasercraft_geom::Point; 4], String> {
+        let picture = self
+            .cameras
+            .picture(name)
+            .ok_or("No picture yet: wait until the camera shows one.")?;
+        let cam = cams
+            .iter()
+            .find(|c| c.name == name)
+            .ok_or("the camera was removed")?;
+        let lens = cam.lens_or_plain(picture.width(), picture.height());
+        let scaled = picture.resized(lens.width, lens.height);
+        lasercraft_camera::marks::find_marks(&scaled).map_err(|e| e.0)
+    }
+
+    /// Puts a camera picture on the canvas through `image.insert_picture`.
+    fn insert_picture(
+        &mut self,
+        cams: &[lasercraft_workshop::Camera],
+        area: &lasercraft_project::WorkArea,
+        name: &str,
+        corrected: bool,
+    ) {
+        let (Some(picture), Some(cam)) = (
+            self.cameras.picture(name),
+            cams.iter().find(|c| c.name == name),
+        ) else {
+            self.shell
+                .log("No picture yet: wait until the camera shows one.");
+            return;
+        };
+        let path = scratch("insert.png");
+        let (bytes, w, h) = match (corrected, cam.alignment()) {
+            (true, Some(alignment)) => {
+                let lens = cam.lens_or_plain(picture.width(), picture.height());
+                let mut o =
+                    lasercraft_camera::overlay::Overlay::empty(area.width_mm, area.height_mm);
+                o.paint(&picture, &lens, alignment, &cam.fit, None);
+                let (w, h) = (
+                    f64::from(o.width) * o.mm_per_px,
+                    f64::from(o.height) * o.mm_per_px,
+                );
+                (o.encode_png(), w, h)
+            }
+            _ => (
+                picture.encode_png(),
+                f64::from(picture.width()) * 0.5,
+                f64::from(picture.height()) * 0.5,
+            ),
+        };
+        if let Err(e) = std::fs::write(&path, bytes) {
+            self.shell
+                .log(format!("error: cannot write the picture: {e}"));
+            return;
+        }
+        let n = |v: f64| lasercraft_plan::num(v);
+        self.run(&Invocation::new(
+            "image.insert_picture",
+            [
+                path.display().to_string(),
+                "0".into(),
+                "0".into(),
+                n(w),
+                n(h),
+            ],
+        ));
     }
 
     /// Plans the job for the open preview window when it is new or the
@@ -293,6 +494,11 @@ impl eframe::App for App {
         if self.laser.connected() {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
         }
+        let cams = self.profile_cameras();
+        let area = *self.session.project().work_area();
+        self.cameras.sync(&cams, &area, self.shell.cameras_live());
+        self.cameras.poll();
+        let camera_view = self.cameras.view(&cams);
         let undo = self.session.undo_label().cloned();
         let view = ShellView {
             project: self.session.project(),
@@ -302,6 +508,7 @@ impl eframe::App for App {
             can_redo: self.session.redo_depth() > 0,
             laser: self.laser.view(),
             workshop: self.session.workshop(),
+            camera: &camera_view,
         };
         let actions = self.shell.show(ui, &view);
         for action in actions {
@@ -338,4 +545,11 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// A file in this run's scratch folder (camera pictures for commands).
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("lasercraft-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(name)
 }

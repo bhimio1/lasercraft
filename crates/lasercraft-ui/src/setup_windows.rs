@@ -12,7 +12,7 @@ use lasercraft_project::{Project, ROTARY_KEYS, Rotary, RotaryKind};
 use crate::laser_panel::{Enabled, LaserView};
 use crate::shell::Action;
 use crate::theme::{Tokens, size, weight};
-use crate::widgets::{self, Band, Fill};
+use crate::widgets::{self, Band, Bounded, Fill};
 
 const NOT_READY: &str = "Needs a connected, ready machine.";
 
@@ -115,7 +115,7 @@ impl SetupWindows {
         egui::Window::new("Rotary attachment")
             .collapsible(false)
             .resizable(false)
-            .show(ctx, |ui| {
+            .bounded(ctx).show(ctx, |ui| {
                 widgets::switch(ui, &mut draft.enabled, "Use rotary");
                 ui.add_space(size::GAP_TIGHT);
                 egui::Grid::new("rotary-grid")
@@ -217,6 +217,7 @@ impl SetupWindows {
         egui::Window::new("Taper correction")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
@@ -317,7 +318,7 @@ impl SetupWindows {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .show(ctx, |ui| {
+            .bounded(ctx).show(ctx, |ui| {
                 ui.set_width(420.0);
                 if !missing.is_empty() && page < 2 {
                     widgets::band(ui, Band::Hint, &missing.join(" "));
@@ -427,6 +428,7 @@ impl SetupWindows {
         egui::Window::new("Registration failed")
             .collapsible(false)
             .resizable(false)
+            .bounded(ctx)
             .show(ctx, |ui| {
                 ui.set_max_width(380.0);
                 ui.horizontal_top(|ui| {

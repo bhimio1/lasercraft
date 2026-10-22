@@ -4,6 +4,8 @@
 //! clicks, menu picks, shortcuts and console lines into [`Action`]s. The app
 //! runs those through the command session (`docs/spec/ui-shell.md`).
 
+mod camera_panel;
+mod camera_windows;
 mod canvas;
 pub mod colors;
 mod device_dialogs;
@@ -26,6 +28,7 @@ mod tool_column;
 pub mod view;
 pub mod widgets;
 
+pub use camera_panel::{CameraAction, CameraLive, CameraStatus, CameraView, LensCapture};
 pub use dock::DockPanel;
 pub use laser_panel::{
     ANCHORS, Busy, CONSOLE_LINES, ConsoleLine, Enabled, LaserAction, LaserView, MachineWord, clock,
@@ -37,7 +40,7 @@ pub use test_windows::{TestInfo, TestKind, TestRequest};
 /// The `ui.*` and `view.*` names a keymap may bind besides registry
 /// commands. They need something only the front end has (a path prompt, the
 /// saved-file path, the pointer, the tool, the zoom).
-pub const UI_ACTIONS: [&str; 35] = [
+pub const UI_ACTIONS: [&str; 37] = [
     "ui.notes",
     "ui.toggle_panels",
     "ui.new",
@@ -79,4 +82,6 @@ pub const UI_ACTIONS: [&str; 35] = [
     "ui.rotary",
     "ui.taper",
     "ui.registration",
+    "ui.camera_list",
+    "ui.camera_capture",
 ];

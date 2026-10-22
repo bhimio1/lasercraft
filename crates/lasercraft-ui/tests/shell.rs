@@ -67,6 +67,7 @@ impl Harness {
                 can_redo: session.redo_depth() > 0,
                 laser,
                 workshop: session.workshop(),
+                camera: &lasercraft_ui::CameraView::default(),
             };
             actions = shell.show(ui, &view);
         });
@@ -247,6 +248,7 @@ fn layers_panel_lists_used_layers() {
             can_redo: false,
             laser: &LaserView::default(),
             workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -293,6 +295,7 @@ fn alt_p_opens_the_preview_and_draws_what_it_is_given() {
             can_redo: false,
             laser: &LaserView::default(),
             workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -385,6 +388,7 @@ fn alt_shift_l_asks_where_to_save_gcode() {
             can_redo: false,
             laser: &LaserView::default(),
             workshop: h.session.workshop(),
+            camera: &lasercraft_ui::CameraView::default(),
         };
         let _ = h.shell.show(ui, &view);
     });
@@ -442,6 +446,7 @@ impl Harness {
                 can_redo: false,
                 laser,
                 workshop: session.workshop(),
+                camera: &lasercraft_ui::CameraView::default(),
             };
             let _ = shell.show(ui, &view);
         });
@@ -863,4 +868,44 @@ fn print_registration_lists_what_is_missing_and_shows_refusals() {
         texts.iter().any(|t| t == "Set target 1 first."),
         "{texts:?}"
     );
+}
+
+#[test]
+fn a_camera_brings_up_the_camera_panel_and_add_camera_starts_with_its_kind() {
+    let mut h = Harness::new(&[
+        "profile.add Shop width=300 height=200",
+        "project.set_device Shop",
+        "camera.add Top simulated",
+    ]);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let tab = h.text_at("Camera").expect("Camera tab");
+    h.click(tab);
+    let texts = h.texts();
+    assert!(
+        texts.iter().any(|t| t == "Capture camera image"),
+        "{texts:?}"
+    );
+    assert!(texts.iter().any(|t| t == "Top"), "{texts:?}");
+    let capture = h.text_at("Capture camera image").unwrap();
+    h.click(capture);
+    assert!(
+        h.log.iter().any(|l| l.starts_with("Camera(Capture")),
+        "{:?}",
+        h.log
+    );
+    // Add camera… opens the wizard; choosing a kind adds the camera.
+    let add = h.text_at("Add camera…").expect("Add camera…");
+    h.click(add);
+    h.frame(Vec::new(), Modifiers::NONE);
+    let simulated = h.text_at("Simulated camera").expect("kind cards");
+    h.click(simulated);
+    assert!(
+        h.log
+            .iter()
+            .any(|l| l == "camera.add \"Simulated camera 2\" simulated"),
+        "{:?}",
+        h.log
+    );
+    assert_eq!(h.session.workshop().cameras("Shop").unwrap().len(), 2);
+    assert!(h.texts().iter().any(|t| t == "Choose the picture source"));
 }

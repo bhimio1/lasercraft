@@ -133,3 +133,4 @@ Alt+1        = registration.set_target 1
 Alt+2        = registration.set_target 2
 Alt+3        = registration.fit scaled
 Alt+4        = registration.fit rigid
+Alt+C        = ui.camera_capture

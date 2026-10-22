@@ -296,6 +296,32 @@ pub fn arrow_button(ui: &mut Ui, arrow: Arrow, min: Vec2) -> Response {
     response
 }
 
+fn bounds_id() -> egui::Id {
+    egui::Id::unique("lasercraft-window-bounds")
+}
+
+/// Sets where windows may go this frame: the screen minus the job bar, so
+/// Stop and Pause never cover a window's title bar (safety rule 7).
+pub fn set_window_bounds(ctx: &egui::Context, rect: egui::Rect) {
+    ctx.data_mut(|d| d.insert_temp(bounds_id(), rect));
+}
+
+/// Keeps a window inside the bounds the shell set for this frame.
+pub trait Bounded {
+    /// The window, constrained to this frame's bounds when the shell set them.
+    #[must_use]
+    fn bounded(self, ctx: &egui::Context) -> Self;
+}
+
+impl Bounded for egui::Window<'_> {
+    fn bounded(self, ctx: &egui::Context) -> Self {
+        match ctx.data(|d| d.get_temp::<egui::Rect>(bounds_id())) {
+            Some(rect) => self.constrain_to(rect),
+            None => self,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,6 +9,7 @@ use crate::colors::layer_color;
 use crate::laser_panel::clock;
 use crate::theme::{DASH, DOTS, Tokens, size, weight};
 use crate::view::View;
+use crate::widgets::Bounded;
 use crate::widgets::{self, Band};
 
 const FIT_MARGIN_PX: f64 = 16.0;
@@ -129,6 +130,7 @@ impl PreviewWindow {
             .open(&mut open)
             .collapsible(false)
             .default_size([frame.width() * 0.6, frame.height() * 0.85])
+            .bounded(ctx)
             .show(ctx, |ui| close = self.contents(ui, project));
         open && !close
     }
