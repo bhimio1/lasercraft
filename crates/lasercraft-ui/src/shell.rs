@@ -246,7 +246,7 @@ impl Shell {
                     .resizable(true)
                     .default_size(width.max(290.0))
                     .min_size(260.0)
-                    .frame(egui::Frame::NONE)
+                    .frame(egui::Frame::NONE.fill(Tokens::of(ui.ctx()).panel))
                     .show(ui, |ui| self.dock(ui, view, &mut actions));
             }
         }
@@ -821,9 +821,9 @@ impl Shell {
     fn command_input(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.horizontal(|ui| {
             let toggle = if self.dock.log_open {
-                "Log ▾"
+                "Hide log"
             } else {
-                "Log ▴"
+                "Show log"
             };
             let width = (ui.available_width() - 60.0).max(80.0);
             let input = ui.add(

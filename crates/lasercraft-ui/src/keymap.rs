@@ -105,6 +105,11 @@ impl Chord {
             Some(egui::Key::Delete) => "Del",
             Some(egui::Key::Escape) => "Esc",
             Some(egui::Key::Minus) => "-",
+            // The UI font has no arrow glyphs.
+            Some(egui::Key::ArrowLeft) => "Left",
+            Some(egui::Key::ArrowRight) => "Right",
+            Some(egui::Key::ArrowUp) => "Up",
+            Some(egui::Key::ArrowDown) => "Down",
             Some(k) => k.symbol_or_name(),
             None => &self.key,
         });

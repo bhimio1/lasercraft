@@ -144,11 +144,11 @@ pub enum Band {
 /// (`visual-language.md`, "Status bands"). Long text wraps.
 pub fn band(ui: &mut Ui, kind: Band, text: &str) -> Response {
     let t = Tokens::of(ui.ctx());
-    let (fill, mark, mark_color) = match kind {
-        Band::Hint => (t.info_soft, "", t.text_muted),
-        Band::Success => (t.success_soft, "✔", t.success),
-        Band::Warning => (t.warning_soft, "⚠", t.warning),
-        Band::Error => (t.danger_soft, "⊗", t.danger),
+    let fill = match kind {
+        Band::Hint => t.info_soft,
+        Band::Success => t.success_soft,
+        Band::Warning => t.warning_soft,
+        Band::Error => t.danger_soft,
     };
     egui::Frame::new()
         .fill(fill)
@@ -160,13 +160,110 @@ pub fn band(ui: &mut Ui, kind: Band, text: &str) -> Response {
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                if !mark.is_empty() {
-                    ui.label(egui::RichText::new(mark).color(mark_color));
+                if kind != Band::Hint {
+                    mark(ui, kind);
                 }
                 ui.label(egui::RichText::new(text).color(t.text));
             });
         })
         .response
+}
+
+/// A band's mark, painted so it never depends on the font: a tick in a
+/// `success` disc, "!" in a `warning` triangle, "×" in a `danger` disc.
+pub fn mark(ui: &mut Ui, kind: Band) -> Response {
+    let t = Tokens::of(ui.ctx());
+    let side = size::ICON_SMALL + 2.0;
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::hover());
+    let painter = ui.painter();
+    let c = rect.center();
+    let r = side / 2.0;
+    let white = Stroke::new(weight::NORMAL, t.text_on_strong);
+    match kind {
+        Band::Hint => {}
+        Band::Success => {
+            painter.circle_filled(c, r, t.success);
+            painter.line_segment(
+                [c + egui::vec2(-3.5, 0.0), c + egui::vec2(-1.0, 2.5)],
+                white,
+            );
+            painter.line_segment(
+                [c + egui::vec2(-1.0, 2.5), c + egui::vec2(3.5, -2.5)],
+                white,
+            );
+        }
+        Band::Warning => {
+            let points = vec![
+                c + egui::vec2(0.0, -r),
+                c + egui::vec2(r, r * 0.8),
+                c + egui::vec2(-r, r * 0.8),
+            ];
+            painter.add(egui::Shape::convex_polygon(points, t.warning, Stroke::NONE));
+            let ink = Stroke::new(weight::NORMAL, t.text_on_warning);
+            painter.line_segment([c + egui::vec2(0.0, -2.5), c + egui::vec2(0.0, 1.5)], ink);
+            painter.circle_filled(c + egui::vec2(0.0, 3.8), 0.9, t.text_on_warning);
+        }
+        Band::Error => {
+            painter.circle_filled(c, r, t.danger);
+            let d = r * 0.4;
+            painter.line_segment([c + egui::vec2(-d, -d), c + egui::vec2(d, d)], white);
+            painter.line_segment([c + egui::vec2(-d, d), c + egui::vec2(d, -d)], white);
+        }
+    }
+    response
+}
+
+/// Which way an arrow button points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arrow {
+    /// Up.
+    Up,
+    /// Down.
+    Down,
+    /// Left.
+    Left,
+    /// Right.
+    Right,
+}
+
+/// A button with a painted arrow, at least `min` in size.
+pub fn arrow_button(ui: &mut Ui, arrow: Arrow, min: Vec2) -> Response {
+    let response = ui.add(egui::Button::new("").min_size(min));
+    let color = if ui.is_enabled() {
+        Tokens::of(ui.ctx()).text
+    } else {
+        Tokens::of(ui.ctx()).text_disabled
+    };
+    let c = response.rect.center();
+    let s = 4.5;
+    let (tip, a, b) = match arrow {
+        Arrow::Up => (
+            egui::vec2(0.0, -s),
+            egui::vec2(-s, s * 0.6),
+            egui::vec2(s, s * 0.6),
+        ),
+        Arrow::Down => (
+            egui::vec2(0.0, s),
+            egui::vec2(s, -s * 0.6),
+            egui::vec2(-s, -s * 0.6),
+        ),
+        Arrow::Left => (
+            egui::vec2(-s, 0.0),
+            egui::vec2(s * 0.6, s),
+            egui::vec2(s * 0.6, -s),
+        ),
+        Arrow::Right => (
+            egui::vec2(s, 0.0),
+            egui::vec2(-s * 0.6, -s),
+            egui::vec2(-s * 0.6, s),
+        ),
+    };
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![c + tip, c + a, c + b],
+        color,
+        Stroke::NONE,
+    ));
+    response
 }
 
 #[cfg(test)]

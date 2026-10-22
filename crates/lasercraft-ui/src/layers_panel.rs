@@ -8,7 +8,7 @@ use lasercraft_project::{Color, Dither, Layer, Mode, Project};
 
 use crate::colors::{self, layer_color};
 use crate::theme::{self, ROUNDED, Tokens, size, weight};
-use crate::widgets::{self, Band};
+use crate::widgets::{self, Arrow, Band};
 
 /// Width of the list's fixed columns: color, mode, speed and power, output,
 /// show.
@@ -353,9 +353,6 @@ impl LayersPanel {
             swatch(ui, c, size::ROW - 4.0, mark);
         });
         cell(ui, name_width, &mut |ui| {
-            if row.image {
-                ui.label(egui::RichText::new("▣ ").color(t.text_muted));
-            }
             ui.add(
                 egui::Label::new(egui::RichText::new(&layer.name).color(text_color))
                     .truncate()
@@ -432,17 +429,23 @@ impl LayersPanel {
         ui.vertical(|ui| {
             ui.add_space(size::ROW);
             let square = vec2(size::ROW, size::ROW);
-            for (glyph, to, tip, ok) in [
-                ("⏶", "up", "Move up: run this layer earlier", at != Some(0)),
+            for (arrow, to, tip, ok) in [
                 (
-                    "⏷",
+                    Arrow::Up,
+                    "up",
+                    "Move up: run this layer earlier",
+                    at != Some(0),
+                ),
+                (
+                    Arrow::Down,
                     "down",
                     "Move down: run this layer later",
                     at != Some(used.len() - 1),
                 ),
             ] {
                 if ui
-                    .add_enabled(ok, egui::Button::new(glyph).min_size(square))
+                    .add_enabled_ui(ok, |ui| widgets::arrow_button(ui, arrow, square))
+                    .inner
                     .on_hover_text(tip)
                     .clicked()
                 {

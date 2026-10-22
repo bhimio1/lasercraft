@@ -9,7 +9,7 @@ use lasercraft_commands::Invocation;
 use crate::Action;
 use crate::keymap::Keymap;
 use crate::theme::{Tokens, size, weight};
-use crate::widgets::{self, Band, Fill};
+use crate::widgets::{self, Arrow, Band, Fill};
 
 /// Job origin names, row by row from the top left (`docs/spec/laser.md`).
 pub const ANCHORS: [&str; 9] = [
@@ -738,26 +738,30 @@ impl LaserPanel {
             egui::Grid::new("laser-jog")
                 .spacing([size::GAP_TIGHT, size::GAP_TIGHT])
                 .show(ui, |ui| {
-                    let mut cell = |ui: &mut egui::Ui, label: &str, name: &'static str, text| {
-                        if ui
-                            .add(egui::Button::new(label).min_size(pad))
-                            .on_hover_text(hint(keymap, text, name))
-                            .on_disabled_hover_text(why_not(view, false))
-                            .clicked()
-                        {
-                            pressed = Some(name);
-                        }
-                    };
+                    let mut cell =
+                        |ui: &mut egui::Ui, arrow: Option<Arrow>, name: &'static str, text| {
+                            let button = match arrow {
+                                Some(arrow) => widgets::arrow_button(ui, arrow, pad),
+                                None => ui.add(egui::Button::new("Home").min_size(pad)),
+                            };
+                            if button
+                                .on_hover_text(hint(keymap, text, name))
+                                .on_disabled_hover_text(why_not(view, false))
+                                .clicked()
+                            {
+                                pressed = Some(name);
+                            }
+                        };
                     ui.label("");
-                    cell(ui, "⏶", "ui.jog_up", "Jog up");
+                    cell(ui, Some(Arrow::Up), "ui.jog_up", "Jog up");
                     ui.label("");
                     ui.end_row();
-                    cell(ui, "⏴", "ui.jog_left", "Jog left");
-                    cell(ui, "Home", "device.home", "Run the homing cycle");
-                    cell(ui, "⏵", "ui.jog_right", "Jog right");
+                    cell(ui, Some(Arrow::Left), "ui.jog_left", "Jog left");
+                    cell(ui, None, "device.home", "Run the homing cycle");
+                    cell(ui, Some(Arrow::Right), "ui.jog_right", "Jog right");
                     ui.end_row();
                     ui.label("");
-                    cell(ui, "⏷", "ui.jog_down", "Jog down");
+                    cell(ui, Some(Arrow::Down), "ui.jog_down", "Jog down");
                     ui.end_row();
                 });
             match pressed {
@@ -933,7 +937,7 @@ fn console_line(ui: &mut egui::Ui, line: &ConsoleLine, t: &Tokens) {
         });
     } else if line.text.starts_with("error:") {
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("⊗").color(t.danger));
+            widgets::mark(ui, Band::Error);
             ui.label(text);
         });
     } else {
@@ -985,12 +989,16 @@ fn state_line(ui: &mut egui::Ui, view: &LaserView) {
 }
 
 fn state_word(ui: &mut egui::Ui, word: MachineWord, t: &Tokens) -> egui::Response {
-    let label = egui::RichText::new(word.label()).color(if word == MachineWord::NotConnected {
+    let color = if word == MachineWord::NotConnected {
         t.text_muted
     } else {
         t.text
-    });
+    };
+    let label = || egui::Label::new(egui::RichText::new(word.label()).color(color));
+    // The dot always reads before the word, also in right-to-left rows.
+    let rtl = ui.layout().prefer_right_to_left();
     ui.horizontal(|ui| {
+        let first = rtl.then(|| ui.add(label().sense(egui::Sense::click())));
         if let Some(dot) = word.dot(t) {
             let (rect, _) = ui.allocate_exact_size(
                 egui::vec2(size::ICON_SMALL, size::ROW),
@@ -999,7 +1007,7 @@ fn state_word(ui: &mut egui::Ui, word: MachineWord, t: &Tokens) -> egui::Respons
             ui.painter()
                 .circle_filled(rect.center(), size::ICON_SMALL / 3.0, dot);
         }
-        ui.add(egui::Label::new(label).sense(egui::Sense::click()))
+        first.unwrap_or_else(|| ui.add(label().sense(egui::Sense::click())))
     })
     .inner
 }
@@ -1117,7 +1125,7 @@ pub fn job_bar(
                     "This job uses constant power (M3): Pause stops motion only. \
                      Use Stop to turn the laser off.",
                 );
-            ui.label(egui::RichText::new("⚠").color(t.warning));
+            widgets::mark(ui, Band::Warning);
         }
         if let Some(busy) = &view.busy {
             ui.label(

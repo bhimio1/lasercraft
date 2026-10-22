@@ -18,6 +18,29 @@ Every device feature is tested against a simulated GRBL controller, which
 the app also offers as a port. Everything works headlessly from the CLI.
 See the milestone list in `CLAUDE.md`.
 
+## Screenshots
+
+The main window: drawing tools on the left, the canvas with the bed, the
+Layers panel (upper dock group, with Jog and Console tabs) and the Machine
+panel (lower group) on the right, the numbered palette strip, the command
+line and the status bar.
+
+![Main window with a coaster design, the Layers panel and the Machine panel](docs/screenshots/main.png)
+
+The job preview (Alt+P): burn moves in layer colors, travel dashed, the
+simulated head, the time slider, the job summary and the bounds check.
+
+![Job preview window showing the planned job](docs/screenshots/preview.png)
+
+Running a job on the built-in GRBL simulator. While a machine is connected
+the job bar at the top right always shows the machine state, the sent share,
+Pause and Stop; this job uses constant power (M3), so Pause reads "Pause
+(motion only)" with a warning.
+
+![A job running on the simulator, with the job bar and the Machine panel](docs/screenshots/machine.png)
+
+The screenshots show `examples/screenshot-demo.lcs`.
+
 ## Build and run
 
 ```sh

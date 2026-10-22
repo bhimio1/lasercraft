@@ -50,7 +50,7 @@ palette, notes), M6 (Laser panel and menu), M7 (images on the canvas, Adjust Ima
   cannot run is greyed and its tooltip says what is missing ("Select two or
   more objects.", "Connect to a machine first.").
 - Each item shows its chord from the keymap in symbol form (Ctrl+=, PgUp,
-  Del, Esc, Alt+⏴; Cmd and Option on macOS; `docs/spec/keymap.md`).
+  Del, Esc, Alt+Left; Cmd and Option on macOS; `docs/spec/keymap.md`).
 - Left: the drawing tools (Select, Line, Rectangle, Ellipse, Text, Edit
   nodes); the active tool is highlighted.
 - Right: the dock (see M6 additions). Its Layers panel lists the layers that

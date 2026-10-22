@@ -89,6 +89,8 @@ pub(crate) struct PreviewWindow {
     show_travel: bool,
     view: Option<View>,
     screen: Option<Rect>,
+    /// The user zoomed or panned; until then the view follows the window.
+    moved: bool,
 }
 
 fn pos(p: Point) -> Pos2 {
@@ -126,7 +128,7 @@ impl PreviewWindow {
         egui::Window::new("Job preview")
             .open(&mut open)
             .collapsible(false)
-            .default_size([frame.width() * 0.55, frame.height() * 0.7])
+            .default_size([frame.width() * 0.6, frame.height() * 0.85])
             .show(ctx, |ui| close = self.contents(ui, project));
         open && !close
     }
@@ -182,6 +184,7 @@ impl PreviewWindow {
         ui.horizontal(|ui| {
             ui.label("Time (s)");
             let mut time = self.time.unwrap_or(total);
+            ui.spacing_mut().slider_width = (ui.available_width() - 220.0).max(120.0);
             let slider = egui::Slider::new(&mut time, 0.0..=total.max(f64::EPSILON))
                 .max_decimals(1)
                 .show_value(true);
@@ -228,16 +231,16 @@ impl PreviewWindow {
         let area = project.work_area();
         let bed = Rect::from_corners(Point::ZERO, Point::new(area.width_mm, area.height_mm));
         let content = self.preview.bounds().map_or(bed, |b| b.union(bed));
-        if self.view.is_none() {
+        if self.view.is_none() || (!self.moved && self.screen != Some(screen)) {
             self.view = Some(View::fit(&screen, &content, FIT_MARGIN_PX));
         }
         let Some(mut view) = self.view else { return };
-        if let Some(old) = self.screen
+        if self.moved
+            && let Some(old) = self.screen
             && old != screen
         {
-            // Resizing keeps the zoom; the drawing stays centred.
-            let shift = screen.center() - old.center();
-            view.pan(shift);
+            // After a zoom, resizing keeps it; the drawing stays centred.
+            view.pan(screen.center() - old.center());
         }
         self.screen = Some(screen);
         if let Some(pointer) = response.hover_pos() {
@@ -245,6 +248,7 @@ impl PreviewWindow {
             if scroll != 0.0 {
                 let at = Point::new(f64::from(pointer.x), f64::from(pointer.y));
                 view.zoom_about(at, (f64::from(scroll) / 400.0).exp());
+                self.moved = true;
             }
         }
         let panning = response.dragged_by(egui::PointerButton::Middle)
@@ -252,6 +256,7 @@ impl PreviewWindow {
         if panning {
             let d = response.drag_delta();
             view.pan(Point::new(f64::from(d.x), f64::from(d.y)));
+            self.moved = true;
         }
         self.view = Some(view);
         let painter = painter.with_clip_rect(response.rect);

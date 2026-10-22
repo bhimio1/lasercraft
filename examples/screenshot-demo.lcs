@@ -1,0 +1,33 @@
+# The project shown in the README screenshots. Run from the repository root:
+#   lasercraft-cli script examples/screenshot-demo.lcs
+# It writes screenshot-demo.lcproj. The lettering uses the Inter font.
+project.rename Coaster set
+project.set_work_area 300 200
+shape.add_ellipse 60 60 45 45 @1
+shape.add_ellipse 60 60 38 38 @2
+shape.add_text 32 66 14 Inter LASER @4
+shape.add_polyline closed 60 30 66 46 84 46 70 56 76 74 60 64 44 74 50 56 36 46 54 46 @4
+shape.add_rect 130 20 150 90 @1
+project.import examples/fixtures/m7-photo.png @3
+shape.scale 6 6 6
+shape.move 140 28 6
+shape.add_ellipse 60 150 30 30 @1
+shape.add_ellipse 60 132 5 5 @2
+arrange.circular 8 60 150 360 rotate 8
+layer.set 1 name "Cut outline"
+layer.set 1 speed 15
+layer.set 1 max_power 80
+layer.set 2 name "Ring engrave"
+layer.set 2 mode fill
+layer.set 2 speed 90
+layer.set 2 max_power 25
+layer.set 3 name Photo
+layer.set 3 image.dither jarvis
+layer.set 3 speed 80
+layer.set 3 max_power 35
+layer.set 4 name Lettering
+layer.set 4 mode fill
+layer.set 4 speed 70
+layer.set 4 max_power 30
+layer.set 4 constant_power on
+project.save screenshot-demo.lcproj
