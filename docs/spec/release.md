@@ -50,7 +50,9 @@ window opens; debug builds keep the console for logs.
   image), `windows` (MSI), `macos` (DMG). Each uploads its package as a
   workflow artifact.
 - On a tag, a last job creates a draft GitHub release with the four
-  packages and SHA-256 sums; the owner publishes it.
+  packages and SHA-256 sums; the owner publishes it. A plain version tag
+  (`v1.2.3`) is a full release marked Latest; a tag with anything after the
+  version (`v1.2.3-beta.1`, `v1.0.0-rc1`) is marked as a pre-release.
 
 ## Checks
 
