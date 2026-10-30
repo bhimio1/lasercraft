@@ -131,4 +131,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
+          # v1.2.3 is a full release marked Latest; anything after the version (v1.2.3-beta.1, v1.0.0-rc1) is a pre-release
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
           files: dist/*
